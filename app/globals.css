@@ -1,4 +1,10 @@
 @import 'tailwindcss';
+.consultation-history-link { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; padding: 14px 0; border-bottom: 1px solid #e5e9e2; font-size: 13px; color: #53645e; }
+.consultation-history-link[aria-current='true'] strong { color: #466243; }
+.consultation-history-link:last-child { border-bottom: 0; }
+.consultation-addendum { padding: 18px 24px; border-top: 1px solid #e5e9e2; font-size: 13px; }
+.consultation-addendum p { white-space: pre-wrap; margin-top: 10px; }
+.consultation-addendum details { margin-top: 10px; color: #68766d; overflow-wrap: anywhere; }
 :root {
   font-family:
     Inter,

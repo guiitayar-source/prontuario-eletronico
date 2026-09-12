@@ -17,7 +17,8 @@
     "test:patients": "node tests/patients.test.mjs",
     "test:patients:http": "node tests/patients-http.mjs",
     "test:appointments": "node tests/appointments.test.mjs",
-    "test:supabase": "node tests/supabase-flow.mjs"
+    "test:supabase": "node tests/supabase-flow.mjs",
+    "test:consultations": "node tests/consultations.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

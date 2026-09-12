@@ -38,6 +38,6 @@ Com Supabase local iniciado, execute `npm run test:supabase`. O teste usa contas
 
 ## Limites desta entrega
 
-A demonstração antiga continua no Sites com D1/R2. O código local novo usa Supabase; sua publicação externa ainda precisa ser concluída. O anexo legado precisa ser copiado e conferido antes de encerrar a migração.
+A aplicação Next.js está publicada na Vercel em https://psywrite.vercel.app. A demonstração antiga continua no Sites com D1/R2. O anexo legado precisa ser copiado e conferido antes de encerrar a migração.
 
-A evolução em texto livre continua no navegador e não sincroniza entre dispositivos. Histórico, finalização e documentos continuam demonstrativos. Ainda faltam permissões clínicas detalhadas por função, revisão de privacidade, operação de backups/restauração e validação para uso com dados reais. Login e RLS não tornam esta versão um prontuário clínico concluído.
+Consultas novas usam PostgreSQL com controle de versão, histórico, finalização imutável e adendos. A migração 20260912050000 limita evoluções e adendos a médicos e proprietários; operações de escrita passam por função autenticada. A secretária mantém acesso administrativo. A finalização não aplica assinatura digital. Documentos ainda são temporários. Rascunhos antigos no navegador não são importados automaticamente. Faltam revisão de privacidade, operação de backups/restauração e validação para uso com dados reais.

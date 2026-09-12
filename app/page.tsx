@@ -5,12 +5,14 @@ import Consultation from '@/components/consultation';
 import Agenda from '@/components/agenda';
 import type { Patient } from '@/lib/patient-fields';
 export default function Home() {
+  const [appointmentId, setAppointmentId] = useState<string | undefined>();
   const [patient, setPatient] = useState<Patient | null>(null),
     [error, setError] = useState(''),
     [section, setSection] = useState<'patients' | 'agenda'>('patients');
-  async function open(id: string) {
+  async function open(id: string, appointment?: string) {
     try {
       setPatient(await fetchPatient(id));
+      setAppointmentId(appointment);
       setError('');
     } catch (e) {
       setError((e as Error).message);
@@ -27,9 +29,16 @@ export default function Home() {
         <Consultation
           key={patient.id}
           patient={patient}
-          onHome={() => { setPatient(null); setSection('patients'); }}
+          appointmentId={appointmentId}
+          onHome={() => {
+            setPatient(null);
+            setSection('patients');
+          }}
           onUpdated={setPatient}
-          onSelect={setPatient}
+          onSelect={(p) => {
+            setAppointmentId(undefined);
+            setPatient(p);
+          }}
           onOpenId={open}
           onAgenda={() => {
             setPatient(null);
@@ -43,9 +52,14 @@ export default function Home() {
         />
       ) : (
         <Registry
-          onOpen={setPatient}
+          onOpen={(p) => {
+            setAppointmentId(undefined);
+            setPatient(p);
+          }}
           onAgenda={() => setSection('agenda')}
-          onConsultation={() => setError('Selecione um paciente na lista para abrir o prontuário.')}
+          onConsultation={() =>
+            setError('Selecione um paciente na lista para abrir o prontuário.')
+          }
         />
       )}
     </>

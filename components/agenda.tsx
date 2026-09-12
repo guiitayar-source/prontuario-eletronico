@@ -312,7 +312,7 @@ export default function Agenda({
   onOpenPatient,
 }: {
   onPatients: () => void;
-  onOpenPatient: (id: string) => void;
+  onOpenPatient: (id: string, appointmentId?: string) => void;
 }) {
   const [day, setDay] = useState(dateInput(new Date()));
   const [items, setItems] = useState<Appointment[]>([]);
@@ -423,7 +423,9 @@ export default function Agenda({
                 type="date"
                 aria-label="Escolher data"
                 value={day}
-                onChange={(e) => { if (e.target.value) setDay(e.target.value); }}
+                onChange={(e) => {
+                  if (e.target.value) setDay(e.target.value);
+                }}
               />
               <button className="primary" onClick={() => setEditing('new')}>
                 <Plus size={18} /> Novo horário
@@ -473,7 +475,7 @@ export default function Agenda({
                   </div>
                   <button
                     className="secondary"
-                    onClick={() => onOpenPatient(item.patient_id)}
+                    onClick={() => onOpenPatient(item.patient_id, item.id)}
                   >
                     Iniciar consulta
                   </button>
