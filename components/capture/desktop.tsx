@@ -27,11 +27,13 @@ type Props = {
   tab: string;
   setTab: (tab: string) => void;
   newDocument: () => void;
+  canCreateDocument?: boolean;
 };
 export default function Attachments({
   tab,
   setTab,
   newDocument,
+  canCreateDocument = true,
   patient,
 }: Props) {
   const [files, setFiles] = useState<Received[]>([]),
@@ -353,7 +355,7 @@ export default function Attachments({
           </p>
         </div>
         <div className="attachment-buttons">
-          {tab === 'documentos' && (
+          {tab === 'documentos' && canCreateDocument && (
             <button className="secondary" onClick={newDocument}>
               <FileText size={16} /> Novo documento
             </button>

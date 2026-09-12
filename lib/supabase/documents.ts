@@ -1,0 +1,91 @@
+import {
+  handle,
+  check,
+  json,
+  HttpError,
+  boundedBody,
+  writeGuard,
+} from './server.ts';
+import { documentKinds, type ClinicalDocument } from '../document-fields.ts';
+import { documentPdf } from '../document-pdf.ts';
+export const documents = handle(async (request, { db, clinic, role, user }) => {
+  if (!['owner', 'doctor'].includes(role))
+    throw new HttpError(
+      403,
+      'Documentos clínicos são exclusivos da equipe médica.',
+    );
+  const u = new URL(request.url),
+    pid = u.searchParams.get('patientId');
+  if (request.method === 'GET') {
+    if (!pid) throw new HttpError(400, 'Informe o paciente.');
+    if (u.searchParams.get('action') === 'pdf') {
+      const d = check(
+        await db
+          .from('clinical_documents')
+          .select('*')
+          .eq('clinic_id', clinic)
+          .eq('patient_id', pid)
+          .eq('id', u.searchParams.get('id') || '')
+          .maybeSingle(),
+      );
+      if (!d) throw new HttpError(404, 'Documento não encontrado.');
+      let bytes;
+      try {
+        bytes = await documentPdf(d as ClinicalDocument);
+      } catch (e) {
+        throw new HttpError(422, (e as Error).message);
+      }
+      return new Response(new Uint8Array(bytes), {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': 'inline; filename="documento.pdf"',
+          'Cache-Control': 'private, no-store',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    }
+    return json({
+      documents: check(
+        await db
+          .from('clinical_documents')
+          .select('*')
+          .eq('clinic_id', clinic)
+          .eq('patient_id', pid)
+          .order('updated_at', { ascending: false }),
+      ),
+      profile: check(
+        await db
+          .from('document_profiles')
+          .select('physician_name,physician_registration')
+          .eq('clinic_id', clinic)
+          .eq('user_id', user)
+          .maybeSingle(),
+      ),
+    });
+  }
+  writeGuard(request, 'X-Document-Action');
+  let d;
+  const bytes = await boundedBody(request, 450000);
+  try {
+    d = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new HttpError(400, 'Solicitação inválida.');
+  }
+  if (
+    !d ||
+    !documentKinds.includes(d.kind) ||
+    typeof d.text !== 'string' ||
+    d.text.length > 100000 ||
+    !Number.isInteger(d.version) ||
+    d.version < 0 ||
+    typeof d.physician_name !== 'string' ||
+    d.physician_name.length > 180 ||
+    typeof d.physician_registration !== 'string' ||
+    d.physician_registration.length > 120 ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(d.document_date || '')
+  )
+    throw new HttpError(422, 'Confira os campos do documento.');
+  return json({
+    document: check(await db.rpc('document_write', { c: clinic, d })),
+  });
+});

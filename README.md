@@ -22,7 +22,7 @@ A aplicação atual usa Next.js, Supabase Auth, PostgreSQL e Storage privado. Co
 - Captura de fotos e PDFs por QR, revisão, classificação e exclusão de anexos.
 - Login individual, vínculo à clínica e auditoria das alterações persistidas.
 
-Evoluções e adendos são acessíveis somente a médicos e proprietários da clínica. A secretária mantém acesso ao cadastro, agenda e anexos. Documentos continuam temporários; não há assinatura digital, OCR ou Anamnesator conectado. Rascunhos antigos do navegador não são importados automaticamente.
+Evoluções, adendos e documentos clínicos são acessíveis somente a médicos e proprietários da clínica. A secretária mantém acesso ao cadastro, agenda e anexos. Documentos possuem modelos editáveis, histórico de rascunhos, duplicação e PDF com fontes incorporadas. O PDF corresponde à versão salva e permanece identificado como rascunho sem assinatura. Não há assinatura digital, OCR ou Anamnesator conectado. Rascunhos antigos do navegador não são importados automaticamente.
 
 ## Verificação
 
@@ -31,6 +31,7 @@ npm exec tsc -- --noEmit
 npm run build
 npm run test:supabase
 npm run test:consultations
+npm run test:documents
 ```
 
 O último comando exige Supabase local iniciado; só usa contas sintéticas locais. Os testes SQLite/D1 e arquivos em `drizzle/` preservam a implementação anterior para referência. Os antigos testes HTTP D1 não se aplicam ao servidor Next.js atual.

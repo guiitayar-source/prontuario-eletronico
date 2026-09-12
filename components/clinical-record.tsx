@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useAccess } from './auth';
+import { useDocuments, DocumentHistory, DocumentEditor } from './documents';
 import { apiFetch } from '@/lib/supabase/http';
 import { PatientDetails, PatientSearch } from './patients/registry';
 import Attachments from './capture/desktop';
@@ -83,6 +84,7 @@ export default function ClinicalRecord({
   appointmentId?: string;
 }) {
   const medical = ['owner', 'doctor'].includes(useAccess().role);
+  const docs = useDocuments(patient, medical);
   const [tab, setTab] = useState(medical ? 'consulta' : 'cadastro'),
     [rows, setRows] = useState<RecordEntry[]>([]),
     [current, setCurrent] = useState<RecordEntry | null>(null),
@@ -92,7 +94,6 @@ export default function ClinicalRecord({
     [busy, setBusy] = useState(false),
     [finalizing, setFinalizing] = useState(false),
     [panel, setPanel] = useState(true),
-    [docType, setDocType] = useState('Declaração de comparecimento'),
     [addendum, setAddendum] = useState(''),
     [dirtyRegistration, setDirtyRegistration] = useState(false);
   const saved = useRef(''),
@@ -102,7 +103,7 @@ export default function ClinicalRecord({
     createId = useRef(crypto.randomUUID()),
     adId = useRef(crypto.randomUUID());
   const dirty = text !== saved.current;
-  const hasUnsaved = dirty || !!addendum.trim();
+  const hasUnsaved = dirty || !!addendum.trim() || docs.dirty;
   function choose(r: RecordEntry) {
     saved.current = r.text;
     latest.current = r.text;
@@ -192,7 +193,7 @@ export default function ClinicalRecord({
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasUnsaved, busy, dirtyRegistration]);
   function leave(action: () => void) {
-    if (busy) return;
+    if (busy || docs.busy) return;
     if (
       (hasUnsaved || dirtyRegistration) &&
       !window.confirm('Há alterações não salvas. Sair e descartá-las?')
@@ -237,7 +238,10 @@ export default function ClinicalRecord({
   }
 
   const [modal, setModal] = useState('');
-  const [docText, setDocText] = useState('');
+  function closeModal() {
+    if (modal === 'documento' && !docs.close()) return;
+    setModal('');
+  }
   const [view, setView] = useState('consulta');
   const displayName = patient.social_name || patient.name;
   const finalized = !!current?.finalized_at;
@@ -248,19 +252,20 @@ export default function ClinicalRecord({
   const save = status;
   async function finish() {
     await persist(true);
-    setModal('');
+    closeModal();
   }
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
+        if (modal === 'documento' && !docs.close()) return;
         setModal('busca');
       }
-      if (e.key === 'Escape') setModal('');
+      if (e.key === 'Escape') closeModal();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [modal, docs.dirty, docs.busy]);
   useEffect(() => {
     if (!modal) return;
     const oldOverflow = window.document.body.style.overflow;
@@ -395,15 +400,25 @@ export default function ClinicalRecord({
                 )}
               </div>
               <Attachments
+                canCreateDocument={medical}
                 key={patient.id}
                 patient={patient}
                 tab={tab}
                 setTab={setTab}
                 newDocument={() => {
-                  setDocText('');
+                  docs.open(undefined, current?.id);
                   setModal('documento');
                 }}
               />
+              {medical && tab === 'documentos' && (
+                <DocumentHistory
+                  docs={docs}
+                  onOpen={(d, duplicate) => {
+                    docs.open(d, undefined, duplicate);
+                    setModal('documento');
+                  }}
+                />
+              )}
               <div hidden={tab !== 'cadastro'}>
                 <PatientDetails
                   patient={patient}
@@ -588,7 +603,7 @@ export default function ClinicalRecord({
                       <button
                         className="secondary"
                         onClick={() => {
-                          setDocText('');
+                          docs.open(undefined, current?.id);
                           setModal('documento');
                         }}
                       >
@@ -660,7 +675,7 @@ export default function ClinicalRecord({
         <div
           className="modal-backdrop"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setModal('');
+            if (e.target === e.currentTarget) closeModal();
           }}
         >
           <section
@@ -689,7 +704,7 @@ export default function ClinicalRecord({
               className="close"
               autoFocus
               aria-label="Fechar"
-              onClick={() => setModal('')}
+              onClick={closeModal}
             >
               <X size={20} />
             </button>
@@ -699,7 +714,7 @@ export default function ClinicalRecord({
                 <PatientSearch
                   compact
                   onOpen={(p) => {
-                    setModal('');
+                    closeModal();
                     leave(() => onSelect(p));
                   }}
                 />
@@ -764,51 +779,7 @@ export default function ClinicalRecord({
                 </button>
               </>
             ) : (
-              <>
-                <h2 id="dialog-title">Novo documento</h2>
-                <p>Experimente um rascunho editável com dados fictícios.</p>
-                <label htmlFor="doctype">Tipo de documento</label>
-                <select
-                  id="doctype"
-                  value={docType}
-                  onChange={(e) => {
-                    setDocType(e.target.value);
-                    setDocText('');
-                  }}
-                >
-                  <option>Declaração de comparecimento</option>
-                  <option>Atestado</option>
-                  <option>Relatório</option>
-                  <option>Receita</option>
-                  <option>Pedido de exames</option>
-                  <option>Documento livre</option>
-                </select>
-                <button
-                  className="secondary"
-                  onClick={() =>
-                    setDocText(
-                      docType !== 'Declaração de comparecimento'
-                        ? `${docType.toUpperCase()} — RASCUNHO FICTÍCIO\n\nPaciente: ${patient.name}\n\n[Escreva o conteúdo aqui]\n\nSem assinatura e sem validade clínica.`
-                        : `DECLARAÇÃO FICTÍCIA — SEM VALIDADE CLÍNICA\n\nPaciente: ${patient.name}\nData: ${visitDate}\n\n[Informe o período de comparecimento]\n\nDocumento sem assinatura.`,
-                    )
-                  }
-                >
-                  Preparar rascunho
-                </button>
-                {docText && (
-                  <>
-                    <textarea
-                      aria-label="Rascunho do documento"
-                      className="document-editor"
-                      value={docText}
-                      onChange={(e) => setDocText(e.target.value)}
-                    />
-                    <small>
-                      Prévia temporária, sem assinatura. Não é salva ao fechar.
-                    </small>
-                  </>
-                )}
-              </>
+              <DocumentEditor docs={docs} />
             )}
           </section>
         </div>
