@@ -1,0 +1,2 @@
+-- Dados clínicos não devem ser incluídos em seeds versionados.
+-- Pacientes fictícios serão criados pelos testes ou pela interface de desenvolvimento.

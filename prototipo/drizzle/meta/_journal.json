@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1789009385034,
+      "tag": "0000_little_greymalkin",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789088006498,
+      "tag": "0001_broad_spot",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789095825004,
+      "tag": "0002_great_vector",
+      "breakpoints": true
+    }
+  ]
+}
