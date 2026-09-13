@@ -5,6 +5,253 @@
 .consultation-addendum { padding: 18px 24px; border-top: 1px solid #e5e9e2; font-size: 13px; }
 .consultation-addendum p { white-space: pre-wrap; margin-top: 10px; }
 .consultation-addendum details { margin-top: 10px; color: #68766d; overflow-wrap: anywhere; }
+.context-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.context-heading .text-button {
+  font-size: 11.5px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: #3b6b4e;
+  padding: 4px;
+}
+
+/* Modal Contexto */
+.modal.context-modal {
+  max-width: 620px;
+  padding: 28px 32px;
+}
+
+.context-modal-header {
+  margin-bottom: 16px;
+}
+
+.context-modal-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1b382b;
+  margin: 0 30px 4px 0;
+  letter-spacing: -0.3px;
+}
+
+.context-modal-header p {
+  font-size: 13.5px;
+  color: #61735d;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.context-tabs {
+  margin: 16px 0 20px;
+}
+
+/* Lista de itens existentes no contexto */
+.context-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #dbe4d7;
+  border-radius: 9px;
+  margin-bottom: 20px;
+  background: #ffffff;
+}
+
+.context-list:empty {
+  display: none;
+}
+
+.context-list .consultation-history-link {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid #edf2eb;
+  background: transparent;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.context-list .consultation-history-link:hover {
+  background: #f5f9f3;
+}
+
+.context-list .consultation-history-link:last-child {
+  border-bottom: none;
+}
+
+.context-list .consultation-history-link strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1f3b2e;
+}
+
+.context-item-badge {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: #43634e;
+  background: #edf5ed;
+  border: 1px solid #d4e6d6;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Formulário de edição/criação no contexto */
+.modal .context-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #fbfdf9;
+  border: 1px solid #dbe5d8;
+  border-radius: 10px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+
+.modal .context-form h3 {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #1e3b2e;
+  margin: 0 0 2px 0;
+}
+
+.modal .context-form .context-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.modal .context-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #385141;
+  margin: 0;
+  text-align: left;
+}
+
+.modal .context-form label > span {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #385141;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.modal .context-form input,
+.modal .context-form select,
+.modal .context-form textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid #d5dfd1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 13px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #1e3b2e;
+  line-height: 1.5;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.modal .context-form input:focus,
+.modal .context-form select:focus,
+.modal .context-form textarea:focus {
+  border-color: #4f8069;
+  box-shadow: 0 0 0 3px rgba(118, 180, 165, 0.35);
+  outline: none;
+  background: #ffffff;
+}
+
+.modal .context-form input::placeholder,
+.modal .context-form textarea::placeholder {
+  color: #8fa38b;
+  font-size: 13.5px;
+}
+
+/* Caixa de observações e textareas do contexto */
+.modal .context-form textarea {
+  min-height: 90px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.modal .context-form .editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0 0;
+  margin-top: 4px;
+  border-top: 1px solid #e2ebd8;
+  background: transparent;
+}
+
+/* Estado de alergias (radio group) */
+.modal .context-allergy-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 14px 18px;
+  border: 1px solid #dce5d8;
+  border-radius: 8px;
+  background: #fbfdf9;
+  margin: 0 0 18px 0;
+}
+
+.modal .context-allergy-state legend {
+  font-size: 12px;
+  font-weight: 600;
+  color: #385141;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 0 6px;
+}
+
+.modal .context-allergy-state label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #27402f;
+  margin: 0;
+  cursor: pointer;
+}
+
+.modal .context-allergy-state input[type="radio"] {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+/* Rodapé do modal de contexto */
+.context-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid #e6ede2;
+  margin-top: 8px;
+}
+
+@media (max-width: 600px) {
+  .modal .context-form .context-form-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
 :root {
   font-family:
     Inter,

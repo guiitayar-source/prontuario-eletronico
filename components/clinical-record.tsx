@@ -1,6 +1,11 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useAccess } from './auth';
+import {
+  useClinicalContext,
+  ClinicalContextSummary,
+  ClinicalContextEditor,
+} from './clinical-context';
 import { useDocuments, DocumentHistory, DocumentEditor } from './documents';
 import { apiFetch } from '@/lib/supabase/http';
 import { PatientDetails, PatientSearch } from './patients/registry';
@@ -85,6 +90,7 @@ export default function ClinicalRecord({
 }) {
   const medical = ['owner', 'doctor'].includes(useAccess().role);
   const docs = useDocuments(patient, medical);
+  const clinicalContext = useClinicalContext(patient.id, medical);
   const [tab, setTab] = useState(medical ? 'consulta' : 'cadastro'),
     [rows, setRows] = useState<RecordEntry[]>([]),
     [current, setCurrent] = useState<RecordEntry | null>(null),
@@ -430,9 +436,10 @@ export default function ClinicalRecord({
                 <div className={panel ? 'workspace' : 'workspace focused'}>
                   {panel && (
                     <aside className="clinical-sidebar">
-                      <div className="section-label">
-                        CONTEXTO DO ATENDIMENTO
-                      </div>
+                      <ClinicalContextSummary
+                        context={clinicalContext}
+                        onEdit={() => setModal('contexto')}
+                      />
                       <section className="history-card">
                         <div className="card-heading">
                           <span>
@@ -466,18 +473,6 @@ export default function ClinicalRecord({
                             </span>
                           </button>
                         ))}
-                      </section>
-                      <section className="mini-section">
-                        <div className="card-heading">
-                          <span>Medicamentos atuais</span>
-                        </div>
-                        <p className="muted">Nenhum medicamento cadastrado.</p>
-                      </section>
-                      <section className="mini-section">
-                        <div className="card-heading">
-                          <span>Alergias</span>
-                        </div>
-                        <p className="muted">Não informadas</p>
                       </section>
                     </aside>
                   )}
@@ -679,7 +674,7 @@ export default function ClinicalRecord({
           }}
         >
           <section
-            className="modal"
+            className={modal === 'contexto' ? 'modal context-modal' : 'modal'}
             role="dialog"
             aria-modal="true"
             aria-labelledby="dialog-title"
@@ -740,6 +735,11 @@ export default function ClinicalRecord({
                   enviado neste protótipo.
                 </div>
               </>
+            ) : modal === 'contexto' ? (
+              <ClinicalContextEditor
+                context={clinicalContext}
+                onClose={closeModal}
+              />
             ) : modal === 'finalizar' ? (
               <>
                 <h2 id="dialog-title">Finalizar esta consulta?</h2>

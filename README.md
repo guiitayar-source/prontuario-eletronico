@@ -18,6 +18,7 @@ A aplicação atual usa Next.js, Supabase Auth, PostgreSQL e Storage privado. Co
 - Cadastro, pesquisa e edição de pacientes, com controle de versão.
 - Agenda com criação, edição, cancelamento e acesso à consulta.
 - Evolução em texto livre com salvamento automático no Supabase, controle de versão e histórico por paciente.
+- Contexto clínico longitudinal com diagnósticos/CID, medicamentos e alergias, disponível no painel lateral da consulta.
 - Finalização imutável com autor e horário, correções por adendos e vínculo opcional à agenda.
 - Captura de fotos e PDFs por QR, revisão, classificação e exclusão de anexos.
 - Login individual, vínculo à clínica e auditoria das alterações persistidas.
@@ -33,6 +34,7 @@ npm run test:supabase
 npm run test:consultations
 npm run test:documents
 npm run test:team
+npm run test:clinical-context
 ```
 
 O último comando exige Supabase local iniciado; só usa contas sintéticas locais. Os testes SQLite/D1 e arquivos em `drizzle/` preservam a implementação anterior para referência. Os antigos testes HTTP D1 não se aplicam ao servidor Next.js atual.
