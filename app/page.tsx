@@ -4,14 +4,15 @@ import Registry, { fetchPatient } from '@/components/patients/registry';
 import Consultation from '@/components/consultation';
 import Agenda from '@/components/agenda';
 import Team from '@/components/team';
+import Imports from '@/components/imports';
 import type { Patient } from '@/lib/patient-fields';
 export default function Home() {
   const [appointmentId, setAppointmentId] = useState<string | undefined>();
   const [patient, setPatient] = useState<Patient | null>(null),
     [error, setError] = useState(''),
-    [section, setSection] = useState<'patients' | 'agenda' | 'team'>(
-      'patients',
-    );
+    [section, setSection] = useState<
+      'patients' | 'agenda' | 'team' | 'imports'
+    >('patients');
   async function open(id: string, appointment?: string) {
     try {
       setPatient(await fetchPatient(id));
@@ -48,6 +49,13 @@ export default function Home() {
             setSection('agenda');
           }}
         />
+      ) : section === 'imports' ? (
+        <Imports
+          onPatients={() => setSection('patients')}
+          onAgenda={() => setSection('agenda')}
+          onTeam={() => setSection('team')}
+          onOpenPatient={open}
+        />
       ) : section === 'agenda' ? (
         <Agenda
           onPatients={() => setSection('patients')}
@@ -61,6 +69,7 @@ export default function Home() {
         />
       ) : (
         <Registry
+          onImports={() => setSection('imports')}
           onOpen={(p) => {
             setAppointmentId(undefined);
             setPatient(p);

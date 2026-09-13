@@ -1,0 +1,82 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:patient-demo",
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-demo",
+        "name": [
+          {
+            "given": [
+              "Paciente"
+            ],
+            "family": "Exemplo FHIR"
+          }
+        ],
+        "birthDate": "1985-02-03"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:encounter-demo",
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "encounter-demo",
+        "status": "finished",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "AMB"
+        },
+        "subject": {
+          "reference": "urn:uuid:patient-demo"
+        },
+        "period": {
+          "start": "2026-08-01T10:00:00-03:00"
+        },
+        "text": {
+          "status": "generated",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\">Evolução fictícia para testar a importação.</div>"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "id": "condition-demo",
+        "subject": {
+          "reference": "Patient/patient-demo"
+        },
+        "code": {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/sid/icd-10",
+              "code": "Z00.0",
+              "display": "Exame geral"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "request-demo",
+        "status": "completed",
+        "intent": "order",
+        "subject": {
+          "reference": "urn:uuid:patient-demo"
+        },
+        "medicationCodeableConcept": {
+          "text": "Medicamento fictício"
+        },
+        "dosageInstruction": [
+          {
+            "text": "Texto de exemplo sem validade clínica."
+          }
+        ],
+        "authoredOn": "2026-08-01"
+      }
+    }
+  ]
+}

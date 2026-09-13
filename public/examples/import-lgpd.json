@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "exported_at": "2026-09-01T12:00:00Z",
+  "patient": {
+    "id": "synthetic-patient-001",
+    "name": "Paciente Exemplo Importação",
+    "dob": "1990-04-10",
+    "phone": "11999990000"
+  },
+  "consultations": [
+    {
+      "id": "visit-001",
+      "patient_id": "synthetic-patient-001",
+      "attended_at": "2026-08-01T10:00:00-03:00",
+      "created_at": "2026-08-02T09:00:00-03:00",
+      "hma": "Texto fictício para testar a importação.",
+      "plan": "Plano fictício para demonstração.",
+      "diagnosis": [
+        {
+          "code": "Z00.0",
+          "name": "Exame geral"
+        }
+      ],
+      "status": "signed",
+      "signed_at": "2026-08-02T09:00:00-03:00"
+    }
+  ],
+  "medications": [
+    {
+      "id": "med-001",
+      "patient_id": "synthetic-patient-001",
+      "name": "Medicamento fictício",
+      "dose": "Dose de exemplo",
+      "frequency": "Uso fictício",
+      "status": "stopped",
+      "created_at": "2026-08-02T09:00:00-03:00"
+    }
+  ],
+  "prescriptions": [
+    {
+      "id": "rx-001",
+      "patient_id": "synthetic-patient-001",
+      "items": {
+        "freeMode": true,
+        "_freeText": "Receita fictícia, sem validade."
+      },
+      "issued_at": "2026-08-01T10:00:00-03:00"
+    }
+  ],
+  "allergies": [],
+  "appointments": [],
+  "documents": [],
+  "files": []
+}

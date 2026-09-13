@@ -1,4 +1,5 @@
 'use client';
+import { useAccess } from '../auth';
 import { apiFetch as fetch } from '@/lib/supabase/http';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -404,13 +405,16 @@ export default function Registry({
   onAgenda,
   onConsultation,
   onTeam,
+  onImports,
 }: {
   onOpen: (p: Patient) => void;
   onAgenda: () => void;
   onConsultation: () => void;
   onTeam: () => void;
+  onImports: () => void;
 }) {
   const [create, setCreate] = useState(false);
+  const medical = ['owner', 'doctor'].includes(useAccess().role);
   return (
     <div className="app-shell">
       <aside className="rail">
@@ -458,6 +462,11 @@ export default function Registry({
                   <h1>Pacientes</h1>
                   <p>Encontre um paciente ou comece um novo cadastro.</p>
                 </div>
+                {medical && (
+                  <button className="secondary" onClick={onImports}>
+                    Importar prontuários
+                  </button>
+                )}
                 <button className="primary" onClick={() => setCreate(true)}>
                   <Plus size={18} /> Novo paciente
                 </button>

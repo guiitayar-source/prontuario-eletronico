@@ -2584,3 +2584,24 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
+
+/* Importação de históricos: estilos restritos à nova tela e aos registros. */
+.imports-page { max-width: 1250px; }
+.import-card { border:1px solid var(--border, #dce5e2); background:#fff; border-radius:12px; padding:24px; margin:20px 0; }
+.import-card h2 { font-size:21px; margin-bottom:12px; }
+.import-card p { margin:10px 0; line-height:1.5; }
+.import-card label:not(.import-confirm) { display:grid; gap:8px; margin:16px 0; font-weight:600; }
+.import-card input:not([type=checkbox]), .import-card select { padding:10px 12px; border:1px solid #cbd8d3; border-radius:7px; background:#fff; width:100%; min-width:0; color:#203c34; }
+.import-actions { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin:20px 0; }
+.import-actions a { text-decoration:underline; color:#245f50; }
+.import-entry { padding:14px; border:1px solid #dee8e4; border-radius:8px; margin:10px 0; overflow-wrap:anywhere; }
+.import-entry summary { cursor:pointer; line-height:1.6; }
+.import-entry summary>span { color:#55756a; font-size:12px; margin-right:8px; }
+.import-entry pre { white-space:pre-wrap; overflow-wrap:anywhere; font-family:inherit; font-size:14px; line-height:1.65; padding-top:12px; }
+.import-card dl { margin:12px 0; font-size:13px; }
+.import-card dt { font-weight:600; margin-top:8px; }.import-card dd { margin:4px 0; }
+.import-entry ul { padding-left:20px; line-height:1.6; }
+.import-patient { padding:18px; border:1px solid #cbd8d3; margin:20px 0; border-radius:10px; }
+.import-confirm { display:flex; gap:12px; line-height:1.6; align-items:flex-start; }.import-confirm input { margin-top:6px; }
+.import-batch { display:flex; align-items:center; justify-content:space-between; gap:15px; padding:12px 0; border-top:1px solid #e3ebe7; }
+@media(max-width:640px) { .import-card { padding:16px; }.import-patient { padding:12px; }.import-batch { align-items:flex-start; flex-direction:column; } }

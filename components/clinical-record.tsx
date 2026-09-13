@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useAccess } from './auth';
+import { ImportedHistory } from './imports';
 import {
   useClinicalContext,
   ClinicalContextSummary,
@@ -388,6 +389,14 @@ export default function ClinicalRecord({
                 >
                   Cadastro
                 </button>
+                {medical && (
+                  <button
+                    className={tab === 'importados' ? 'selected' : ''}
+                    onClick={() => setTab('importados')}
+                  >
+                    Histórico importado
+                  </button>
+                )}
                 <div className="tabs-spacer" />
                 {tab === 'consulta' && (
                   <button
@@ -416,6 +425,9 @@ export default function ClinicalRecord({
                   setModal('documento');
                 }}
               />
+              {medical && tab === 'importados' && (
+                <ImportedHistory key={patient.id} patientId={patient.id} />
+              )}
               {medical && tab === 'documentos' && (
                 <DocumentHistory
                   docs={docs}
