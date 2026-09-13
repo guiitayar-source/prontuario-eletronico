@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock3,
   Plus,
+  ShieldCheck,
   Stethoscope,
   Users,
   X,
@@ -51,9 +52,11 @@ const localDateTime = (timestamp: number) => {
 function Navigation({
   onPatients,
   onConsultation,
+  onTeam,
 }: {
   onPatients: () => void;
   onConsultation: () => void;
+  onTeam?: () => void;
 }) {
   return (
     <aside className="rail">
@@ -73,6 +76,12 @@ function Navigation({
           <Stethoscope size={21} />
           <span>Consulta</span>
         </button>
+        {onTeam && (
+          <button className="nav-item" onClick={onTeam}>
+            <ShieldCheck size={21} />
+            <span>Equipe</span>
+          </button>
+        )}
       </nav>
       <div className="rail-bottom">
         <span className="avatar doctor">G</span>
@@ -310,9 +319,11 @@ function AppointmentForm({
 export default function Agenda({
   onPatients,
   onOpenPatient,
+  onTeam,
 }: {
   onPatients: () => void;
   onOpenPatient: (id: string, appointmentId?: string) => void;
+  onTeam?: () => void;
 }) {
   const [day, setDay] = useState(dateInput(new Date()));
   const [items, setItems] = useState<Appointment[]>([]);
@@ -384,7 +395,11 @@ export default function Agenda({
 
   return (
     <div className="app-shell">
-      <Navigation onPatients={onPatients} onConsultation={onPatients} />
+      <Navigation
+        onPatients={onPatients}
+        onConsultation={onPatients}
+        onTeam={onTeam}
+      />
       <div className="main-shell">
         <header className="topbar">
           <div className="wordmark">

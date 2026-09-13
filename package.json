@@ -19,7 +19,8 @@
     "test:appointments": "node tests/appointments.test.mjs",
     "test:supabase": "node tests/supabase-flow.mjs",
     "test:consultations": "node tests/consultations.mjs",
-    "test:documents": "node tests/documents.mjs"
+    "test:documents": "node tests/documents.mjs",
+    "test:team": "node tests/team.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

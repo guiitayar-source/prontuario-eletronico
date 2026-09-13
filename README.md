@@ -32,6 +32,7 @@ npm run build
 npm run test:supabase
 npm run test:consultations
 npm run test:documents
+npm run test:team
 ```
 
 O último comando exige Supabase local iniciado; só usa contas sintéticas locais. Os testes SQLite/D1 e arquivos em `drizzle/` preservam a implementação anterior para referência. Os antigos testes HTTP D1 não se aplicam ao servidor Next.js atual.

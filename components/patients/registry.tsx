@@ -12,6 +12,7 @@ import {
   Check,
   CalendarDays,
   Stethoscope,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   fieldGroups,
@@ -402,10 +403,12 @@ export default function Registry({
   onOpen,
   onAgenda,
   onConsultation,
+  onTeam,
 }: {
   onOpen: (p: Patient) => void;
   onAgenda: () => void;
   onConsultation: () => void;
+  onTeam: () => void;
 }) {
   const [create, setCreate] = useState(false);
   return (
@@ -426,6 +429,10 @@ export default function Registry({
           <button className="nav-item" onClick={onConsultation}>
             <Stethoscope size={21} />
             <span>Consulta</span>
+          </button>
+          <button className="nav-item" onClick={onTeam}>
+            <ShieldCheck size={21} />
+            <span>Equipe</span>
           </button>
         </nav>
         <div className="rail-bottom">

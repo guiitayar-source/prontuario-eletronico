@@ -1888,3 +1888,452 @@ h1 {
 .account-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 20px; background: #153e33; color: white; font-size: 14px; }
 .account-bar button { color: white; border: 1px solid #9bb8ad; border-radius: 6px; padding: 5px 16px; }
 .account-bar span { overflow-wrap: anywhere; }
+
+/* ==========================================================================
+   Equipe e Gestão de Acessos
+   ========================================================================== */
+
+.team-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Card: Convidar Integrante */
+.team-invite-card {
+  background: #ffffff;
+  border: 1px solid #dce5d9;
+  border-radius: 12px;
+  padding: 24px 28px;
+  box-shadow: 0 4px 20px rgba(33, 58, 44, 0.04);
+}
+
+.team-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.team-header-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #eef6f1;
+  color: #24583e;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid #d4e7db;
+}
+
+.team-card-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1b382b;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.3px;
+}
+
+.team-card-header p {
+  font-size: 13.5px;
+  color: #63775f;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.team-invite-form {
+  display: grid;
+  grid-template-columns: 1fr 220px auto;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.team-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.team-field-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #385141;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.team-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.team-input-wrapper .input-icon {
+  position: absolute;
+  left: 14px;
+  color: #8fa38b;
+  pointer-events: none;
+}
+
+.team-input-wrapper input {
+  width: 100%;
+  height: 42px;
+  padding: 0 14px 0 40px;
+  border: 1px solid #d5dfd1;
+  border-radius: 8px;
+  background: #fafbfa;
+  font-size: 14px;
+  color: #1e3b2e;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.team-input-wrapper input:focus {
+  background: #ffffff;
+  border-color: #4f8069;
+  box-shadow: 0 0 0 3px rgba(118, 180, 165, 0.35);
+}
+
+.team-field-group select {
+  width: 100%;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid #d5dfd1;
+  border-radius: 8px;
+  background: #fafbfa;
+  font-size: 14px;
+  color: #1e3b2e;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.team-field-group select:focus {
+  background: #ffffff;
+  border-color: #4f8069;
+  box-shadow: 0 0 0 3px rgba(118, 180, 165, 0.35);
+}
+
+.team-invite-form button.primary {
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 22px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.team-invite-form button.primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Card: Lista de Integrantes */
+.team-list-card {
+  background: #ffffff;
+  border: 1px solid #dce5d9;
+  border-radius: 12px;
+  padding: 24px 28px;
+  box-shadow: 0 4px 20px rgba(33, 58, 44, 0.04);
+}
+
+.team-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #ebf1ea;
+  margin-bottom: 6px;
+}
+
+.team-list-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1b382b;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.team-count-badge {
+  font-size: 12.5px;
+  font-weight: 550;
+  color: #4a6652;
+  background: #edf5ef;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid #d6e8dc;
+}
+
+.team-members-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.team-member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid #f0f4ee;
+  transition: background-color 0.15s ease;
+}
+
+.team-member-item:last-child {
+  border-bottom: none;
+  padding-bottom: 4px;
+}
+
+.team-member-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.team-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
+.team-avatar.owner {
+  background: #fcf6e8;
+  color: #846726;
+  border: 1.5px solid #ebd9a8;
+}
+
+.team-avatar.doctor {
+  background: #eaf5ee;
+  color: #23583c;
+  border: 1.5px solid #c7e5d3;
+}
+
+.team-avatar.secretary {
+  background: #edf4f8;
+  color: #2a5b73;
+  border: 1.5px solid #cde0ea;
+}
+
+.team-member-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.team-member-email-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.team-member-email {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #1a3629;
+}
+
+.team-member-meta {
+  font-size: 12.5px;
+  color: #6d806a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 5px;
+  letter-spacing: 0.2px;
+}
+
+.role-badge.owner {
+  background: #fbf5e2;
+  color: #7b6223;
+  border: 1px solid #ebd9a8;
+}
+
+.role-badge.doctor {
+  background: #e9f5ed;
+  color: #1f563a;
+  border: 1px solid #c5e4d2;
+}
+
+.role-badge.secretary {
+  background: #ebf3f7;
+  color: #29576e;
+  border: 1px solid #cadbe3;
+}
+
+.team-member-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.team-role-select {
+  padding: 7px 12px;
+  border: 1px solid #d4dfd0;
+  border-radius: 6px;
+  background: #fafbfa;
+  font-size: 13px;
+  font-weight: 500;
+  color: #264634;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.team-role-select:focus {
+  background: #fff;
+  border-color: #4f8069;
+  box-shadow: 0 0 0 2px rgba(118, 180, 165, 0.35);
+}
+
+.team-revoke-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #a8543d;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.team-revoke-button:hover:not(:disabled) {
+  background: #fdf2ef;
+  border-color: #f3d4cb;
+  color: #923d26;
+}
+
+.team-revoke-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Card: Guia de Permissões e Segurança */
+.team-roles-guide {
+  background: #fbfdfa;
+  border: 1px solid #dbe6d8;
+  border-radius: 12px;
+  padding: 24px 28px;
+}
+
+.team-guide-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.team-guide-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f3b2d;
+  margin: 0 0 4px 0;
+}
+
+.team-guide-header p {
+  font-size: 13px;
+  color: #63775f;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.team-roles-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.team-role-card {
+  background: #ffffff;
+  border: 1px solid #e2ebd9;
+  border-radius: 10px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.team-role-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.team-role-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #1c392b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-role-features {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.team-role-features li {
+  font-size: 13px;
+  color: #4a5c49;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+}
+
+.team-role-features li svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.team-feature-check {
+  color: #2e734c;
+}
+
+.team-feature-lock {
+  color: #b05e46;
+}
+
+@media (max-width: 760px) {
+  .team-invite-form {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .team-member-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .team-member-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .team-roles-grid {
+    grid-template-columns: 1fr;
+  }
+}
