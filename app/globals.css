@@ -630,7 +630,7 @@
   gap: 12px;
   margin-top: 24px;
   padding: 18px 0 0;
-  border-top: 1px solid #e2ebd9;
+  border-top: 1px solid var(--theme-border, #e2ebd9);
   background: transparent;
 }
 @media (max-width: 760px) {
@@ -917,17 +917,23 @@ h1 {
   font-size: 14px;
   min-height: 44px;
 }
-.patient-tabs > span.selected {
+.patient-tabs > span.selected,
+.patient-tabs > button.selected {
   border-bottom: 2px solid var(--theme-primary, #36634e);
   padding: 0 0 14px;
   color: var(--theme-primary, #305d47);
   font-weight: 600;
   align-self: end;
+  transition: color 0.2s ease, border-color 0.2s ease;
 }
 .patient-tabs button {
   padding-bottom: 14px;
   color: #788479;
   font-size: 13px;
+  transition: color 0.15s ease;
+}
+.patient-tabs button:hover:not(:disabled) {
+  color: var(--theme-primary, #305d47);
 }
 .count {
   font-size: 11px;
@@ -1503,8 +1509,8 @@ h1 {
   }
 }
 .patient-tabs > button.selected {
-  border-bottom: 2px solid #36634e;
-  color: #305d47;
+  border-bottom: 2px solid var(--theme-primary, #36634e);
+  color: var(--theme-primary, #305d47);
   font-weight: 600;
 }
 .patient-tabs > button {
@@ -1538,13 +1544,14 @@ h1 {
 }
 .capture-notice {
   padding: 12px 16px;
-  border: 1px solid #e5e7d5;
+  border: 1px solid var(--theme-accent-border, #e5e7d5);
   border-radius: 7px;
-  background: #f4f5eb;
-  color: #767958;
+  background: var(--theme-accent-soft, #f4f5eb);
+  color: var(--theme-text-accent, #767958);
   font-size: 13px;
   line-height: 1.6;
   margin: 16px 0 22px;
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
 }
 .capture-error {
   display: flex;
@@ -1561,24 +1568,27 @@ h1 {
   margin: 14px 0;
 }
 .capture-message {
-  background: #eaf2e8;
-  color: #3e6b46;
+  background: var(--theme-accent-soft, #eaf2e8);
+  color: var(--theme-primary, #3e6b46);
+  border: 1px solid var(--theme-accent-border, transparent);
   padding: 12px 15px;
   border-radius: 7px;
   font-size: 14px;
   line-height: 1.6;
   margin: 15px 0;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 .connection-strip {
   display: flex;
   align-items: center;
   gap: 15px;
-  background: #edf3ec;
-  border: 1px solid #d6e4d4;
+  background: var(--theme-accent-soft, #edf3ec);
+  border: 1px solid var(--theme-accent-border, #d6e4d4);
   padding: 17px 20px;
   border-radius: 9px;
   margin: 22px 0;
-  color: #406444;
+  color: var(--theme-primary, #406444);
+  transition: all 0.25s ease;
 }
 .connection-strip div {
   flex: 1;
@@ -1598,11 +1608,12 @@ h1 {
   text-decoration: underline;
   text-underline-offset: 4px;
   padding: 8px;
-  color: #55764e;
+  color: var(--theme-primary, #55764e);
+  transition: color 0.15s ease;
 }
 .received-section {
   background: white;
-  border: 1px solid #e0e6dc;
+  border: 1px solid var(--theme-border, #e0e6dc);
   border-radius: 10px;
   margin: 24px 0;
   padding: 24px;
@@ -1627,17 +1638,17 @@ h1 {
 .received-file select {
   font-size: 13px;
   padding: 8px 10px;
-  background: #f9fbf7;
-  border: 1px solid #dce5d7;
+  background: #ffffff;
+  border: 1px solid var(--theme-border, #dce5d7);
   border-radius: 6px;
-  color: #53694c;
+  color: var(--theme-color, #53694c);
 }
 .received-file {
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 18px 0;
-  border-bottom: 1px solid #edf0e8;
+  border-bottom: 1px solid var(--theme-border-subtle, #edf0e8);
 }
 .received-file:last-child {
   border-bottom: 0;
@@ -1645,12 +1656,13 @@ h1 {
 .file-symbol {
   display: grid;
   place-items: center;
-  background: #eff3ea;
-  color: #68855d;
+  background: var(--theme-accent-soft, #eff3ea);
+  color: var(--theme-primary, #68855d);
   width: 44px;
   height: 50px;
   border-radius: 6px;
   flex-shrink: 0;
+  transition: all 0.25s ease;
 }
 .file-detail {
   flex: 1;
@@ -1691,12 +1703,14 @@ h1 {
 .empty-icon {
   width: 68px;
   height: 68px;
-  background: #eef2e8;
+  background: var(--theme-accent-soft, #eef2e8);
+  border: 1px solid var(--theme-accent-border, transparent);
   border-radius: 50%;
-  color: #80916b;
+  color: var(--theme-primary, #80916b);
   display: grid;
   place-items: center;
   margin-bottom: 8px;
+  transition: all 0.25s ease;
 }
 .attachments-empty h3 {
   font-size: 19px;
@@ -1719,23 +1733,24 @@ h1 {
 }
 .capture-destination {
   padding: 17px 20px;
-  background: #f0f4eb;
-  border: 1px solid #dbe6d5;
+  background: var(--theme-accent-soft, #f0f4eb);
+  border: 1px solid var(--theme-accent-border, #dbe6d5);
   border-radius: 8px;
   display: grid;
   gap: 6px;
   margin: 18px 0;
+  transition: all 0.25s ease;
 }
 .capture-destination > span {
   font-size: 10px;
   letter-spacing: 1.2px;
-  color: #7b896e;
+  color: var(--theme-text-accent, #7b896e);
   font-weight: 600;
 }
 .capture-destination > strong {
   font-size: 21px;
   font-weight: 600;
-  color: #355638;
+  color: var(--theme-primary, #355638);
 }
 .capture-destination > small {
   font-size: 12px;
@@ -2225,9 +2240,10 @@ h1 {
   gap: 15px;
   position: sticky;
   bottom: 0;
-  background: #f5f7f5ed;
-  border-top: 1px solid #dce4d5;
+  background: var(--theme-bg, #f5f7f5);
+  border-top: 1px solid var(--theme-border, #dce4d5);
   padding: 20px 0;
+  transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 .patient-details {
   max-width: 1100px;
@@ -2235,10 +2251,11 @@ h1 {
 }
 .detail-group {
   background: white;
-  border: 1px solid #dfe6da;
+  border: 1px solid var(--theme-border, #dfe6da);
   border-radius: 9px;
   padding: 22px 25px;
   margin: 20px 0;
+  transition: border-color 0.25s ease;
 }
 .detail-group h3 {
   font-size: 16px;
@@ -3116,7 +3133,7 @@ h1 {
   align-items: center;
   justify-content: space-between;
   padding-bottom: 16px;
-  border-bottom: 1px solid #ebf1ea;
+  border-bottom: 1px solid var(--theme-border-subtle, #ebf1ea);
   margin-bottom: 6px;
 }
 
@@ -3131,11 +3148,12 @@ h1 {
 .team-count-badge {
   font-size: 12.5px;
   font-weight: 550;
-  color: #4a6652;
-  background: #edf5ef;
+  color: var(--theme-primary, #4a6652);
+  background: var(--theme-accent-soft, #edf5ef);
   padding: 4px 12px;
   border-radius: 20px;
-  border: 1px solid #d6e8dc;
+  border: 1px solid var(--theme-accent-border, #d6e8dc);
+  transition: all 0.25s ease;
 }
 
 .team-members-list {
@@ -3182,9 +3200,10 @@ h1 {
 }
 
 .team-avatar.doctor {
-  background: #eaf5ee;
-  color: #23583c;
-  border: 1.5px solid #c7e5d3;
+  background: var(--theme-avatar-doctor-bg, #eaf5ee);
+  color: var(--theme-avatar-doctor-color, #23583c);
+  border: 1.5px solid var(--theme-accent-border, #c7e5d3);
+  transition: all 0.25s ease;
 }
 
 .team-avatar.secretary {
@@ -3237,9 +3256,10 @@ h1 {
 }
 
 .role-badge.doctor {
-  background: #e9f5ed;
-  color: #1f563a;
-  border: 1px solid #c5e4d2;
+  background: var(--theme-accent-soft, #e9f5ed);
+  color: var(--theme-primary, #1f563a);
+  border: 1px solid var(--theme-accent-border, #c5e4d2);
+  transition: all 0.25s ease;
 }
 
 .role-badge.secretary {
@@ -3336,12 +3356,13 @@ h1 {
 
 .team-role-card {
   background: #ffffff;
-  border: 1px solid #e2ebd9;
+  border: 1px solid var(--theme-border, #e2ebd9);
   border-radius: 10px;
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  transition: border-color 0.25s ease;
 }
 
 .team-role-card-head {
@@ -3353,7 +3374,7 @@ h1 {
 .team-role-title {
   font-size: 14.5px;
   font-weight: 600;
-  color: #1c392b;
+  color: var(--theme-color, #1c392b);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3370,7 +3391,7 @@ h1 {
 
 .team-role-features li {
   font-size: 13px;
-  color: #4a5c49;
+  color: var(--theme-color, #4a5c49);
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -3383,7 +3404,8 @@ h1 {
 }
 
 .team-feature-check {
-  color: #2e734c;
+  color: var(--theme-primary, #2e734c);
+  transition: color 0.25s ease;
 }
 
 .team-feature-lock {
