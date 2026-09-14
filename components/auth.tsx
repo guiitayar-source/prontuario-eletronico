@@ -101,6 +101,21 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     <p>Sua conta precisa ser vinculada à clínica pelo administrador.</p>
     {error && <p role="alert">{error}</p>}<button className="secondary" onClick={() => location.reload()}>Verificar acesso</button><button className="secondary" onClick={signOut}>Sair</button>
   </div></main>;
-  return <Access.Provider value={access}><div className="account-bar"><span>{members.find(m => m.clinic_id === access.clinic)?.clinics?.name} · {session.user.email}</span><button onClick={signOut}>Sair</button></div>
-    {error && <p className="capture-error" role="alert">{error}</p>}<MFAGate key={`${session.user.id}:${access.clinic}`} session={session} clinic={access.clinic} role={access.role}>{children}</MFAGate></Access.Provider>;
+  const clinicName = members.find((m) => m.clinic_id === access.clinic)?.clinics?.name || '';
+  return (
+    <Access.Provider value={access}>
+      {error && <p className="capture-error" role="alert">{error}</p>}
+      <MFAGate
+        key={`${session.user.id}:${access.clinic}`}
+        session={session}
+        clinic={access.clinic}
+        role={access.role}
+        clinicName={clinicName}
+        userEmail={session.user.email}
+        onSignOut={signOut}
+      >
+        {children}
+      </MFAGate>
+    </Access.Provider>
+  );
 }

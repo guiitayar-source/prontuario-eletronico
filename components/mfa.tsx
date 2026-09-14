@@ -6,16 +6,23 @@ import { Audit } from './audit';
 import type { Session } from '@supabase/supabase-js';
 import QRCode from 'qrcode';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { Building2, ShieldCheck, LogOut, X } from 'lucide-react';
 
 export function MFAGate({
   session,
   clinic,
   role,
+  clinicName,
+  userEmail,
+  onSignOut,
   children,
 }: {
   session: Session;
   clinic: string;
   role: string;
+  clinicName?: string;
+  userEmail?: string;
+  onSignOut?: () => void;
   children: React.ReactNode;
 }) {
   const [allowed, setAllowed] = useState(false),
@@ -136,12 +143,28 @@ export function MFAGate({
   }
   const security = (
     <section className="auth-card" aria-labelledby="mfa-title">
-      <h2 id="mfa-title">Segurança da conta</h2>
-      <p>
-        {required
-          ? 'Autenticador obrigatório para todos os membros da clínica.'
-          : 'Configure seu autenticador para proteger o acesso ao prontuário.'}
-      </p>
+      <div className="mfa-card-top">
+        <div>
+          <h2 id="mfa-title">Segurança da conta</h2>
+          <p>
+            {required
+              ? 'Autenticador obrigatório para todos os membros da clínica.'
+              : 'Configure seu autenticador para proteger o acesso ao prontuário.'}
+          </p>
+        </div>
+        {allowed && (
+          <button
+            type="button"
+            className="audit-btn-icon"
+            onClick={() => {
+              if (!busy) setOpen(false);
+            }}
+            title="Fechar"
+          >
+            <X size={18} />
+          </button>
+        )}
+      </div>
       {!ready ? (
         <p>Verificando sessão…</p>
       ) : (
@@ -248,16 +271,74 @@ export function MFAGate({
     </section>
   );
   if (!allowed) return <main className="auth-shell">{security}</main>;
+  const roleLabel =
+    role === 'owner'
+      ? 'Proprietário'
+      : role === 'doctor'
+        ? 'Médico'
+        : role === 'secretary'
+          ? 'Secretária'
+          : role;
+
   return (
     <>
-      <div className="account-bar">
-        <button onClick={() => setOpen(true)}>Segurança · MFA</button>
-        {['owner', 'doctor'].includes(role) && <Audit />}
-      </div>
+      <header className="account-bar">
+        <div className="account-bar-left">
+          <div className="clinic-badge-group">
+            <Building2 size={15} className="clinic-icon" />
+            <span className="clinic-name">{clinicName || 'Clínica'}</span>
+          </div>
+          <span className="account-sep">•</span>
+          <div className="user-badge-group">
+            <span className="user-email" title={userEmail || session.user.email}>
+              {userEmail || session.user.email}
+            </span>
+            <span className={`user-role-badge role-${role}`}>{roleLabel}</span>
+          </div>
+        </div>
+
+        <div className="account-bar-right">
+          <button
+            type="button"
+            className="header-btn"
+            onClick={() => setOpen(true)}
+            title="Configurações de segurança e segundo fator (MFA)"
+          >
+            <ShieldCheck size={15} />
+            <span>Segurança · MFA</span>
+            {factors.length > 0 && (
+              <span
+                className="mfa-dot"
+                title="Segundo fator ativo nesta conta"
+              />
+            )}
+          </button>
+
+          {['owner', 'doctor'].includes(role) && <Audit />}
+
+          {onSignOut && (
+            <>
+              <div className="header-divider" />
+              <button
+                type="button"
+                className="header-btn btn-signout"
+                onClick={onSignOut}
+                title="Sair da conta"
+              >
+                <LogOut size={15} />
+                <span>Sair</span>
+              </button>
+            </>
+          )}
+        </div>
+      </header>
+
       {children}
+
       {open && (
         <Modal
           label="Segurança da conta"
+          className="mfa-modal-dialog"
           onClose={() => {
             if (!busy) setOpen(false);
           }}

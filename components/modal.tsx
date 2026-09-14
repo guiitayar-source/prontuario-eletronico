@@ -4,10 +4,12 @@ export function Modal({
   children,
   onClose,
   label,
+  className,
 }: {
   children: React.ReactNode;
   onClose: () => void;
   label: string;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -18,8 +20,13 @@ export function Modal({
   return (
     <dialog
       ref={ref}
-      className="modal native-modal"
+      className={`modal native-modal${className ? ` ${className}` : ''}`}
       aria-label={label}
+      onClick={(e) => {
+        if (ref.current && e.target === ref.current) {
+          onClose();
+        }
+      }}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
