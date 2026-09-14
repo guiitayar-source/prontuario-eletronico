@@ -21,8 +21,9 @@ A aplicação atual usa Next.js, Supabase Auth, PostgreSQL e Storage privado. Co
 - Evolução em texto livre com salvamento automático no Supabase, controle de versão e histórico por paciente.
 - Contexto clínico longitudinal com diagnósticos/CID, medicamentos e alergias, disponível no painel lateral da consulta.
 - Finalização imutável com autor e horário, correções por adendos e vínculo opcional à agenda.
-- Captura de fotos e PDFs por QR, revisão, classificação e exclusão de anexos.
+- Captura de fotos e PDFs por QR, revisão, classificação, arquivamento e restauração de anexos.
 - Login individual, vínculo à clínica e auditoria das alterações persistidas.
+- Exportação FHIR R4 por paciente, MFA com proteção também no banco e backup criptografado com ensaio local de restauração. Consulte [OPERACAO_SEGURA.md](./OPERACAO_SEGURA.md) para ativação, limites e pendências antes de dados reais.
 
 Evoluções, adendos e documentos clínicos são acessíveis somente a médicos e proprietários da clínica. A secretária mantém acesso ao cadastro, agenda e anexos. Documentos possuem modelos editáveis, histórico de rascunhos, duplicação e PDF com fontes incorporadas. O PDF corresponde à versão salva e permanece identificado como rascunho sem assinatura. Não há assinatura digital, OCR ou Anamnesator conectado. Rascunhos antigos do navegador não são importados automaticamente.
 
@@ -37,6 +38,7 @@ npm run test:documents
 npm run test:team
 npm run test:clinical-context
 npm run test:imports
+npm run test:readiness
 ```
 
 O último comando exige Supabase local iniciado; só usa contas sintéticas locais. Os testes SQLite/D1 e arquivos em `drizzle/` preservam a implementação anterior para referência. Os antigos testes HTTP D1 não se aplicam ao servidor Next.js atual.

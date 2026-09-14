@@ -14,10 +14,13 @@ export const capture = handle(async (request, ctx) => {
     c: ctx.clinic, action: a, d, device_token: request.headers.get('x-device-token'),
   }));
   if (request.method === 'GET') {
-    if (action === 'list') {
+    if (action === 'list' || action === 'archived') {
+      if (action === 'archived' && !['owner','doctor'].includes(ctx.role)) throw new HttpError(403,'Acesso restrito ao médico.');
       await patient(ctx, url.searchParams.get('patientId'));
-      const rows = check(await ctx.db.from('attachments').select('id,request_id,name,mime,size,category,created_at').eq('clinic_id', ctx.clinic)
-        .eq('patient_id', url.searchParams.get('patientId')!).order('created_at').order('id'));
+      let query = ctx.db.from('attachments').select('id,request_id,name,mime,size,category,created_at').eq('clinic_id', ctx.clinic)
+        .eq('patient_id', url.searchParams.get('patientId')!).order('created_at').order('id');
+      query = action === 'archived' ? query.not('archived_at','is',null) : query.is('archived_at',null);
+      const rows = check(await query);
       return json({ attachments: rows.map(r => ({ ...r, created_at: Date.parse(r.created_at) })) });
     }
     if (action === 'file') {
@@ -49,10 +52,8 @@ export const capture = handle(async (request, ctx) => {
     }
     return json(check(await adminClient().rpc('commit_verified_upload', { c: ctx.clinic, d, actor: ctx.user, device_token: request.headers.get('x-device-token') })),201);
   }
-  if (action === 'delete') {
-    const record = await command('file',d);
-    check(await bucket.remove([record.storage_path]));
-    await command('delete',d);
+  if (action === 'delete' || action === 'restore') {
+    await command(action,d);
     return json({ ok:true });
   }
   if (['connect','request','disconnect','complete','classify'].includes(action)) return json(normalize(await command(action,d)));

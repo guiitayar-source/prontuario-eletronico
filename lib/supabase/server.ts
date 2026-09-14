@@ -63,6 +63,8 @@ export async function context(request: Request) {
   const clinic = request.headers.get('x-clinic-id');
   const member = clinic ? memberships.find(m => m.clinic_id === clinic) : memberships[0];
   if (!member) throw new HttpError(403, 'Sua conta ainda não está vinculada a uma clínica.');
+  if (!check(await db.rpc('session_is_strong', { c: member.clinic_id })))
+    throw new HttpError(403, 'Confirme o segundo fator de autenticação para acessar a clínica.');
   return { db, clinic: member.clinic_id as string, role: member.role as string, user: data.user.id };
 }
 export type Context = Awaited<ReturnType<typeof context>>;

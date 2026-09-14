@@ -38,6 +38,16 @@ export default function Attachments({
 }: Props) {
   const [files, setFiles] = useState<Received[]>([]),
     [pair, setPair] = useState<Pairing | null>(null);
+  const [archived,setArchived]=useState<Received[] | null>(null);
+  async function loadArchived() {
+    try { const r=await api(`archived&patientId=${encodeURIComponent(patient.id)}`);setArchived(r.attachments); }
+    catch(e) {setError((e as Error).message);}
+  }
+  async function restore(file:Received) {
+    setBusy(true);
+    try {await api('restore',{id:file.id,patientId:patient.id});await refresh();await loadArchived();setMessage('Anexo restaurado.');}
+    catch(e) {setError((e as Error).message);} finally {setBusy(false);}
+  }
   const [request, setRequest] = useState<CaptureRequest | null>(null),
     [connected, setConnected] = useState(false);
   const [dialog, setDialog] = useState(false),
@@ -230,7 +240,8 @@ export default function Attachments({
       await api('delete', { id: remove.id, patientId: patient.id });
       setRemove(null);
       await refresh();
-      setMessage('Anexo excluído.');
+      if(archived) await loadArchived();
+      setMessage('Anexo arquivado. O arquivo foi preservado e pode ser restaurado.');
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -326,14 +337,14 @@ export default function Attachments({
           <option value="report">Relatório externo</option>
           <option value="other">Outro documento</option>
         </select>
-        <button
+        {canCreateDocument && <button
           className="icon-btn"
           disabled={busy}
-          aria-label={`Excluir ${file.name}`}
+          aria-label={`Arquivar ${file.name}`}
           onClick={() => setRemove(file)}
         >
           <Trash2 size={18} />
-        </button>
+        </button>}
       </article>
     );
   }
@@ -368,8 +379,11 @@ export default function Attachments({
       </div>
       <div className="capture-notice">
         Demonstração: envie somente arquivos fictícios. Os anexos ficam
-        armazenados no site privado até você excluí-los.
+        preservados no armazenamento privado. O arquivamento permite recuperá-los.
       </div>
+      {canCreateDocument && <div><button className="secondary" disabled={busy} onClick={()=>archived?setArchived(null):loadArchived()}>{archived?'Fechar arquivados':'Ver anexos arquivados'}</button>
+        {archived && <section aria-label="Anexos arquivados">{!archived.length && <p>Nenhum anexo arquivado.</p>}{archived.map(file=><p key={file.id}>{file.name} <button className="secondary" disabled={busy} onClick={()=>restore(file)}>Restaurar</button></p>)}</section>}
+      </div>}
       {error && (
         <div className="capture-error" role="alert">
           {error}
@@ -518,10 +532,10 @@ export default function Attachments({
               </>
             ) : remove ? (
               <>
-                <h2 id="capture-title">Excluir este anexo?</h2>
+                <h2 id="capture-title">Arquivar este anexo?</h2>
                 <p>{remove.name}</p>
                 <p>
-                  O arquivo será removido do armazenamento desta demonstração.
+                  O arquivo sairá da lista ativa, mas será preservado e poderá ser restaurado pelo médico.
                 </p>
                 {error && <p role="alert">{error}</p>}
                 <button
@@ -529,7 +543,7 @@ export default function Attachments({
                   disabled={busy}
                   onClick={deleteFile}
                 >
-                  Excluir arquivo
+                  Arquivar arquivo
                 </button>
               </>
             ) : (

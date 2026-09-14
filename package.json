@@ -22,7 +22,10 @@
     "test:documents": "node tests/documents.mjs",
     "test:team": "node tests/team.mjs",
     "test:clinical-context": "node tests/clinical-context.mjs",
-    "test:imports": "node tests/imports.mjs"
+    "test:imports": "node tests/imports.mjs",
+    "test:readiness": "node tests/readiness.mjs",
+    "backup:create": "node --env-file=.env.local scripts/backup.mjs create",
+    "backup:verify": "node scripts/backup.mjs verify"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

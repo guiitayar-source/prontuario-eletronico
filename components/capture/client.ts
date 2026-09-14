@@ -42,7 +42,7 @@ type DeviceState = {
   connected: boolean;
 };
 export function api(
-  action: 'list' | `list&patientId=${string}`,
+  action: 'list' | `list&patientId=${string}` | `archived&patientId=${string}`,
 ): Promise<{ attachments: Received[] }>;
 export function api(
   action: 'connect',

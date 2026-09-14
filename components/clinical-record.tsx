@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAccess } from './auth';
 import { ImportedHistory } from './imports';
+import { FHIRExport } from './fhir-export';
 import {
   useClinicalContext,
   ClinicalContextSummary,
@@ -398,6 +399,7 @@ export default function ClinicalRecord({
                   </button>
                 )}
                 <div className="tabs-spacer" />
+                {medical && <FHIRExport key={patient.id} patientId={patient.id} patientName={displayName} />}
                 {tab === 'consulta' && (
                   <button
                     onClick={() => setPanel(!panel)}

@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { setClinicId } from '@/lib/supabase/http';
+import { MFAGate } from './mfa';
 
 const Access = createContext({ role: '', clinic: '' });
 export const useAccess = () => useContext(Access);
@@ -101,5 +102,5 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     {error && <p role="alert">{error}</p>}<button className="secondary" onClick={() => location.reload()}>Verificar acesso</button><button className="secondary" onClick={signOut}>Sair</button>
   </div></main>;
   return <Access.Provider value={access}><div className="account-bar"><span>{members.find(m => m.clinic_id === access.clinic)?.clinics?.name} · {session.user.email}</span><button onClick={signOut}>Sair</button></div>
-    {error && <p className="capture-error" role="alert">{error}</p>}<div key={`${session.user.id}:${access.clinic}`}>{children}</div></Access.Provider>;
+    {error && <p className="capture-error" role="alert">{error}</p>}<MFAGate key={`${session.user.id}:${access.clinic}`} session={session} clinic={access.clinic} role={access.role}>{children}</MFAGate></Access.Provider>;
 }

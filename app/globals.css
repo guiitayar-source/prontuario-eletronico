@@ -1032,6 +1032,9 @@ h1 {
   padding: 20px;
   backdrop-filter: blur(3px);
 }
+.native-modal { margin: auto; border: 0; color: inherit; }
+.native-modal::backdrop { background: #122e2866; backdrop-filter: blur(3px); }
+.native-modal .auth-card { padding: 0; border: 0; box-shadow: none; max-width: 100%; }
 .modal {
   width: 100%;
   max-width: 550px;
