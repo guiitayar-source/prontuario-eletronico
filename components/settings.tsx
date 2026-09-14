@@ -126,7 +126,10 @@ export default function Settings({
                               style={{ background: t.railColor }}
                               title="Barra lateral"
                             />
-                            <div className="preview-bar-content">
+                            <div
+                              className="preview-bar-content"
+                              style={{ background: t.bgColor }}
+                            >
                               <span
                                 className="preview-chip-accent"
                                 style={{ background: t.accentSoft }}

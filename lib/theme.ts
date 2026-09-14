@@ -11,6 +11,7 @@ export type ThemeConfig = {
   headerColor: string;
   primaryColor: string;
   accentSoft: string;
+  bgColor: string;
 };
 
 export const THEMES: ThemeConfig[] = [
@@ -22,15 +23,17 @@ export const THEMES: ThemeConfig[] = [
     headerColor: '#11332a',
     primaryColor: '#24583e',
     accentSoft: '#edf5ed',
+    bgColor: '#f5f7f5',
   },
   {
     id: 'azul',
     name: 'Azul Hospitalar',
-    description: 'Estilo médico hospitalar contemporâneo em tons de azul-marinho profundo.',
+    description: 'Estilo médico hospitalar contemporâneo em tons de azul calmo e sereno.',
     railColor: '#102a3d',
     headerColor: '#0c202f',
     primaryColor: '#1a547e',
     accentSoft: '#eaf2f8',
+    bgColor: '#f3f6f9',
   },
   {
     id: 'salvia',
@@ -40,6 +43,7 @@ export const THEMES: ThemeConfig[] = [
     headerColor: '#1d3027',
     primaryColor: '#365b47',
     accentSoft: '#edf3ef',
+    bgColor: '#f6f7f2',
   },
   {
     id: 'grafite',
@@ -49,6 +53,7 @@ export const THEMES: ThemeConfig[] = [
     headerColor: '#0f172a',
     primaryColor: '#334155',
     accentSoft: '#f1f5f9',
+    bgColor: '#f5f7f9',
   },
 ];
 
