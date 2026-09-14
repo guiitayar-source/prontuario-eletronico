@@ -84,7 +84,7 @@ export function Audit() {
           e.action.includes('consultation') ||
           e.action.includes('document') ||
           e.action.includes('patient') ||
-          ['patients', 'consultations', 'clinical_documents', 'clinical_context'].includes(
+          ['patients', 'consultations', 'clinical_documents', 'clinical_context', 'exam_results', 'exam_definitions'].includes(
             e.entity_type,
           );
         if (!isClinical) return false;

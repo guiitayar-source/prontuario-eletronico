@@ -15,6 +15,7 @@ A aplicação atual usa Next.js, Supabase Auth, PostgreSQL e Storage privado. Co
 
 ## Funcionalidades
 
+- Exames estruturados com biblioteca pesquisável, sinônimos, modelos personalizados, preenchimento manual, histórico longitudinal, correções e gráficos por parâmetro. Consulte [EXAMES.md](./EXAMES.md) para ativação e a estrutura de extração futura.
 - Importação LGPD JSON e FHIR R4 com prévia, vínculo explícito, detecção de repetidos, histórico de origem e reversão de lote com auditoria.
 - Cadastro, pesquisa e edição de pacientes, com controle de versão.
 - Agenda com criação, edição, cancelamento e acesso à consulta.
@@ -39,9 +40,10 @@ npm run test:team
 npm run test:clinical-context
 npm run test:imports
 npm run test:readiness
+npm run test:exams
 ```
 
-O último comando exige Supabase local iniciado; só usa contas sintéticas locais. Os testes SQLite/D1 e arquivos em `drizzle/` preservam a implementação anterior para referência. Os antigos testes HTTP D1 não se aplicam ao servidor Next.js atual.
+Os testes de integração Supabase exigem a instância local iniciada e usam contas sintéticas. `test:exams` usa PostgreSQL embarcado e não exige Docker. Os testes SQLite/D1 e arquivos em `drizzle/` preservam a implementação anterior para referência. Os antigos testes HTTP D1 não se aplicam ao servidor Next.js atual.
 
 A aplicação está hospedada na Vercel em https://psywrite.vercel.app. A demonstração anterior ainda usa Sites e D1/R2; um anexo legado permanece pendente de transferência. Não publique esta versão Next.js pelo fluxo antigo de Sites.
 

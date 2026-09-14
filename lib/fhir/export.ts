@@ -1,4 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
+import {
+  activeExamResults,
+  numericExamValue,
+  type ExamDefinition,
+  type ExamResult,
+} from '../exams.ts';
 
 // SQL owns the snapshot schema; FHIR resources are assembled dynamically below.
 // oxlint-disable-next-line typescript/no-explicit-any
@@ -13,6 +19,8 @@ export type Snapshot = {
   imports: Row[];
   allergies: Row[];
   allergy_state: string | null;
+  exam_results?: ExamResult[];
+  exam_definitions?: ExamDefinition[];
 };
 const escape = (text: string) =>
   text.replace(
@@ -261,6 +269,70 @@ export function exportFHIR(
       ),
     ].join('\n'),
   );
+  for (const result of activeExamResults(s.exam_results || [])) {
+    const definition = s.exam_definitions?.find(
+      (d) => d.id === result.definition_id,
+    );
+    if (!definition) throw new Error('Modelo de exame ausente na exportação.');
+    const observations = [];
+    for (const [fieldId, value] of Object.entries(result.values)) {
+      const field = definition.fields.find((f) => f.id === fieldId);
+      const key = `${result.id}:${fieldId}`;
+      const number = numericExamValue(value.value);
+      add('Observation', key, {
+        status: result.supersedes_id ? 'corrected' : 'final',
+        subject,
+        category: [terminology('observation-category', 'laboratory')],
+        code: {
+          text: `${definition.name} · ${field?.name || fieldId}`,
+          coding: [
+            {
+              system: `${origin}/identifiers/exam-parameters`,
+              code: `${definition.id}:${fieldId}`,
+            },
+          ],
+        },
+        effectiveDateTime: result.collected_on,
+        issued: result.created_at,
+        ...(field?.type === 'number' && number !== null
+          ? {
+              valueQuantity: {
+                value: number,
+                ...(value.unit ? { unit: value.unit } : {}),
+              },
+            }
+          : {
+              valueString: [value.value, value.unit].filter(Boolean).join(' '),
+            }),
+        ...(value.reference
+          ? { referenceRange: [{ text: value.reference }] }
+          : {}),
+        ...(result.method ? { method: { text: result.method } } : {}),
+        note: [
+          {
+            text: [
+              `Material: ${result.specimen || 'não informado'}`,
+              `Laboratório: ${result.laboratory || 'não informado'}`,
+              `Origem: manual; autor: ${result.author_id}`,
+              result.notes,
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          },
+        ],
+      });
+      observations.push(ref('Observation', key));
+    }
+    add('DiagnosticReport', result.id, {
+      status: result.supersedes_id ? 'corrected' : 'final',
+      subject,
+      code: { text: definition.name },
+      effectiveDateTime: result.collected_on,
+      issued: result.created_at,
+      result: observations,
+      ...(result.notes ? { conclusion: result.notes } : {}),
+    });
+  }
   return {
     resourceType: 'Bundle',
     id: randomUUID(),

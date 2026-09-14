@@ -1,5 +1,6 @@
 'use client';
 import { apiFetch } from '@/lib/supabase/http';
+import Exams from '@/components/exams';
 import type { Patient } from '@/lib/patient-fields';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
@@ -353,6 +354,7 @@ export default function Attachments({
       className="attachments-area"
       hidden={tab !== 'exames' && tab !== 'documentos'}
     >
+      {tab === 'exames' && canCreateDocument && <Exams key={patient.id} patientId={patient.id} attachments={files.filter(f => f.category === 'exam')} />}
       <div className="attachments-heading">
         <div>
           <div className="eyebrow">

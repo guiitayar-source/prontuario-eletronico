@@ -1,0 +1,140 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import {
+  searchExams,
+  numericExamValue,
+  validNumericExamValue,
+  activeExamResults,
+  examSeries,
+  validateDefinition,
+  validateResult,
+} from '../lib/exams.ts';
+import { exportFHIR } from '../lib/fhir/export.ts';
+const definition = {
+  id: 'ast',
+  name: 'AST / TGO',
+  aliases: ['aspartato aminotransferase', 'transaminases'],
+  fields: [{ id: 'value', name: 'AST', type: 'number', unit: 'U/L' }],
+};
+const result = (id, overrides = {}) => ({
+  id,
+  definition_id: 'ast',
+  collected_on: '2026-09-14',
+  created_at: '2026-09-14T12:00:00Z',
+  laboratory: 'Lab',
+  method: 'M',
+  specimen: 'Soro',
+  values: { value: { value: '20,5', unit: 'U/L', reference: '10 a 40' } },
+  notes: '',
+  supersedes_id: null,
+  correction_reason: '',
+  author_id: 'doctor',
+  ...overrides,
+});
+test('search is accent-insensitive and never merges AST with ALT', () => {
+  const defs = [
+    definition,
+    {
+      ...definition,
+      id: 'alt',
+      name: 'ALT / TGP',
+      aliases: ['alanina aminotransferase', 'transaminases'],
+    },
+  ];
+  assert.deepEqual(
+    searchExams(defs, 'tGo').map((d) => d.id),
+    ['ast'],
+  );
+  assert.equal(searchExams(defs, 'transaminases').length, 2);
+  assert.equal(searchExams(defs, 'ASPARTÁTO')[0].id, 'ast');
+  assert.deepEqual(searchExams(defs, ''), []);
+});
+test('numbers preserve comparators and reject ambiguous punctuation', () => {
+  assert.equal(numericExamValue('20,5'), 20.5);
+  assert.equal(numericExamValue('1.234,5'), null);
+  assert.equal(numericExamValue('< 0,1'), null);
+  assert.equal(numericExamValue(''), null);
+  assert.equal(validNumericExamValue('< 0,1'), true);
+});
+test('corrections replace active values, never mix incompatible series', () => {
+  const rows = [
+    result('old'),
+    result('new', { supersedes_id: 'old' }),
+    result('different', { method: 'Another' }),
+    result('limit', {
+      values: { value: { value: '< 1', unit: 'U/L', reference: '' } },
+    }),
+  ];
+  assert.deepEqual(
+    activeExamResults(rows).map((r) => r.id),
+    ['new', 'different', 'limit'],
+  );
+  const series = examSeries(rows, 'value');
+  assert.equal(series.length, 2);
+  assert.deepEqual(series.flatMap((s) => s.points.map((p) => p.id)).sort(), [
+    'different',
+    'new',
+  ]);
+});
+test('validation rejects impossible dates, unknown fields and missing correction reason', () => {
+  validateDefinition(definition);
+  validateResult(result('valid'), definition);
+  assert.throws(() =>
+    validateResult(result('bad', { collected_on: '2026-02-30' }), definition),
+  );
+  assert.throws(() =>
+    validateResult(result('bad', { values: {} }), definition),
+  );
+  assert.throws(() =>
+    validateResult(
+      result('bad', {
+        values: { other: { value: '2', unit: '', reference: '' } },
+      }),
+      definition,
+    ),
+  );
+  assert.throws(() =>
+    validateResult(result('bad', { supersedes_id: 'old' }), definition),
+  );
+  assert.throws(() =>
+    validateDefinition({
+      ...definition,
+      fields: [...definition.fields, ...definition.fields],
+    }),
+  );
+});
+test('FHIR exports only active results with units and references, no invented LOINC codes', () => {
+  const bundle = exportFHIR(
+    {
+      patient: { id: 'p', clinic_id: 'c', name: 'Synthetic' },
+      consultations: [],
+      conditions: [],
+      medications: [],
+      documents: [],
+      attachments: [],
+      imports: [],
+      allergies: [],
+      allergy_state: 'unknown',
+      exam_definitions: [definition],
+      exam_results: [
+        result('old'),
+        result('new', {
+          supersedes_id: 'old',
+          correction_reason: 'Transcription',
+        }),
+      ],
+    },
+    'https://test.invalid',
+  );
+  const observations = bundle.entry.filter(
+    (e) => e.resource.resourceType === 'Observation',
+  );
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0].resource.valueQuantity.value, 20.5);
+  assert.equal(observations[0].resource.status, 'corrected');
+  assert.equal(observations[0].resource.referenceRange[0].text, '10 a 40');
+  const report = bundle.entry.find(
+    (e) => e.resource.resourceType === 'DiagnosticReport',
+  ).resource;
+  assert.equal(report.result[0].reference, observations[0].fullUrl);
+});
