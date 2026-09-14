@@ -12,6 +12,7 @@ export type ThemeConfig = {
   primaryColor: string;
   accentSoft: string;
   bgColor: string;
+  bgGradient: string;
 };
 
 export const THEMES: ThemeConfig[] = [
@@ -24,6 +25,7 @@ export const THEMES: ThemeConfig[] = [
     primaryColor: '#24583e',
     accentSoft: '#edf5ed',
     bgColor: '#f5f7f5',
+    bgGradient: 'linear-gradient(135deg, #f7f4ea 0%, #edf3eb 50%, #dceadc 100%)',
   },
   {
     id: 'azul',
@@ -34,6 +36,7 @@ export const THEMES: ThemeConfig[] = [
     primaryColor: '#1a547e',
     accentSoft: '#eaf2f8',
     bgColor: '#f3f6f9',
+    bgGradient: 'linear-gradient(135deg, #f7f5ed 0%, #ebf2f8 50%, #d2e4f4 100%)',
   },
   {
     id: 'salvia',
@@ -44,6 +47,7 @@ export const THEMES: ThemeConfig[] = [
     primaryColor: '#365b47',
     accentSoft: '#edf3ef',
     bgColor: '#f6f7f2',
+    bgGradient: 'linear-gradient(135deg, #f8f5eb 0%, #edf2ec 50%, #d8e5d8 100%)',
   },
   {
     id: 'grafite',
@@ -54,6 +58,7 @@ export const THEMES: ThemeConfig[] = [
     primaryColor: '#334155',
     accentSoft: '#f1f5f9',
     bgColor: '#f5f7f9',
+    bgGradient: 'linear-gradient(135deg, #f8f6f0 0%, #edf1f5 50%, #d8dfe6 100%)',
   },
 ];
 

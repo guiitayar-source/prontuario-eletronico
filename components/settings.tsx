@@ -128,7 +128,7 @@ export default function Settings({
                             />
                             <div
                               className="preview-bar-content"
-                              style={{ background: t.bgColor }}
+                              style={{ background: gradient ? t.bgGradient : t.bgColor }}
                             >
                               <span
                                 className="preview-chip-accent"

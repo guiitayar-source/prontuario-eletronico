@@ -5,10 +5,11 @@
    ========================================================================== */
 :root {
   --theme-bg: #f5f7f5;
-  --theme-bg-gradient: linear-gradient(175deg, #f9f8f4 0%, #edf4ee 100%);
+  --theme-bg-gradient: linear-gradient(135deg, #f7f4ea 0%, #edf3eb 50%, #dceadc 100%);
   --theme-color: #263e3b;
   --theme-rail-bg: #143e38;
   --theme-rail-active: #2e554b;
+  --theme-rail-gradient: linear-gradient(180deg, #184841 0%, #10322d 100%);
   --theme-account-bar: #11332a;
   --theme-primary: #24583e;
   --theme-primary-hover: #1b4530;
@@ -18,7 +19,7 @@
   --theme-text-accent: #36634e;
   --theme-card-bg: #edf2eb;
   --theme-card-border: #dfe6dc;
-  --theme-card-gradient: linear-gradient(145deg, #f8f6f0 0%, #edf3ec 100%);
+  --theme-card-gradient: linear-gradient(145deg, #ffffff 0%, #faf8f2 50%, #edf4ec 100%);
   --theme-hover-bg: #f4f8f2;
   --theme-border: #dfe6dc;
   --theme-border-subtle: #edf1e9;
@@ -32,10 +33,11 @@
 
 [data-theme="verde"] {
   --theme-bg: #f5f7f5;
-  --theme-bg-gradient: linear-gradient(175deg, #f9f8f4 0%, #edf4ee 100%);
+  --theme-bg-gradient: linear-gradient(135deg, #f7f4ea 0%, #edf3eb 50%, #dceadc 100%);
   --theme-color: #263e3b;
   --theme-rail-bg: #143e38;
   --theme-rail-active: #2e554b;
+  --theme-rail-gradient: linear-gradient(180deg, #184841 0%, #10322d 100%);
   --theme-account-bar: #11332a;
   --theme-primary: #24583e;
   --theme-primary-hover: #1b4530;
@@ -45,7 +47,7 @@
   --theme-text-accent: #36634e;
   --theme-card-bg: #edf2eb;
   --theme-card-border: #dfe6dc;
-  --theme-card-gradient: linear-gradient(145deg, #f8f6f0 0%, #edf3ec 100%);
+  --theme-card-gradient: linear-gradient(145deg, #ffffff 0%, #faf8f2 50%, #edf4ec 100%);
   --theme-hover-bg: #f4f8f2;
   --theme-border: #dfe6dc;
   --theme-border-subtle: #edf1e9;
@@ -59,10 +61,11 @@
 
 [data-theme="azul"] {
   --theme-bg: #f3f6f9;
-  --theme-bg-gradient: linear-gradient(175deg, #f8fafc 0%, #eaf1f7 100%);
+  --theme-bg-gradient: linear-gradient(135deg, #f7f5ed 0%, #ebf2f8 50%, #d2e4f4 100%);
   --theme-color: #1a3348;
   --theme-rail-bg: #102a3d;
   --theme-rail-active: #1e4563;
+  --theme-rail-gradient: linear-gradient(180deg, #15354d 0%, #0c202f 100%);
   --theme-account-bar: #0c202f;
   --theme-primary: #1a547e;
   --theme-primary-hover: #134061;
@@ -72,7 +75,7 @@
   --theme-text-accent: #1a547e;
   --theme-card-bg: #eaf0f6;
   --theme-card-border: #d2dfeb;
-  --theme-card-gradient: linear-gradient(145deg, #f5f8fb 0%, #e7f0f7 100%);
+  --theme-card-gradient: linear-gradient(145deg, #ffffff 0%, #faf8f2 50%, #e0edf8 100%);
   --theme-hover-bg: #edf4f9;
   --theme-border: #d5e2ed;
   --theme-border-subtle: #e8f0f6;
@@ -86,10 +89,11 @@
 
 [data-theme="salvia"] {
   --theme-bg: #f6f7f2;
-  --theme-bg-gradient: linear-gradient(175deg, #faf8f3 0%, #f0f4ee 100%);
+  --theme-bg-gradient: linear-gradient(135deg, #f8f5eb 0%, #edf2ec 50%, #d8e5d8 100%);
   --theme-color: #273e32;
   --theme-rail-bg: #253d32;
   --theme-rail-active: #365747;
+  --theme-rail-gradient: linear-gradient(180deg, #2c473a 0%, #1c2e25 100%);
   --theme-account-bar: #1d3027;
   --theme-primary: #365b47;
   --theme-primary-hover: #274334;
@@ -99,7 +103,7 @@
   --theme-text-accent: #365b47;
   --theme-card-bg: #edf2ec;
   --theme-card-border: #d8e3da;
-  --theme-card-gradient: linear-gradient(145deg, #f8f6f0 0%, #edf3ee 100%);
+  --theme-card-gradient: linear-gradient(145deg, #ffffff 0%, #faf8f2 50%, #e8f0e8 100%);
   --theme-hover-bg: #f3f7f1;
   --theme-border: #d8e3db;
   --theme-border-subtle: #ebf0ea;
@@ -113,10 +117,11 @@
 
 [data-theme="grafite"] {
   --theme-bg: #f5f7f9;
-  --theme-bg-gradient: linear-gradient(175deg, #f9fafb 0%, #edf1f5 100%);
+  --theme-bg-gradient: linear-gradient(135deg, #f8f6f0 0%, #edf1f5 50%, #d8dfe6 100%);
   --theme-color: #1e293b;
   --theme-rail-bg: #1e293b;
   --theme-rail-active: #334155;
+  --theme-rail-gradient: linear-gradient(180deg, #243144 0%, #141c27 100%);
   --theme-account-bar: #0f172a;
   --theme-primary: #334155;
   --theme-primary-hover: #1e293b;
@@ -126,7 +131,7 @@
   --theme-text-accent: #334155;
   --theme-card-bg: #edf0f4;
   --theme-card-border: #d7dee6;
-  --theme-card-gradient: linear-gradient(145deg, #f8f9fa 0%, #edf0f3 100%);
+  --theme-card-gradient: linear-gradient(145deg, #ffffff 0%, #faf8f4 50%, #e3e9ef 100%);
   --theme-hover-bg: #f1f4f8;
   --theme-border: #d8e0e8;
   --theme-border-subtle: #ecf0f4;
@@ -139,19 +144,50 @@
 }
 
 /* Modo Degradê suave no fundo e nos painéis de apoio */
-[data-gradient="true"] html,
-[data-gradient="true"] body,
-[data-gradient="true"] .main-shell {
+html[data-gradient="true"],
+html[data-gradient="true"] body,
+html[data-gradient="true"] .main-shell,
+html[data-gradient="true"] main,
+[data-gradient="true"] .main-shell,
+[data-gradient="true"] main {
   background: var(--theme-bg-gradient) !important;
+  background-attachment: fixed !important;
 }
 
+html[data-gradient="true"] .rail,
+[data-gradient="true"] .rail {
+  background: var(--theme-rail-gradient, var(--theme-rail-bg)) !important;
+}
+
+html[data-gradient="true"] .history-card,
+html[data-gradient="true"] .sample-card,
+html[data-gradient="true"] .patient-search,
+html[data-gradient="true"] .detail-group,
+html[data-gradient="true"] .team-invite-card,
+html[data-gradient="true"] .team-list,
+html[data-gradient="true"] .team-roles-guide,
+html[data-gradient="true"] .team-role-card,
+html[data-gradient="true"] .received-section,
+html[data-gradient="true"] .agenda-list,
+html[data-gradient="true"] .settings-card,
+html[data-gradient="true"] .import-card,
+html[data-gradient="true"] .info-box,
 [data-gradient="true"] .history-card,
 [data-gradient="true"] .sample-card,
+[data-gradient="true"] .patient-search,
+[data-gradient="true"] .detail-group,
 [data-gradient="true"] .team-invite-card,
+[data-gradient="true"] .team-list,
+[data-gradient="true"] .team-roles-guide,
+[data-gradient="true"] .team-role-card,
+[data-gradient="true"] .received-section,
+[data-gradient="true"] .agenda-list,
 [data-gradient="true"] .settings-card,
+[data-gradient="true"] .import-card,
 [data-gradient="true"] .info-box {
   background: var(--theme-card-gradient) !important;
   border-color: var(--theme-card-border) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04) !important;
 }
 
 .consultation-history-link { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; padding: 14px 0; border-bottom: 1px solid #e5e9e2; font-size: 13px; color: #53645e; }
