@@ -14,6 +14,7 @@ import {
   CalendarDays,
   Stethoscope,
   ShieldCheck,
+  Palette,
 } from 'lucide-react';
 import {
   fieldGroups,
@@ -406,12 +407,14 @@ export default function Registry({
   onConsultation,
   onTeam,
   onImports,
+  onSettings,
 }: {
   onOpen: (p: Patient) => void;
   onAgenda: () => void;
   onConsultation: () => void;
   onTeam: () => void;
   onImports: () => void;
+  onSettings?: () => void;
 }) {
   const [create, setCreate] = useState(false);
   const medical = ['owner', 'doctor'].includes(useAccess().role);
@@ -438,6 +441,12 @@ export default function Registry({
             <ShieldCheck size={21} />
             <span>Equipe</span>
           </button>
+          {onSettings && (
+            <button className="nav-item" onClick={onSettings}>
+              <Palette size={21} />
+              <span>Ajustes</span>
+            </button>
+          )}
         </nav>
         <div className="rail-bottom">
           <span className="avatar doctor">G</span>

@@ -14,6 +14,7 @@ import {
   Check,
   AlertCircle,
   CheckCircle2,
+  Palette,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/supabase/http';
 import { useAccess } from './auth';
@@ -44,9 +45,11 @@ function getInitials(email: string): string {
 export default function Team({
   onPatients,
   onAgenda,
+  onSettings,
 }: {
   onPatients: () => void;
   onAgenda: () => void;
+  onSettings?: () => void;
 }) {
   const { role } = useAccess();
   const [members, setMembers] = useState<Member[]>([]);
@@ -120,6 +123,12 @@ export default function Team({
             <ShieldCheck size={21} />
             <span>Equipe</span>
           </button>
+          {onSettings && (
+            <button className="nav-item" onClick={onSettings}>
+              <Palette size={21} />
+              <span>Ajustes</span>
+            </button>
+          )}
         </nav>
         <div className="rail-bottom">
           <span className="avatar doctor">G</span>

@@ -271,15 +271,6 @@ export function MFAGate({
     </section>
   );
   if (!allowed) return <main className="auth-shell">{security}</main>;
-  const roleLabel =
-    role === 'owner'
-      ? 'Proprietário'
-      : role === 'doctor'
-        ? 'Médico'
-        : role === 'secretary'
-          ? 'Secretária'
-          : role;
-
   return (
     <>
       <header className="account-bar">
@@ -289,12 +280,9 @@ export function MFAGate({
             <span className="clinic-name">{clinicName || 'Clínica'}</span>
           </div>
           <span className="account-sep">•</span>
-          <div className="user-badge-group">
-            <span className="user-email" title={userEmail || session.user.email}>
-              {userEmail || session.user.email}
-            </span>
-            <span className={`user-role-badge role-${role}`}>{roleLabel}</span>
-          </div>
+          <span className="user-email" title={userEmail || session.user.email}>
+            {userEmail || session.user.email}
+          </span>
         </div>
 
         <div className="account-bar-right">

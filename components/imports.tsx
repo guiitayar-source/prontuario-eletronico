@@ -7,6 +7,7 @@ import {
   Stethoscope,
   Upload,
   ShieldCheck,
+  Palette,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/supabase/http';
 import { useAccess } from './auth';
@@ -74,11 +75,13 @@ export default function Imports({
   onAgenda,
   onTeam,
   onOpenPatient,
+  onSettings,
 }: {
   onPatients: () => void;
   onAgenda: () => void;
   onTeam: () => void;
   onOpenPatient: (id: string) => void;
+  onSettings?: () => void;
 }) {
   const medical = ['owner', 'doctor'].includes(useAccess().role);
   const [source, setSource] = useState('Prontuário anterior'),
@@ -251,6 +254,12 @@ export default function Imports({
             <Upload size={21} />
             <span>Importar</span>
           </button>
+          {onSettings && (
+            <button className="nav-item" disabled={busy} onClick={onSettings}>
+              <Palette size={21} />
+              <span>Ajustes</span>
+            </button>
+          )}
         </nav>
       </aside>
       <div className="main-shell">

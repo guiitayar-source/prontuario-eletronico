@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Stethoscope,
   Users,
+  Palette,
   X,
 } from 'lucide-react';
 import type { Patient } from '@/lib/patient-fields';
@@ -53,10 +54,12 @@ function Navigation({
   onPatients,
   onConsultation,
   onTeam,
+  onSettings,
 }: {
   onPatients: () => void;
   onConsultation: () => void;
   onTeam?: () => void;
+  onSettings?: () => void;
 }) {
   return (
     <aside className="rail">
@@ -80,6 +83,12 @@ function Navigation({
           <button className="nav-item" onClick={onTeam}>
             <ShieldCheck size={21} />
             <span>Equipe</span>
+          </button>
+        )}
+        {onSettings && (
+          <button className="nav-item" onClick={onSettings}>
+            <Palette size={21} />
+            <span>Ajustes</span>
           </button>
         )}
       </nav>
@@ -320,10 +329,12 @@ export default function Agenda({
   onPatients,
   onOpenPatient,
   onTeam,
+  onSettings,
 }: {
   onPatients: () => void;
   onOpenPatient: (id: string, appointmentId?: string) => void;
   onTeam?: () => void;
+  onSettings?: () => void;
 }) {
   const [day, setDay] = useState(dateInput(new Date()));
   const [items, setItems] = useState<Appointment[]>([]);
@@ -399,6 +410,7 @@ export default function Agenda({
         onPatients={onPatients}
         onConsultation={onPatients}
         onTeam={onTeam}
+        onSettings={onSettings}
       />
       <div className="main-shell">
         <header className="topbar">

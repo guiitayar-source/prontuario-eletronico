@@ -22,6 +22,7 @@ import {
   ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
+  Palette,
   Clock3,
   Check,
   FileText,
@@ -81,6 +82,7 @@ export default function ClinicalRecord({
   onSelect,
   onOpenId,
   appointmentId,
+  onSettings,
 }: {
   patient: Patient;
   onHome: () => void;
@@ -89,6 +91,7 @@ export default function ClinicalRecord({
   onSelect: (p: Patient) => void;
   onOpenId: (id: string) => void;
   appointmentId?: string;
+  onSettings?: () => void;
 }) {
   const medical = ['owner', 'doctor'].includes(useAccess().role);
   const docs = useDocuments(patient, medical);
@@ -293,6 +296,7 @@ export default function ClinicalRecord({
             { id: 'agenda', icon: CalendarDays, label: 'Agenda' },
             { id: 'pacientes', icon: Users, label: 'Pacientes' },
             { id: 'consulta', icon: Stethoscope, label: 'Consulta' },
+            ...(onSettings ? [{ id: 'ajustes', icon: Palette, label: 'Ajustes' }] : []),
           ].map(({ id, icon: Icon, label }) => (
             <button
               key={id}
@@ -302,7 +306,9 @@ export default function ClinicalRecord({
                   ? leave(onHome)
                   : id === 'agenda'
                     ? leave(onAgenda)
-                    : setView(id)
+                    : id === 'ajustes'
+                      ? leave(onSettings!)
+                      : setView(id)
               }
               aria-current={view === id ? 'page' : undefined}
             >

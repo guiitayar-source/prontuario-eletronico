@@ -5,13 +5,14 @@ import Consultation from '@/components/consultation';
 import Agenda from '@/components/agenda';
 import Team from '@/components/team';
 import Imports from '@/components/imports';
+import Settings from '@/components/settings';
 import type { Patient } from '@/lib/patient-fields';
 export default function Home() {
   const [appointmentId, setAppointmentId] = useState<string | undefined>();
   const [patient, setPatient] = useState<Patient | null>(null),
     [error, setError] = useState(''),
     [section, setSection] = useState<
-      'patients' | 'agenda' | 'team' | 'imports'
+      'patients' | 'agenda' | 'team' | 'imports' | 'settings'
     >('patients');
   async function open(id: string, appointment?: string) {
     try {
@@ -48,6 +49,16 @@ export default function Home() {
             setPatient(null);
             setSection('agenda');
           }}
+          onSettings={() => {
+            setPatient(null);
+            setSection('settings');
+          }}
+        />
+      ) : section === 'settings' ? (
+        <Settings
+          onPatients={() => setSection('patients')}
+          onAgenda={() => setSection('agenda')}
+          onTeam={() => setSection('team')}
         />
       ) : section === 'imports' ? (
         <Imports
@@ -55,17 +66,20 @@ export default function Home() {
           onAgenda={() => setSection('agenda')}
           onTeam={() => setSection('team')}
           onOpenPatient={open}
+          onSettings={() => setSection('settings')}
         />
       ) : section === 'agenda' ? (
         <Agenda
           onPatients={() => setSection('patients')}
           onOpenPatient={open}
           onTeam={() => setSection('team')}
+          onSettings={() => setSection('settings')}
         />
       ) : section === 'team' ? (
         <Team
           onPatients={() => setSection('patients')}
           onAgenda={() => setSection('agenda')}
+          onSettings={() => setSection('settings')}
         />
       ) : (
         <Registry
@@ -76,6 +90,7 @@ export default function Home() {
           }}
           onAgenda={() => setSection('agenda')}
           onTeam={() => setSection('team')}
+          onSettings={() => setSection('settings')}
           onConsultation={() =>
             setError('Selecione um paciente na lista para abrir o prontuário.')
           }
