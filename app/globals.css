@@ -1729,6 +1729,9 @@ h1 {
   padding: 10px;
   color: #8b8578;
 }
+.ai-file-action {
+  white-space: nowrap;
+}
 .attachments-empty {
   display: grid;
   justify-items: center;
@@ -2055,6 +2058,9 @@ h1 {
   .received-file select {
     margin-left: 58px;
   }
+  .received-file .ai-file-action {
+    margin-left: 58px;
+  }
   .file-detail {
     min-width: 60%;
   }
@@ -2096,6 +2102,9 @@ h1 {
   .received-file select {
     margin-left: 0;
     flex: 1;
+  }
+  .received-file .ai-file-action {
+    margin-left: 0;
   }
   .file-detail {
     min-width: calc(100% - 60px);
@@ -3763,4 +3772,3 @@ h1 {
     gap: 14px;
   }
 }
-

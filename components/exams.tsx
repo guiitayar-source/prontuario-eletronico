@@ -2,6 +2,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/supabase/http';
 import {
+  proposalValues,
+  type ExamExtractionProposal,
+} from '@/lib/exam-extraction';
+import {
   activeExamResults,
   examSeries,
   searchExams,
@@ -36,6 +40,13 @@ type Draft = {
   attachment_id: string;
   supersedes_id: string | null;
   correction_reason: string;
+  source: 'manual' | 'ai_reviewed';
+  provenance: Record<string, unknown>;
+};
+type Reviewing = {
+  proposalIndex: number;
+  originalName: string;
+  fields: ExamExtractionProposal['exams'][number]['fields'];
 };
 const dateLabel = (date: string) => date.split('-').reverse().join('/');
 const emptyField = (): ExamField => ({
@@ -63,6 +74,12 @@ export default function Exams({
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractionAttachment, setExtractionAttachment] = useState('');
+  const [extraction, setExtraction] = useState<ExamExtractionProposal | null>(
+    null,
+  );
+  const [reviewing, setReviewing] = useState<Reviewing | null>(null);
   const endpoint = `/api/exams?patientId=${encodeURIComponent(patientId)}`;
   const call = useCallback(
     async (payload?: unknown) => {
@@ -123,11 +140,90 @@ export default function Exams({
       attachment_id: correction?.attachment_id || '',
       supersedes_id: correction?.id || null,
       correction_reason: '',
+      source: 'manual',
+      provenance: {},
     });
     setCustom(null);
     setQuery('');
     setMessage('');
     setError('');
+  }
+  async function extractExams() {
+    if (!extractionAttachment) return;
+    setError('');
+    setMessage('');
+    setExtracting(true);
+    try {
+      const response = await apiFetch(
+        `/api/ai-files?patientId=${encodeURIComponent(patientId)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-AI-Action': '1',
+          },
+          body: JSON.stringify({
+            action: 'extract-exams',
+            attachmentId: extractionAttachment,
+          }),
+        },
+      );
+      const data = (await response.json()) as {
+        proposal?: ExamExtractionProposal;
+        error?: string;
+      };
+      if (!response.ok || !data.proposal)
+        throw new Error(data.error || 'Não foi possível ler o exame.');
+      setExtraction(data.proposal);
+      setMessage(
+        data.proposal.exams.length
+          ? 'Leitura concluída. Revise cada sugestão antes de salvar.'
+          : 'A leitura terminou, mas nenhum resultado foi identificado.',
+      );
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setExtracting(false);
+    }
+  }
+  function reviewProposal(
+    exam: ExamExtractionProposal['exams'][number],
+    proposalIndex: number,
+  ) {
+    if (!extraction || !exam.definitionId) return;
+    const definition = definitions.find(
+      (item) => item.id === exam.definitionId,
+    );
+    if (!definition) return;
+    setDraft({
+      id: crypto.randomUUID(),
+      definition_id: definition.id,
+      collected_on: exam.collectedOn || '',
+      laboratory: exam.laboratory || '',
+      method: exam.method || '',
+      specimen: exam.specimen || '',
+      values: proposalValues(exam, definition),
+      notes: '',
+      attachment_id: extraction.attachmentId,
+      supersedes_id: null,
+      correction_reason: '',
+      source: 'ai_reviewed',
+      provenance: {
+        attachment_id: extraction.attachmentId,
+        provider: extraction.provider,
+        model: extraction.model,
+        extracted_at: extraction.extractedAt,
+      },
+    });
+    setReviewing({
+      proposalIndex,
+      originalName: exam.originalName,
+      fields: exam.fields,
+    });
+    setCustom(null);
+    setQuery('');
+    setError('');
+    setMessage('');
   }
   async function saveResult(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -142,6 +238,10 @@ export default function Exams({
         ...draft,
         values,
         attachment_id: draft.attachment_id || null,
+        provenance:
+          draft.source === 'ai_reviewed'
+            ? { ...draft.provenance, reviewed_at: new Date().toISOString() }
+            : {},
       };
       validateResult(
         payload as ExamResult,
@@ -149,8 +249,21 @@ export default function Exams({
       );
       const { record } = await call({ ...payload, action: 'result' });
       setResults((previous) => [...previous, record]);
+      if (reviewing && extraction) {
+        const remaining = extraction.exams.filter(
+          (_, index) => index !== reviewing.proposalIndex,
+        );
+        setExtraction(
+          remaining.length ? { ...extraction, exams: remaining } : null,
+        );
+        setReviewing(null);
+      }
       setDraft(null);
-      setMessage('Resultado salvo no histórico do paciente.');
+      setMessage(
+        draft.source === 'ai_reviewed'
+          ? 'Resultado revisado e salvo no histórico do paciente.'
+          : 'Resultado salvo no histórico do paciente.',
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -234,52 +347,162 @@ export default function Exams({
       ) : (
         <>
           {!draft && !custom && (
-            <div className="exam-search">
-              <label htmlFor="exam-search">Adicionar exame</label>
-              <div className="exam-actions">
-                <input
-                  id="exam-search"
-                  type="search"
-                  placeholder="Busque hemograma, TSH, TGO…"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-                <button
-                  className="secondary"
-                  onClick={() => {
-                    setCustom({
-                      id: crypto.randomUUID(),
-                      name: query.trim(),
-                      aliases: [],
-                      fields: [emptyField()],
-                    });
-                    setError('');
-                  }}
-                >
-                  Criar exame
-                </button>
-              </div>
-              {query.trim() && (
-                <div className="exam-search-results">
-                  {searchExams(definitions, query).map((d) => (
-                    <button key={d.id} onClick={() => start(d)}>
-                      <strong>{d.name}</strong>
-                      <small>
-                        {d.fields.length > 1
-                          ? `${d.fields.length} parâmetros`
-                          : d.aliases.join(' · ')}
-                      </small>
-                    </button>
-                  ))}
-                  {!searchExams(definitions, query).length && (
-                    <p>
-                      Nenhum exame encontrado. Use “Criar exame” para
-                      adicioná-lo à biblioteca da clínica.
-                    </p>
-                  )}
+            <>
+              <section className="exam-ai" aria-labelledby="exam-ai-title">
+                <div>
+                  <h3 id="exam-ai-title">Preencher a partir do laudo</h3>
+                  <p>
+                    A IA prepara sugestões. Nada entra no prontuário sem sua
+                    revisão e confirmação.
+                  </p>
                 </div>
+                <div className="exam-actions">
+                  <label>
+                    Laudo anexado
+                    <select
+                      value={extractionAttachment}
+                      disabled={extracting || !attachments.length}
+                      onChange={(event) => {
+                        setExtractionAttachment(event.target.value);
+                        setExtraction(null);
+                      }}
+                    >
+                      <option value="">Selecione um arquivo</option>
+                      {attachments.map((attachment) => (
+                        <option key={attachment.id} value={attachment.id}>
+                          {attachment.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={extracting || !extractionAttachment}
+                    onClick={() => void extractExams()}
+                  >
+                    {extracting ? 'Lendo laudo…' : 'Ler com IA'}
+                  </button>
+                </div>
+                {!attachments.length && (
+                  <small>
+                    Classifique primeiro uma imagem ou um PDF como exame.
+                  </small>
+                )}
+              </section>
+              {extraction && (
+                <section
+                  className="exam-proposals"
+                  aria-label="Sugestões da IA"
+                >
+                  <div className="exam-proposal-heading">
+                    <div>
+                      <h3>Sugestões para revisar</h3>
+                      <small>
+                        {extraction.provider} · {extraction.model} · estimativas
+                        de confiança não garantem exatidão
+                      </small>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => setExtraction(null)}
+                    >
+                      Descartar sugestões
+                    </button>
+                  </div>
+                  {extraction.warnings.length > 0 && (
+                    <ul className="exam-ai-warnings">
+                      {extraction.warnings.map((warning, index) => (
+                        <li key={`${warning}-${index}`}>{warning}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {extraction.exams.map((exam, index) => {
+                    const definition = definitions.find(
+                      (item) => item.id === exam.definitionId,
+                    );
+                    const values = exam.fields.filter((field) =>
+                      field.suggested.value?.trim(),
+                    ).length;
+                    return (
+                      <article
+                        className="exam-proposal"
+                        key={`${exam.originalName}-${index}`}
+                      >
+                        <div>
+                          <strong>
+                            {definition?.name || exam.originalName}
+                          </strong>
+                          <small>
+                            {definition
+                              ? `${values} valor(es) sugerido(s)${exam.collectedOn ? ` · coleta ${dateLabel(exam.collectedOn)}` : ''}`
+                              : 'Sem correspondência segura com o catálogo'}
+                          </small>
+                        </div>
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={!definition || values === 0}
+                          onClick={() => reviewProposal(exam, index)}
+                        >
+                          Revisar e preencher
+                        </button>
+                      </article>
+                    );
+                  })}
+                  {!extraction.exams.length && (
+                    <p>Nenhum resultado foi identificado neste arquivo.</p>
+                  )}
+                </section>
               )}
-            </div>
+              <div className="exam-search">
+                <label htmlFor="exam-search">Adicionar exame manualmente</label>
+                <div className="exam-actions">
+                  <input
+                    id="exam-search"
+                    type="search"
+                    placeholder="Busque hemograma, TSH, TGO…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                  <button
+                    className="secondary"
+                    onClick={() => {
+                      setCustom({
+                        id: crypto.randomUUID(),
+                        name: query.trim(),
+                        aliases: [],
+                        fields: [emptyField()],
+                      });
+                      setError('');
+                    }}
+                  >
+                    Criar exame
+                  </button>
+                </div>
+                {query.trim() && (
+                  <div className="exam-search-results">
+                    {searchExams(definitions, query).map((d) => (
+                      <button key={d.id} onClick={() => start(d)}>
+                        <strong>{d.name}</strong>
+                        <small>
+                          {d.fields.length > 1
+                            ? `${d.fields.length} parâmetros`
+                            : d.aliases.join(' · ')}
+                        </small>
+                      </button>
+                    ))}
+                    {!searchExams(definitions, query).length && (
+                      <p>
+                        Nenhum exame encontrado. Use “Criar exame” para
+                        adicioná-lo à biblioteca da clínica.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
           )}
           {message && <output>{message}</output>}
           {custom && (
@@ -444,6 +667,18 @@ export default function Exams({
                 {draft.supersedes_id ? 'Corrigir resultado' : 'Novo resultado'}{' '}
                 · {selected.name}
               </h3>
+              {reviewing && (
+                <output className="exam-ai-review">
+                  <strong>Revisão obrigatória da sugestão</strong>
+                  <p>
+                    Confira o laudo original, a data, cada valor, unidade e
+                    referência. O sistema só salvará depois de sua confirmação.
+                  </p>
+                  <small>
+                    Identificado no arquivo como: {reviewing.originalName}
+                  </small>
+                </output>
+              )}
               <div className="exam-meta">
                 <label>
                   Data da coleta
@@ -501,59 +736,91 @@ export default function Exams({
                   <legend>{group}</legend>
                   {selected.fields
                     .filter((f) => (f.group || 'Resultados') === group)
-                    .map((field) => (
-                      <div className="exam-value-row" key={field.id}>
-                        <label>
-                          {field.name}
-                          {field.type === 'choice' ? (
-                            <select
-                              aria-label={field.name}
-                              value={draft.values[field.id]?.value || ''}
-                              onChange={(e) =>
-                                updateValue(field, 'value', e.target.value)
-                              }
-                            >
-                              <option value="">Não informado</option>
-                              {field.options?.map((o) => (
-                                <option key={o}>{o}</option>
+                    .map((field) => {
+                      const evidence = reviewing?.fields.find(
+                        (item) => item.fieldId === field.id,
+                      );
+                      return (
+                        <div className="exam-value-block" key={field.id}>
+                          <div className="exam-value-row">
+                            <label>
+                              {field.name}
+                              {field.type === 'choice' ? (
+                                <select
+                                  aria-label={field.name}
+                                  value={draft.values[field.id]?.value || ''}
+                                  onChange={(e) =>
+                                    updateValue(field, 'value', e.target.value)
+                                  }
+                                >
+                                  <option value="">Não informado</option>
+                                  {field.options?.map((o) => (
+                                    <option key={o}>{o}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  maxLength={2000}
+                                  placeholder="Não informado"
+                                  value={draft.values[field.id]?.value || ''}
+                                  onChange={(e) =>
+                                    updateValue(field, 'value', e.target.value)
+                                  }
+                                />
+                              )}
+                            </label>
+                            <label>
+                              Unidade
+                              <input
+                                aria-label={`Unidade · ${field.name}`}
+                                maxLength={40}
+                                value={
+                                  draft.values[field.id]?.unit ?? field.unit
+                                }
+                                onChange={(e) =>
+                                  updateValue(field, 'unit', e.target.value)
+                                }
+                              />
+                            </label>
+                            <label>
+                              Referência do laboratório
+                              <input
+                                aria-label={`Referência · ${field.name}`}
+                                maxLength={500}
+                                placeholder="Opcional"
+                                value={draft.values[field.id]?.reference || ''}
+                                onChange={(e) =>
+                                  updateValue(
+                                    field,
+                                    'reference',
+                                    e.target.value,
+                                  )
+                                }
+                              />
+                            </label>
+                          </div>
+                          {evidence && (
+                            <div className="exam-evidence">
+                              <strong>
+                                Trecho de origem
+                                {evidence.page
+                                  ? ` · página ${evidence.page}`
+                                  : ''}
+                              </strong>
+                              <span>
+                                {evidence.originalText ||
+                                  'Trecho não informado.'}
+                              </span>
+                              {evidence.warnings.map((warning, index) => (
+                                <span key={`${warning}-${index}`}>
+                                  Atenção: {warning}
+                                </span>
                               ))}
-                            </select>
-                          ) : (
-                            <input
-                              maxLength={2000}
-                              placeholder="Não informado"
-                              value={draft.values[field.id]?.value || ''}
-                              onChange={(e) =>
-                                updateValue(field, 'value', e.target.value)
-                              }
-                            />
+                            </div>
                           )}
-                        </label>
-                        <label>
-                          Unidade
-                          <input
-                            aria-label={`Unidade · ${field.name}`}
-                            maxLength={40}
-                            value={draft.values[field.id]?.unit ?? field.unit}
-                            onChange={(e) =>
-                              updateValue(field, 'unit', e.target.value)
-                            }
-                          />
-                        </label>
-                        <label>
-                          Referência do laboratório
-                          <input
-                            aria-label={`Referência · ${field.name}`}
-                            maxLength={500}
-                            placeholder="Opcional"
-                            value={draft.values[field.id]?.reference || ''}
-                            onChange={(e) =>
-                              updateValue(field, 'reference', e.target.value)
-                            }
-                          />
-                        </label>
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                 </fieldset>
               ))}
               <div className="exam-meta">
@@ -609,13 +876,20 @@ export default function Exams({
               )}
               <div className="exam-actions">
                 <button className="primary" disabled={busy}>
-                  {busy ? 'Salvando…' : 'Salvar resultado'}
+                  {busy
+                    ? 'Salvando…'
+                    : reviewing
+                      ? 'Confirmar e salvar resultado'
+                      : 'Salvar resultado'}
                 </button>
                 <button
                   type="button"
                   className="secondary"
                   disabled={busy}
-                  onClick={() => setDraft(null)}
+                  onClick={() => {
+                    setDraft(null);
+                    setReviewing(null);
+                  }}
                 >
                   Cancelar
                 </button>
@@ -831,7 +1105,10 @@ export default function Exams({
                       <small>
                         Registrado em{' '}
                         {new Date(r.created_at).toLocaleString('pt-BR')} ·
-                        preenchimento manual · autor {r.author_id}
+                        {r.source === 'ai_reviewed'
+                          ? 'sugestão da IA revisada pelo profissional'
+                          : 'preenchimento manual'}{' '}
+                        · autor {r.author_id}
                       </small>
                       {current.some((c) => c.id === r.id) && (
                         <button

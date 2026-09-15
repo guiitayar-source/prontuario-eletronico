@@ -28,7 +28,7 @@ export type ExamResult = {
   correction_reason: string;
   created_at: string;
   author_id: string;
-  source: 'manual';
+  source: 'manual' | 'ai_reviewed';
   provenance: Record<string, unknown>;
 };
 export const normalizeExamSearch = (text: string) =>
@@ -181,4 +181,25 @@ export function validateResult(d: ExamResult, definition: ExamDefinition) {
       throw new Error('Confira os dados da coleta.');
   if (d.supersedes_id && !d.correction_reason.trim())
     throw new Error('Informe o motivo da correção.');
+  const source = d.source || 'manual';
+  if (!['manual', 'ai_reviewed'].includes(source))
+    throw new Error('Origem do resultado inválida.');
+  if (
+    !d.provenance ||
+    typeof d.provenance !== 'object' ||
+    Array.isArray(d.provenance)
+  )
+    throw new Error('Proveniência do resultado inválida.');
+  if (
+    source === 'ai_reviewed' &&
+    (!d.attachment_id ||
+      d.provenance.attachment_id !== d.attachment_id ||
+      typeof d.provenance.provider !== 'string' ||
+      !d.provenance.provider ||
+      typeof d.provenance.model !== 'string' ||
+      !d.provenance.model ||
+      typeof d.provenance.extracted_at !== 'string' ||
+      typeof d.provenance.reviewed_at !== 'string')
+  )
+    throw new Error('Confira a origem da sugestão revisada.');
 }

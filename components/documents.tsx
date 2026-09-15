@@ -49,6 +49,7 @@ export function useDocuments(patient: Patient, enabled = true) {
     d?: ClinicalDocument,
     consultationId?: string,
     duplicate = false,
+    initialText = '',
   ) {
     clearPreview();
     setError('');
@@ -74,7 +75,7 @@ export function useDocuments(patient: Patient, enabled = true) {
           document_date: new Intl.DateTimeFormat('en-CA', {
             timeZone: 'America/Sao_Paulo',
           }).format(new Date()),
-          text: '',
+          text: initialText,
           version: 0,
         };
     setDraft(next);
@@ -219,7 +220,13 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
       <h2 id="dialog-title">
         {d.version ? 'Editar documento' : 'Novo documento'}
       </h2>
-      <p>Rascunho salvo no prontuário. Sem assinatura digital.</p>
+      <p>
+        {d.version
+          ? 'Rascunho salvo no prontuário. Sem assinatura digital.'
+          : d.text
+            ? 'Texto inserido em um rascunho não salvo. Confira com o documento original antes de salvar.'
+            : 'Novo rascunho ainda não salvo. Sem assinatura digital.'}
+      </p>
       {docs.error && (
         <div className="capture-error" role="alert">
           {docs.error} Seu texto foi mantido para revisão.

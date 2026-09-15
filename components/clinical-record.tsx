@@ -296,7 +296,9 @@ export default function ClinicalRecord({
             { id: 'agenda', icon: CalendarDays, label: 'Agenda' },
             { id: 'pacientes', icon: Users, label: 'Pacientes' },
             { id: 'consulta', icon: Stethoscope, label: 'Consulta' },
-            ...(onSettings ? [{ id: 'ajustes', icon: Palette, label: 'Ajustes' }] : []),
+            ...(onSettings
+              ? [{ id: 'ajustes', icon: Palette, label: 'Ajustes' }]
+              : []),
           ].map(({ id, icon: Icon, label }) => (
             <button
               key={id}
@@ -405,7 +407,13 @@ export default function ClinicalRecord({
                   </button>
                 )}
                 <div className="tabs-spacer" />
-                {medical && <FHIRExport key={patient.id} patientId={patient.id} patientName={displayName} />}
+                {medical && (
+                  <FHIRExport
+                    key={patient.id}
+                    patientId={patient.id}
+                    patientName={displayName}
+                  />
+                )}
                 {tab === 'consulta' && (
                   <button
                     onClick={() => setPanel(!panel)}
@@ -428,8 +436,8 @@ export default function ClinicalRecord({
                 patient={patient}
                 tab={tab}
                 setTab={setTab}
-                newDocument={() => {
-                  docs.open(undefined, current?.id);
+                newDocument={(initialText) => {
+                  docs.open(undefined, current?.id, false, initialText);
                   setModal('documento');
                 }}
               />

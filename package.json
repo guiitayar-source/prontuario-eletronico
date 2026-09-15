@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
-    "build": "next build --webpack",
+    "build": "tsc --noEmit && next build --webpack",
     "start": "next start --hostname 127.0.0.1",
     "lint": "oxlint",
     "format": "oxfmt",

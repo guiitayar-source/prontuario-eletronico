@@ -15,7 +15,7 @@ A aplicação atual usa Next.js, Supabase Auth, PostgreSQL e Storage privado. Co
 
 ## Funcionalidades
 
-- Exames estruturados com biblioteca pesquisável, sinônimos, modelos personalizados, preenchimento manual, histórico longitudinal, correções e gráficos por parâmetro. Consulte [EXAMES.md](./EXAMES.md) para ativação e a estrutura de extração futura.
+- Exames estruturados com biblioteca pesquisável, preenchimento manual ou sugestões de PDF/imagem revisadas pelo profissional, histórico longitudinal, correções e gráficos por parâmetro. Documentos anexados também podem ser transcritos para um novo rascunho. Consulte [EXAMES.md](./EXAMES.md) para ativação e controles.
 - Importação LGPD JSON e FHIR R4 com prévia, vínculo explícito, detecção de repetidos, histórico de origem e reversão de lote com auditoria.
 - Cadastro, pesquisa e edição de pacientes, com controle de versão.
 - Agenda com criação, edição, cancelamento e acesso à consulta.
@@ -26,7 +26,7 @@ A aplicação atual usa Next.js, Supabase Auth, PostgreSQL e Storage privado. Co
 - Login individual, vínculo à clínica e auditoria das alterações persistidas.
 - Exportação FHIR R4 por paciente, MFA com proteção também no banco e backup criptografado com ensaio local de restauração. Consulte [OPERACAO_SEGURA.md](./OPERACAO_SEGURA.md) para ativação, limites e pendências antes de dados reais.
 
-Evoluções, adendos e documentos clínicos são acessíveis somente a médicos e proprietários da clínica. A secretária mantém acesso ao cadastro, agenda e anexos. Documentos possuem modelos editáveis, histórico de rascunhos, duplicação e PDF com fontes incorporadas. O PDF corresponde à versão salva e permanece identificado como rascunho sem assinatura. Não há assinatura digital, OCR ou Anamnesator conectado. Rascunhos antigos do navegador não são importados automaticamente.
+Evoluções, adendos e documentos clínicos são acessíveis somente a médicos e proprietários da clínica. A secretária mantém acesso ao cadastro, agenda e anexos. Documentos possuem modelos editáveis, histórico de rascunhos, duplicação, transcrição assistida com revisão e PDF com fontes incorporadas. O PDF corresponde à versão salva e permanece identificado como rascunho sem assinatura. Não há assinatura digital nem Anamnesator conectado. Rascunhos antigos do navegador não são importados automaticamente.
 
 ## Verificação
 

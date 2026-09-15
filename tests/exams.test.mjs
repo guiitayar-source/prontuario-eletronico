@@ -9,6 +9,12 @@ import {
   validateDefinition,
   validateResult,
 } from '../lib/exams.ts';
+import { proposalValues } from '../lib/exam-extraction.ts';
+import {
+  normalizeDocumentTranscription,
+  normalizeExamExtraction,
+  responseOutputText,
+} from '../lib/openai-files.ts';
 import { exportFHIR } from '../lib/fhir/export.ts';
 const definition = {
   id: 'ast',
@@ -29,7 +35,81 @@ const result = (id, overrides = {}) => ({
   supersedes_id: null,
   correction_reason: '',
   author_id: 'doctor',
+  attachment_id: null,
+  source: 'manual',
+  provenance: {},
   ...overrides,
+});
+test('AI proposals are bounded, catalog-matched and remain separate from results', () => {
+  const proposal = normalizeExamExtraction(
+    {
+      warnings: ['Conferir cabeçalho'],
+      exams: [
+        {
+          definitionId: 'ast',
+          originalName: 'TGO',
+          collectedOn: '2026-09-14',
+          laboratory: ' Lab ',
+          method: null,
+          specimen: 'Soro',
+          fields: [
+            {
+              fieldId: 'value',
+              originalName: 'TGO',
+              value: '20,5',
+              unit: 'U/L',
+              reference: '10 a 40',
+              page: 1,
+              originalText: 'TGO 20,5 U/L',
+              confidence: 1.4,
+              warnings: [],
+            },
+            {
+              fieldId: 'invented',
+              originalName: 'Outro',
+              value: '1',
+              unit: '',
+              reference: '',
+              page: 0,
+              originalText: 'Outro 1',
+              confidence: null,
+              warnings: [],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      attachmentId: 'attachment',
+      provider: 'OpenAI',
+      model: 'test',
+      extractedAt: '2026-09-15T00:00:00Z',
+    },
+    [definition],
+  );
+  assert.equal(proposal.exams[0].fields[0].confidence, 1);
+  assert.equal(proposal.exams[0].fields[1].fieldId, null);
+  assert.deepEqual(proposalValues(proposal.exams[0], definition), {
+    value: { value: '20,5', unit: 'U/L', reference: '10 a 40' },
+  });
+  assert.equal(
+    normalizeDocumentTranscription(
+      { transcription: '  texto fiel  ', warnings: [] },
+      {
+        attachmentId: 'attachment',
+        provider: 'OpenAI',
+        model: 'test',
+        extractedAt: '2026-09-15T00:00:00Z',
+      },
+    ).transcription,
+    'texto fiel',
+  );
+  assert.equal(
+    responseOutputText({
+      output: [{ content: [{ type: 'output_text', text: '{"ok":true}' }] }],
+    }),
+    '{"ok":true}',
+  );
 });
 test('search is accent-insensitive and never merges AST with ALT', () => {
   const defs = [
@@ -101,6 +181,36 @@ test('validation rejects impossible dates, unknown fields and missing correction
       ...definition,
       fields: [...definition.fields, ...definition.fields],
     }),
+  );
+  validateResult(
+    result('reviewed', {
+      attachment_id: 'attachment',
+      source: 'ai_reviewed',
+      provenance: {
+        attachment_id: 'attachment',
+        provider: 'OpenAI',
+        model: 'test',
+        extracted_at: '2026-09-15T00:00:00Z',
+        reviewed_at: '2026-09-15T00:01:00Z',
+      },
+    }),
+    definition,
+  );
+  assert.throws(() =>
+    validateResult(
+      result('reviewed', {
+        attachment_id: 'attachment',
+        source: 'ai_reviewed',
+        provenance: {
+          attachment_id: 'other',
+          provider: 'OpenAI',
+          model: 'test',
+          extracted_at: '2026-09-15T00:00:00Z',
+          reviewed_at: '2026-09-15T00:01:00Z',
+        },
+      }),
+      definition,
+    ),
   );
 });
 test('FHIR exports only active results with units and references, no invented LOINC codes', () => {

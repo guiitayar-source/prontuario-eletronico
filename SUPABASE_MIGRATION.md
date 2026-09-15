@@ -9,13 +9,15 @@ O projeto de desenvolvimento `mywmszbmdqzwewhzdjug` usa São Paulo. Trabalhar so
 - Anexos no bucket privado `clinical-files`: JPG, PNG, WebP e PDF até 12 MB, dez por solicitação.
 - Upload direto para Storage; a API verifica tamanho e assinatura do arquivo antes de registrar o anexo. Downloads usam URLs temporárias.
 - Captura por QR com sessão de duas horas, solicitação de quinze minutos, hash de token e revogação.
-- Auditoria de alterações cadastrais, agenda e anexos por gatilhos do banco.
+- Auditoria de alterações cadastrais, agenda, anexos e resultados estruturados por gatilhos do banco.
+- Exames estruturados: biblioteca de 25 modelos, resultados por paciente, histórico, correções, RLS médica e exportação FHIR.
+- Leitura assistida de exames e transcrição de documentos com revisão humana obrigatória; a API externa é chamada somente pelo backend.
 
-As três migrações em `supabase/migrations/` foram aplicadas ao projeto remoto. Dois cadastros e um agendamento foram copiados da demonstração. Um arquivo ainda aguarda transferência.
+As migrações até `20260913030000_readiness` e as três migrações de exames (`20260914010000`, `20260914010100` e `20260914010200`) foram aplicadas ao projeto remoto em São Paulo. A verificação posterior encontrou 25 modelos de exame, RLS ativa e nenhuma coleta estruturada criada durante a publicação. Dois cadastros e um agendamento foram copiados da demonstração. Um arquivo ainda aguarda transferência.
 
 ## Configuração
 
-Copie `.env.example` para `.env.local` e configure a URL, a chave pública e `SUPABASE_SECRET_KEY`. Esta última é exclusiva do servidor: nunca use prefixo `NEXT_PUBLIC_`, publique em Git ou inclua em código cliente. O arquivo local está ignorado pelo Git.
+Copie `.env.example` para `.env.local` e configure a URL, a chave pública, `SUPABASE_SECRET_KEY` e, para leitura de arquivos, `OPENAI_API_KEY`. As duas chaves são exclusivas do servidor: nunca use prefixo `NEXT_PUBLIC_`, publique em Git ou inclua em código cliente. O arquivo local está ignorado pelo Git. Os modelos podem ser alterados com `OPENAI_EXAM_MODEL` e `OPENAI_TRANSCRIPTION_MODEL`.
 
 ```sh
 npm ci
@@ -24,7 +26,7 @@ npm run build
 npm start
 ```
 
-Na Vercel, configure as mesmas variáveis. `vercel.json` seleciona Next.js e funções em São Paulo. Os arquivos passam diretamente pelo Storage para evitar o limite de corpo das funções. A publicação ainda está pendente.
+Na Vercel, configure as mesmas variáveis. `vercel.json` seleciona Next.js e funções em São Paulo. Os arquivos passam diretamente pelo Storage para evitar o limite de corpo das funções. A aplicação base está publicada; o código do módulo de exames precisa ser incluído na próxima publicação da Vercel.
 
 ## Administração e importação
 

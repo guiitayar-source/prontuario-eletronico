@@ -12,6 +12,7 @@ import {
   Download,
   Trash2,
   Image as ImageIcon,
+  ScanText,
 } from 'lucide-react';
 import {
   api,
@@ -27,7 +28,7 @@ type Props = {
   patient: Patient;
   tab: string;
   setTab: (tab: string) => void;
-  newDocument: () => void;
+  newDocument: (initialText?: string) => void;
   canCreateDocument?: boolean;
 };
 export default function Attachments({
@@ -39,15 +40,29 @@ export default function Attachments({
 }: Props) {
   const [files, setFiles] = useState<Received[]>([]),
     [pair, setPair] = useState<Pairing | null>(null);
-  const [archived,setArchived]=useState<Received[] | null>(null);
+  const [archived, setArchived] = useState<Received[] | null>(null);
   async function loadArchived() {
-    try { const r=await api(`archived&patientId=${encodeURIComponent(patient.id)}`);setArchived(r.attachments); }
-    catch(e) {setError((e as Error).message);}
+    try {
+      const r = await api(
+        `archived&patientId=${encodeURIComponent(patient.id)}`,
+      );
+      setArchived(r.attachments);
+    } catch (e) {
+      setError((e as Error).message);
+    }
   }
-  async function restore(file:Received) {
+  async function restore(file: Received) {
     setBusy(true);
-    try {await api('restore',{id:file.id,patientId:patient.id});await refresh();await loadArchived();setMessage('Anexo restaurado.');}
-    catch(e) {setError((e as Error).message);} finally {setBusy(false);}
+    try {
+      await api('restore', { id: file.id, patientId: patient.id });
+      await refresh();
+      await loadArchived();
+      setMessage('Anexo restaurado.');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
   const [request, setRequest] = useState<CaptureRequest | null>(null),
     [connected, setConnected] = useState(false);
@@ -241,8 +256,10 @@ export default function Attachments({
       await api('delete', { id: remove.id, patientId: patient.id });
       setRemove(null);
       await refresh();
-      if(archived) await loadArchived();
-      setMessage('Anexo arquivado. O arquivo foi preservado e pode ser restaurado.');
+      if (archived) await loadArchived();
+      setMessage(
+        'Anexo arquivado. O arquivo foi preservado e pode ser restaurado.',
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -258,16 +275,59 @@ export default function Attachments({
           cache: 'no-store',
         },
       );
-      if (!ticket.ok) throw new Error('Não foi possível autorizar a abertura do arquivo.');
-      const { url } = await ticket.json() as { url: string };
+      if (!ticket.ok)
+        throw new Error('Não foi possível autorizar a abertura do arquivo.');
+      const { url } = (await ticket.json()) as { url: string };
       const response = await fetch(url);
-      if (!response.ok || response.headers.get('content-type')?.split(';')[0] !== file.mime)
+      if (
+        !response.ok ||
+        response.headers.get('content-type')?.split(';')[0] !== file.mime
+      )
         throw new Error(
           'Não foi possível abrir o arquivo. Verifique o acesso e tente novamente.',
         );
       setPreview({ file, url: URL.createObjectURL(await response.blob()) });
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function transcribe(file: Received) {
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const response = await apiFetch(
+        `/api/ai-files?patientId=${encodeURIComponent(patient.id)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-AI-Action': '1',
+          },
+          body: JSON.stringify({
+            action: 'transcribe-document',
+            attachmentId: file.id,
+          }),
+        },
+      );
+      const data = (await response.json()) as {
+        proposal?: { transcription: string; warnings: string[] };
+        error?: string;
+      };
+      if (!response.ok || !data.proposal)
+        throw new Error(
+          data.error || 'Não foi possível transcrever o documento.',
+        );
+      newDocument(data.proposal.transcription);
+      setMessage(
+        data.proposal.warnings.length
+          ? `Transcrição aberta como rascunho. Revise também: ${data.proposal.warnings.join(' · ')}`
+          : 'Transcrição aberta como rascunho para revisão. Nada foi salvo ainda.',
+      );
+    } catch (error) {
+      setError((error as Error).message);
     } finally {
       setBusy(false);
     }
@@ -338,14 +398,28 @@ export default function Attachments({
           <option value="report">Relatório externo</option>
           <option value="other">Outro documento</option>
         </select>
-        {canCreateDocument && <button
-          className="icon-btn"
-          disabled={busy}
-          aria-label={`Arquivar ${file.name}`}
-          onClick={() => setRemove(file)}
-        >
-          <Trash2 size={18} />
-        </button>}
+        {tab === 'documentos' &&
+          canCreateDocument &&
+          ['report', 'other'].includes(file.category) && (
+            <button
+              type="button"
+              className="secondary ai-file-action"
+              disabled={busy}
+              onClick={() => void transcribe(file)}
+            >
+              <ScanText size={16} /> Transcrever
+            </button>
+          )}
+        {canCreateDocument && (
+          <button
+            className="icon-btn"
+            disabled={busy}
+            aria-label={`Arquivar ${file.name}`}
+            onClick={() => setRemove(file)}
+          >
+            <Trash2 size={18} />
+          </button>
+        )}
       </article>
     );
   }
@@ -354,7 +428,13 @@ export default function Attachments({
       className="attachments-area"
       hidden={tab !== 'exames' && tab !== 'documentos'}
     >
-      {tab === 'exames' && canCreateDocument && <Exams key={patient.id} patientId={patient.id} attachments={files.filter(f => f.category === 'exam')} />}
+      {tab === 'exames' && canCreateDocument && (
+        <Exams
+          key={patient.id}
+          patientId={patient.id}
+          attachments={files.filter((f) => f.category === 'exam')}
+        />
+      )}
       <div className="attachments-heading">
         <div>
           <div className="eyebrow">
@@ -369,7 +449,7 @@ export default function Attachments({
         </div>
         <div className="attachment-buttons">
           {tab === 'documentos' && canCreateDocument && (
-            <button className="secondary" onClick={newDocument}>
+            <button className="secondary" onClick={() => newDocument()}>
               <FileText size={16} /> Novo documento
             </button>
           )}
@@ -381,11 +461,37 @@ export default function Attachments({
       </div>
       <div className="capture-notice">
         Demonstração: envie somente arquivos fictícios. Os anexos ficam
-        preservados no armazenamento privado. O arquivamento permite recuperá-los.
+        preservados no armazenamento privado. O arquivamento permite
+        recuperá-los.
       </div>
-      {canCreateDocument && <div><button className="secondary" disabled={busy} onClick={()=>archived?setArchived(null):loadArchived()}>{archived?'Fechar arquivados':'Ver anexos arquivados'}</button>
-        {archived && <section aria-label="Anexos arquivados">{!archived.length && <p>Nenhum anexo arquivado.</p>}{archived.map(file=><p key={file.id}>{file.name} <button className="secondary" disabled={busy} onClick={()=>restore(file)}>Restaurar</button></p>)}</section>}
-      </div>}
+      {canCreateDocument && (
+        <div>
+          <button
+            className="secondary"
+            disabled={busy}
+            onClick={() => (archived ? setArchived(null) : loadArchived())}
+          >
+            {archived ? 'Fechar arquivados' : 'Ver anexos arquivados'}
+          </button>
+          {archived && (
+            <section aria-label="Anexos arquivados">
+              {!archived.length && <p>Nenhum anexo arquivado.</p>}
+              {archived.map((file) => (
+                <p key={file.id}>
+                  {file.name}{' '}
+                  <button
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() => restore(file)}
+                  >
+                    Restaurar
+                  </button>
+                </p>
+              ))}
+            </section>
+          )}
+        </div>
+      )}
       {error && (
         <div className="capture-error" role="alert">
           {error}
@@ -537,7 +643,8 @@ export default function Attachments({
                 <h2 id="capture-title">Arquivar este anexo?</h2>
                 <p>{remove.name}</p>
                 <p>
-                  O arquivo sairá da lista ativa, mas será preservado e poderá ser restaurado pelo médico.
+                  O arquivo sairá da lista ativa, mas será preservado e poderá
+                  ser restaurado pelo médico.
                 </p>
                 {error && <p role="alert">{error}</p>}
                 <button

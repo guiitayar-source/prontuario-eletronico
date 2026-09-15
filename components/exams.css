@@ -54,6 +54,82 @@
   flex-wrap: wrap;
   gap: 10px;
 }
+.exam-ai {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, auto);
+  align-items: end;
+  gap: 18px;
+  padding: 18px;
+  margin-bottom: 20px;
+  border: 1px solid var(--theme-accent-border, #d6e4d4);
+  border-radius: 12px;
+  background: var(--theme-accent-soft, #edf3ec);
+}
+.exam-ai p {
+  margin-bottom: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.exam-ai .exam-actions {
+  flex-wrap: nowrap;
+  align-items: end;
+}
+.exam-ai label {
+  min-width: 230px;
+}
+.exam-proposals {
+  padding: 18px;
+  margin: 0 0 20px;
+  border: 1px solid #8899aa45;
+  border-radius: 12px;
+}
+.exam-proposal-heading,
+.exam-proposal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.exam-proposal {
+  padding: 14px 0;
+  border-top: 1px solid #8899aa30;
+}
+.exam-ai-warnings {
+  margin: 14px 0;
+  padding: 12px 12px 12px 32px;
+  border-radius: 8px;
+  background: #fff4e8;
+  color: #7a4d2d;
+  font-size: 13px;
+}
+.exam-ai-review {
+  margin: 14px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--theme-accent-border, #d6e4d4);
+  border-radius: 9px;
+  background: var(--theme-accent-soft, #edf3ec);
+}
+.exam-ai-review p {
+  margin-bottom: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.exam-value-block {
+  margin-bottom: 12px;
+}
+.exam-value-block .exam-value-row {
+  margin-bottom: 0;
+}
+.exam-evidence {
+  display: grid;
+  gap: 4px;
+  margin-top: 7px;
+  padding: 9px 11px;
+  border-left: 3px solid var(--exam-accent, #537d98);
+  background: #8899aa0d;
+  font-size: 12px;
+  line-height: 1.45;
+}
 .exam-search .exam-actions {
   flex-wrap: nowrap;
   margin-top: 8px;
@@ -184,8 +260,18 @@
     padding: 14px;
   }
   .exam-meta,
-  .exam-custom-field {
+  .exam-custom-field,
+  .exam-ai {
     grid-template-columns: 1fr;
+  }
+  .exam-ai .exam-actions,
+  .exam-proposal-heading,
+  .exam-proposal {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .exam-ai label {
+    min-width: 0;
   }
   .exam-value-row {
     grid-template-columns: 1fr 1fr;

@@ -36,6 +36,7 @@ try {
     '20260914010000_exams.sql',
     '20260914010100_exam_catalog.sql',
     '20260914010200_exam_fhir.sql',
+    '20260915010000_ai_reviewed_exams.sql',
   ])
     await db.exec(
       await readFile(
@@ -119,6 +120,34 @@ try {
   await assert.rejects(
     write('result', { ...correction, id: crypto.randomUUID() }),
   );
+  const reviewed = {
+    ...base,
+    id: crypto.randomUUID(),
+    source: 'ai_reviewed',
+    provenance: {
+      attachment_id: 'valid',
+      provider: 'OpenAI',
+      model: 'test-model',
+      extracted_at: '2026-09-15T00:00:00Z',
+      reviewed_at: '2026-09-15T00:01:00Z',
+    },
+  };
+  await write('result', reviewed);
+  assert.equal(
+    (
+      await db.query('select source from public.exam_results where id=$1', [
+        reviewed.id,
+      ])
+    ).rows[0].source,
+    'ai_reviewed',
+  );
+  await assert.rejects(
+    write('result', {
+      ...reviewed,
+      id: crypto.randomUUID(),
+      provenance: {},
+    }),
+  );
   const custom = {
     id: crypto.randomUUID(),
     name: 'Exame personalizado',
@@ -152,7 +181,7 @@ try {
   const snapshot = (
     await db.query('select public.fhir_snapshot($1,$2) as s', [clinic, 'p'])
   ).rows[0].s;
-  assert.equal(snapshot.exam_results.length, 2);
+  assert.equal(snapshot.exam_results.length, 3);
   assert.equal(snapshot.exam_definitions.length, 1);
   await assert.rejects(
     db.query('select public.fhir_snapshot_before_exams($1,$2)', [clinic, 'p']),
@@ -176,7 +205,7 @@ try {
   await db.exec('reset role');
   assert.equal(
     (await db.query('select * from public.audit_events')).rows.length,
-    3,
+    4,
   );
   console.log(
     'Exams SQL: catalog, persistence, RLS, MFA guard, correction conflicts, attachment scope, validation, audit and FHIR passed.',
