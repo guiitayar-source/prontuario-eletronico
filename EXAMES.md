@@ -30,13 +30,13 @@ Resultados são incluídos na exportação existente como `DiagnosticReport` + `
 
 ## Leitura por IA
 
-PDFs e imagens classificados como exame podem ser enviados à ação **Ler com IA**. O backend confirma clínica, paciente, tipo e integridade do anexo, baixa o arquivo do Storage privado e o envia à Responses API da OpenAI com `store: false`. A chave nunca é enviada ao navegador. O modelo recebe o catálogo atual e devolve uma proposta estruturada com página, trecho original, sugestões, incerteza e avisos. Datas e valores desconhecidos permanecem ausentes.
+PDFs e imagens classificados como exame podem ser enviados à ação **Ler com IA**. Depois do clique, o profissional escolhe entre os provedores configurados (OpenAI ou Gemini). O backend confirma clínica, paciente, tipo e integridade do anexo, baixa o arquivo do Storage privado e o envia diretamente ao provedor escolhido. As chaves nunca são enviadas ao navegador. O modelo recebe o catálogo atual e devolve uma proposta estruturada com página, trecho original, sugestões, incerteza e avisos. Datas e valores desconhecidos permanecem ausentes.
 
 A proposta fica apenas no navegador e não é um resultado. Cada exame precisa ser aberto, conferido e confirmado pelo médico. Somente então passa pela mesma validação de preenchimento manual e entra no histórico como `ai_reviewed`, com provedor, modelo, horário de extração, horário de revisão, autor e anexo de origem. Trechos extraídos não são duplicados no banco.
 
 Em Documentos, **Transcrever** abre o texto como um novo rascunho não salvo. O profissional deve comparar com o arquivo, editar e salvar manualmente. A transcrição não resume, interpreta nem cria automaticamente um documento clínico definitivo.
 
-Configure `OPENAI_API_KEY` exclusivamente no servidor/Vercel. `OPENAI_EXAM_MODEL` e `OPENAI_TRANSCRIPTION_MODEL` são opcionais; sem eles, usa-se `gpt-4o-mini`. Antes de dados reais, revise contrato, retenção, transferência internacional, base legal e demais controles LGPD. `store: false` não equivale, sozinho, a Zero Data Retention.
+Configure `OPENAI_API_KEY` e/ou `GEMINI_API_KEY` exclusivamente no servidor/Vercel. `OPENAI_EXAM_MODEL`, `OPENAI_TRANSCRIPTION_MODEL`, `GEMINI_EXAM_MODEL` e `GEMINI_TRANSCRIPTION_MODEL` são opcionais; os padrões são `gpt-4o-mini` e `gemini-2.5-flash`. Antes de dados reais, revise contrato, retenção, transferência internacional, base legal e demais controles LGPD. A configuração de não retenção de um provedor não equivale, sozinha, a Zero Data Retention.
 
 ## Verificação
 

@@ -3,6 +3,7 @@ import type { ExamDefinition } from '../exams.ts';
 import {
   examExtractionSchema,
   extractionInstructions,
+  geminiOutputText,
   normalizeDocumentTranscription,
   normalizeExamExtraction,
   responseOutputText,
@@ -24,6 +25,44 @@ type OpenAIResponse = {
   incomplete_details?: { reason?: string } | null;
   output?: unknown;
 };
+
+type AiProviderId = 'openai' | 'gemini';
+type AiAction = 'extract-exams' | 'transcribe-document';
+
+const providerLabel = (provider: AiProviderId) =>
+  provider === 'gemini' ? 'Gemini' : 'OpenAI';
+
+function providerModel(provider: AiProviderId, action: AiAction) {
+  if (provider === 'gemini') {
+    return action === 'transcribe-document'
+      ? process.env.GEMINI_TRANSCRIPTION_MODEL ||
+          process.env.GEMINI_EXAM_MODEL ||
+          'gemini-2.5-flash'
+      : process.env.GEMINI_EXAM_MODEL || 'gemini-2.5-flash';
+  }
+  return action === 'transcribe-document'
+    ? process.env.OPENAI_TRANSCRIPTION_MODEL ||
+        process.env.OPENAI_EXAM_MODEL ||
+        'gpt-4o-mini'
+    : process.env.OPENAI_EXAM_MODEL || 'gpt-4o-mini';
+}
+
+function providerConfigured(provider: AiProviderId) {
+  return Boolean(
+    provider === 'gemini'
+      ? process.env.GEMINI_API_KEY
+      : process.env.OPENAI_API_KEY,
+  );
+}
+
+function availableProviders(action: AiAction) {
+  return (['openai', 'gemini'] as const).map((id) => ({
+    id,
+    label: providerLabel(id),
+    model: providerModel(id, action),
+    configured: providerConfigured(id),
+  }));
+}
 
 async function askOpenAI({
   bytes,
@@ -145,12 +184,121 @@ async function askOpenAI({
   }
 }
 
+async function askGemini({
+  bytes,
+  mime,
+  model,
+  instructions,
+  schema,
+  maxOutputTokens,
+}: {
+  bytes: Uint8Array;
+  mime: string;
+  model: string;
+  instructions: string;
+  schema: object;
+  maxOutputTokens: number;
+}) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey)
+    throw new HttpError(
+      503,
+      'Gemini ainda não configurado. Adicione GEMINI_API_KEY ao ambiente do servidor.',
+    );
+  if (!/^[a-zA-Z0-9._-]{1,100}$/.test(model))
+    throw new HttpError(503, 'O modelo Gemini configurado é inválido.');
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          store: false,
+          systemInstruction: { parts: [{ text: instructions }] },
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: 'Leia somente o arquivo anexado e devolva a extração solicitada.',
+                },
+                {
+                  inlineData: {
+                    mimeType: mime,
+                    data: Buffer.from(bytes).toString('base64'),
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseJsonSchema: schema,
+            maxOutputTokens,
+          },
+        }),
+        signal: AbortSignal.timeout(90_000),
+      },
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError')
+      throw new HttpError(
+        504,
+        'A leitura demorou além do esperado. Tente novamente.',
+      );
+    throw new HttpError(
+      503,
+      'Não foi possível conectar ao Gemini. Tente novamente.',
+    );
+  }
+  let result: unknown;
+  try {
+    result = await response.json();
+  } catch {
+    throw new HttpError(502, 'O Gemini devolveu uma resposta inválida.');
+  }
+  if (!response.ok) {
+    console.error('Gemini file extraction failed', response.status);
+    throw new HttpError(
+      response.status === 429 ? 429 : 502,
+      response.status === 429
+        ? 'O limite temporário de leituras do Gemini foi atingido. Tente novamente em instantes.'
+        : 'O Gemini não conseguiu processar o arquivo.',
+    );
+  }
+  const text = geminiOutputText(result);
+  if (!text)
+    throw new HttpError(
+      422,
+      'O Gemini não encontrou informação legível ou bloqueou a resposta.',
+    );
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new HttpError(502, 'O Gemini devolveu dados inválidos.');
+  }
+}
+
+function askProvider(
+  provider: AiProviderId,
+  options: Parameters<typeof askOpenAI>[0],
+) {
+  return provider === 'gemini' ? askGemini(options) : askOpenAI(options);
+}
+
 export const aiFiles = handle(async (request, { db, clinic, role }) => {
   if (!['owner', 'doctor'].includes(role))
     throw new HttpError(
       403,
       'Leitura por IA disponível somente à equipe médica.',
     );
+  if (request.method === 'GET')
+    return json({ providers: availableProviders('extract-exams') });
   writeGuard(request, 'X-AI-Action');
   const url = new URL(request.url);
   const patientId = url.searchParams.get('patientId');
@@ -165,6 +313,16 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
     !/^[a-f0-9-]{36}$/i.test(attachmentId)
   )
     throw new HttpError(422, 'Selecione um arquivo válido.');
+  const provider = data.provider === undefined ? 'openai' : data.provider;
+  if (typeof provider !== 'string' || !['openai', 'gemini'].includes(provider))
+    throw new HttpError(422, 'Selecione um provedor de IA válido.');
+  const selectedProvider = provider as AiProviderId;
+  const selectedAction = action as AiAction;
+  if (!providerConfigured(selectedProvider))
+    throw new HttpError(
+      503,
+      `${providerLabel(selectedProvider)} ainda não está configurado no servidor.`,
+    );
 
   const attachment = check(
     await db
@@ -210,11 +368,8 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
 
   const extractedAt = new Date().toISOString();
   if (action === 'transcribe-document') {
-    const model =
-      process.env.OPENAI_TRANSCRIPTION_MODEL ||
-      process.env.OPENAI_EXAM_MODEL ||
-      'gpt-4o-mini';
-    const result = await askOpenAI({
+    const model = providerModel(selectedProvider, selectedAction);
+    const result = await askProvider(selectedProvider, {
       bytes,
       mime: attachment.mime,
       name: attachment.name,
@@ -228,7 +383,7 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
       return json({
         proposal: normalizeDocumentTranscription(result, {
           attachmentId,
-          provider: 'OpenAI',
+          provider: providerLabel(selectedProvider),
           model,
           extractedAt,
         }),
@@ -245,8 +400,8 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
       .or(`clinic_id.is.null,clinic_id.eq.${clinic}`)
       .order('name'),
   ) as ExamDefinition[];
-  const model = process.env.OPENAI_EXAM_MODEL || 'gpt-4o-mini';
-  const result = await askOpenAI({
+  const model = providerModel(selectedProvider, selectedAction);
+  const result = await askProvider(selectedProvider, {
     bytes,
     mime: attachment.mime,
     name: attachment.name,
@@ -260,7 +415,12 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
     return json({
       proposal: normalizeExamExtraction(
         result,
-        { attachmentId, provider: 'OpenAI', model, extractedAt },
+        {
+          attachmentId,
+          provider: providerLabel(selectedProvider),
+          model,
+          extractedAt,
+        },
         definitions,
       ),
     });

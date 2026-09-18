@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/supabase/http';
+import { Modal } from '@/components/modal';
 import {
   proposalValues,
   type ExamExtractionProposal,
@@ -28,6 +29,12 @@ import {
 import './exams.css';
 
 type Attachment = { id: string; name: string };
+type AiProvider = {
+  id: 'openai' | 'gemini';
+  label: string;
+  model: string;
+  configured: boolean;
+};
 type Draft = {
   id: string;
   definition_id: string;
@@ -75,6 +82,9 @@ export default function Exams({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [providerModal, setProviderModal] = useState(false);
+  const [providerLoading, setProviderLoading] = useState(false);
+  const [providers, setProviders] = useState<AiProvider[]>([]);
   const [extractionAttachment, setExtractionAttachment] = useState('');
   const [extraction, setExtraction] = useState<ExamExtractionProposal | null>(
     null,
@@ -148,8 +158,35 @@ export default function Exams({
     setMessage('');
     setError('');
   }
-  async function extractExams() {
+  async function chooseProvider() {
     if (!extractionAttachment) return;
+    setError('');
+    setProviderModal(true);
+    setProviderLoading(true);
+    try {
+      const response = await apiFetch(
+        `/api/ai-files?patientId=${encodeURIComponent(patientId)}`,
+        { cache: 'no-store' },
+      );
+      const data = (await response.json()) as {
+        providers?: AiProvider[];
+        error?: string;
+      };
+      if (!response.ok || !data.providers)
+        throw new Error(
+          data.error || 'Não foi possível carregar os modelos disponíveis.',
+        );
+      setProviders(data.providers);
+    } catch (error) {
+      setProviderModal(false);
+      setError((error as Error).message);
+    } finally {
+      setProviderLoading(false);
+    }
+  }
+  async function extractExams(provider: AiProvider['id']) {
+    if (!extractionAttachment) return;
+    setProviderModal(false);
     setError('');
     setMessage('');
     setExtracting(true);
@@ -165,6 +202,7 @@ export default function Exams({
           body: JSON.stringify({
             action: 'extract-exams',
             attachmentId: extractionAttachment,
+            provider,
           }),
         },
       );
@@ -379,7 +417,7 @@ export default function Exams({
                     type="button"
                     className="primary"
                     disabled={extracting || !extractionAttachment}
-                    onClick={() => void extractExams()}
+                    onClick={() => void chooseProvider()}
                   >
                     {extracting ? 'Lendo laudo…' : 'Ler com IA'}
                   </button>
@@ -1130,6 +1168,55 @@ export default function Exams({
         <p role="alert" className="capture-error">
           {error}
         </p>
+      )}
+      {providerModal && (
+        <Modal
+          label="Escolher modelo de IA"
+          className="exam-provider-modal"
+          onClose={() => !extracting && setProviderModal(false)}
+        >
+          <button
+            type="button"
+            className="close text-button"
+            aria-label="Fechar"
+            onClick={() => setProviderModal(false)}
+          >
+            ×
+          </button>
+          <h2>Escolha a IA para ler o laudo</h2>
+          <p>
+            O arquivo será enviado ao provedor escolhido. A leitura continuará
+            como sugestão e precisará da sua revisão antes de ser salva.
+          </p>
+          {providerLoading ? (
+            <output>Carregando modelos…</output>
+          ) : (
+            <div className="exam-provider-list">
+              {providers.map((provider) => (
+                <button
+                  type="button"
+                  key={provider.id}
+                  disabled={!provider.configured || extracting}
+                  onClick={() => void extractExams(provider.id)}
+                >
+                  <span>
+                    <strong>{provider.label}</strong>
+                    <small>{provider.model}</small>
+                  </span>
+                  <span className="exam-provider-status">
+                    {provider.configured ? 'Usar modelo' : 'Não configurado'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          {!providerLoading && !providers.some((item) => item.configured) && (
+            <p className="exam-provider-note">
+              Configure ao menos uma chave de IA no ambiente do servidor para
+              habilitar a leitura.
+            </p>
+          )}
+        </Modal>
       )}
     </section>
   );

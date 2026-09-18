@@ -17,7 +17,7 @@ As migrações até `20260913030000_readiness` e as três migrações de exames 
 
 ## Configuração
 
-Copie `.env.example` para `.env.local` e configure a URL, a chave pública, `SUPABASE_SECRET_KEY` e, para leitura de arquivos, `OPENAI_API_KEY`. As duas chaves são exclusivas do servidor: nunca use prefixo `NEXT_PUBLIC_`, publique em Git ou inclua em código cliente. O arquivo local está ignorado pelo Git. Os modelos podem ser alterados com `OPENAI_EXAM_MODEL` e `OPENAI_TRANSCRIPTION_MODEL`.
+Copie `.env.example` para `.env.local` e configure a URL, a chave pública, `SUPABASE_SECRET_KEY` e, para leitura de arquivos, `OPENAI_API_KEY` e/ou `GEMINI_API_KEY`. As chaves secretas são exclusivas do servidor: nunca use prefixo `NEXT_PUBLIC_`, publique em Git ou inclua em código cliente. O arquivo local está ignorado pelo Git. Os modelos podem ser alterados com `OPENAI_EXAM_MODEL`, `OPENAI_TRANSCRIPTION_MODEL`, `GEMINI_EXAM_MODEL` e `GEMINI_TRANSCRIPTION_MODEL`.
 
 ```sh
 npm ci

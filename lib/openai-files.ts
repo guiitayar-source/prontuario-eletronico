@@ -132,6 +132,27 @@ export function normalizeDocumentTranscription(
   return { ...meta, transcription, warnings: warnings(root.warnings) };
 }
 
+export function geminiOutputText(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  const candidates = (value as { candidates?: unknown }).candidates;
+  if (!Array.isArray(candidates)) return '';
+  return candidates
+    .flatMap((candidate) => {
+      if (!candidate || typeof candidate !== 'object') return [];
+      const content = (candidate as { content?: unknown }).content;
+      if (!content || typeof content !== 'object' || Array.isArray(content))
+        return [];
+      const parts = (content as { parts?: unknown }).parts;
+      if (!Array.isArray(parts)) return [];
+      return parts.flatMap((part) => {
+        if (!part || typeof part !== 'object' || Array.isArray(part)) return [];
+        const text = (part as { text?: unknown }).text;
+        return typeof text === 'string' ? [text] : [];
+      });
+    })
+    .join('');
+}
+
 const nullableText = { type: ['string', 'null'] };
 const warningSchema = { type: 'array', items: { type: 'string' } };
 

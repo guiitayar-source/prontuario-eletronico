@@ -13,6 +13,7 @@ import { proposalValues } from '../lib/exam-extraction.ts';
 import {
   normalizeDocumentTranscription,
   normalizeExamExtraction,
+  geminiOutputText,
   responseOutputText,
 } from '../lib/openai-files.ts';
 import { exportFHIR } from '../lib/fhir/export.ts';
@@ -107,6 +108,14 @@ test('AI proposals are bounded, catalog-matched and remain separate from results
   assert.equal(
     responseOutputText({
       output: [{ content: [{ type: 'output_text', text: '{"ok":true}' }] }],
+    }),
+    '{"ok":true}',
+  );
+  assert.equal(
+    geminiOutputText({
+      candidates: [
+        { content: { parts: [{ text: '{"ok":' }, { text: 'true}' }] } },
+      ],
     }),
     '{"ok":true}',
   );

@@ -114,6 +114,50 @@
   font-size: 13px;
   line-height: 1.6;
 }
+.exam-provider-modal {
+  max-width: 590px;
+}
+.exam-provider-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+.exam-provider-list > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  padding: 15px 16px;
+  border: 1px solid #8899aa55;
+  border-radius: 10px;
+  background: var(--background, #fff);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.exam-provider-list > button:not(:disabled):hover {
+  border-color: var(--theme-primary, #24583e);
+  background: var(--theme-accent-soft, #edf3ec);
+}
+.exam-provider-list > button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.exam-provider-list small {
+  margin-top: 3px;
+}
+.exam-provider-status {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-primary, #24583e);
+}
+.exam-provider-note {
+  padding: 12px;
+  border-radius: 8px;
+  background: #fff4e8;
+}
 .exam-value-block {
   margin-bottom: 12px;
 }
