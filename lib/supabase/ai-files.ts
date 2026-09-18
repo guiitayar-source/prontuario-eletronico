@@ -41,8 +41,11 @@ const EXAM_MODELS: Record<
   },
   'openai-luna': {
     provider: 'openai',
-    label: 'OpenAI · GPT-4o',
-    model: process.env.OPENAI_EXAM_MODEL || 'gpt-4o',
+    label: 'OpenAI · Luna',
+    model:
+      process.env.OPENAI_LUNA_MODEL ||
+      process.env.OPENAI_EXAM_MODEL ||
+      'gpt-5.6-luna',
   },
   'openai-mini': {
     provider: 'openai',
