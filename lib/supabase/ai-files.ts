@@ -1,3 +1,4 @@
+import _sharp from 'sharp';
 import { fileType, MAX_FILE } from '../capture.ts';
 import type { ExamDefinition } from '../exams.ts';
 import {
@@ -11,6 +12,92 @@ import {
   transcriptionSchema,
 } from '../openai-files.ts';
 import { body, check, handle, HttpError, json, writeGuard } from './server.ts';
+
+type SharpInstance = {
+  metadata(): Promise<{ width?: number; height?: number }>;
+  rotate(): SharpInstance;
+  resize(options: {
+    width?: number;
+    height?: number;
+    fit?: string;
+    withoutEnlargement?: boolean;
+  }): SharpInstance;
+  jpeg(options: { quality?: number; mozjpeg?: boolean }): SharpInstance;
+  toBuffer(): Promise<Buffer>;
+};
+type SharpFn = (
+  input?: Buffer | Uint8Array,
+  options?: { failOnError?: boolean },
+) => SharpInstance;
+const sharp = _sharp as unknown as SharpFn;
+
+export function adaptSchemaForGemini(schema: object): object {
+  const jsonStr = JSON.stringify(schema);
+  return JSON.parse(jsonStr, (_key, value) => {
+    if (value && typeof value === 'object' && Array.isArray(value.type)) {
+      const types = value.type as string[];
+      if (types.includes('null') && types.length === 2) {
+        const actualType = types.find((t) => t !== 'null');
+        return { ...value, type: actualType, nullable: true };
+      }
+    }
+    return value;
+  });
+}
+
+export async function optimizeImageForAi(
+  bytes: Uint8Array,
+  mime: string,
+): Promise<{ bytes: Uint8Array; mime: string }> {
+  if (mime === 'application/pdf') {
+    return { bytes, mime };
+  }
+  try {
+    const image = sharp(bytes, { failOnError: false });
+    const metadata = await image.metadata();
+    const maxDimension = Math.max(metadata.width || 0, metadata.height || 0);
+
+    // Se a imagem já for leve (< 1.2 MB) e a maior dimensão for <= 2048px, preserva os bytes
+    if (
+      bytes.length < 1.2 * 1024 * 1024 &&
+      maxDimension > 0 &&
+      maxDimension <= 2048
+    ) {
+      return { bytes, mime };
+    }
+
+    let pipeline = image.rotate(); // auto-rotação conforme orientação EXIF da câmera
+    if (maxDimension > 2048) {
+      pipeline = pipeline.resize({
+        width:
+          metadata.width && metadata.width >= (metadata.height || 0)
+            ? 2048
+            : undefined,
+        height:
+          metadata.height && metadata.height > (metadata.width || 0)
+            ? 2048
+            : undefined,
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
+    }
+
+    const outputBuffer = await pipeline
+      .jpeg({ quality: 85, mozjpeg: true })
+      .toBuffer();
+
+    return {
+      bytes: new Uint8Array(outputBuffer),
+      mime: 'image/jpeg',
+    };
+  } catch (err) {
+    console.warn(
+      'Falha na otimização da imagem para IA, mantendo bytes originais:',
+      err,
+    );
+    return { bytes, mime };
+  }
+}
 
 const ALLOWED_MIMES = new Set([
   'application/pdf',
@@ -196,19 +283,26 @@ async function askOpenAI({
     );
   }
   if (!response.ok) {
-    console.error('OpenAI file extraction failed', response.status);
+    const errorBody = result as { error?: { message?: string } };
+    const apiDetail = errorBody?.error?.message
+      ? `: ${errorBody.error.message}`
+      : '';
+    console.error('OpenAI file extraction failed', response.status, errorBody);
     throw new HttpError(
       response.status === 429 ? 429 : 502,
       response.status === 429
         ? 'O limite temporário de leituras foi atingido. Tente novamente em instantes.'
-        : 'O serviço de leitura não conseguiu processar o arquivo.',
+        : `O serviço de leitura não conseguiu processar o arquivo${apiDetail}.`,
     );
   }
   if (result.status && result.status !== 'completed') {
-    console.error('OpenAI file extraction incomplete');
+    const reason = result.incomplete_details?.reason
+      ? ` (${result.incomplete_details.reason})`
+      : '';
+    console.error('OpenAI file extraction incomplete', result.incomplete_details);
     throw new HttpError(
       422,
-      'A leitura ficou incompleta. Tente um arquivo menor ou páginas mais nítidas.',
+      `A leitura ficou incompleta${reason}. Tente um arquivo menor ou páginas mais nítidas.`,
     );
   }
   const text = responseOutputText(result);
@@ -274,7 +368,7 @@ async function askGemini({
           ],
           generationConfig: {
             responseMimeType: 'application/json',
-            responseJsonSchema: schema,
+            responseJsonSchema: adaptSchemaForGemini(schema),
             maxOutputTokens,
           },
         }),
@@ -299,20 +393,32 @@ async function askGemini({
     throw new HttpError(502, 'O Gemini devolveu uma resposta inválida.');
   }
   if (!response.ok) {
-    console.error('Gemini file extraction failed', response.status);
+    const errorBody = result as { error?: { message?: string } };
+    const apiDetail = errorBody?.error?.message
+      ? `: ${errorBody.error.message}`
+      : '';
+    console.error('Gemini file extraction failed', response.status, errorBody);
     throw new HttpError(
       response.status === 429 ? 429 : 502,
       response.status === 429
         ? 'O limite temporário de leituras do Gemini foi atingido. Tente novamente em instantes.'
-        : 'O Gemini não conseguiu processar o arquivo.',
+        : `O Gemini não conseguiu processar o arquivo${apiDetail}.`,
     );
   }
   const text = geminiOutputText(result);
-  if (!text)
+  if (!text) {
+    const raw = result as {
+      promptFeedback?: { blockReason?: string };
+      candidates?: { finishReason?: string }[];
+    };
+    const reason =
+      raw?.promptFeedback?.blockReason || raw?.candidates?.[0]?.finishReason;
+    const detail = reason ? ` (motivo: ${reason})` : '';
     throw new HttpError(
       422,
-      'O Gemini não encontrou informação legível ou bloqueou a resposta.',
+      `O Gemini não encontrou informação legível ou bloqueou a resposta${detail}.`,
     );
+  }
   try {
     return JSON.parse(text) as unknown;
   } catch {
@@ -548,11 +654,16 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
     );
 
   const extractedAt = new Date().toISOString();
+  const { bytes: aiBytes, mime: aiMime } = await optimizeImageForAi(
+    bytes,
+    attachment.mime,
+  );
+
   if (action === 'transcribe-document') {
     const model = providerModel(selectedProvider, selectedAction);
     const result = await askProvider(selectedProvider, {
-      bytes,
-      mime: attachment.mime,
+      bytes: aiBytes,
+      mime: aiMime,
       name: attachment.name,
       model,
       instructions: transcriptionInstructions,
@@ -605,8 +716,8 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
   }
 
   const result = await askProvider(selectedProvider, {
-    bytes,
-    mime: attachment.mime,
+    bytes: aiBytes,
+    mime: aiMime,
     name: attachment.name,
     model,
     instructions: extractionInstructions(definitions),

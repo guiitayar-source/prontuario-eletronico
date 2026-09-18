@@ -19,6 +19,7 @@ import {
   api,
   ApiError,
   categoryNames,
+  compressImageFile,
   formatBytes,
   type Pairing,
   type Received,
@@ -240,8 +241,11 @@ export default function Attachments({
     }
   }
   async function uploadFromDesktop(list: FileList | null) {
-    const selected = Array.from(list || []);
-    if (!selected.length) return;
+    const rawSelected = Array.from(list || []);
+    if (!rawSelected.length) return;
+    const selected = await Promise.all(
+      rawSelected.map((f) => compressImageFile(f)),
+    );
     const allowed = new Set([
       'image/jpeg',
       'image/png',
@@ -321,7 +325,8 @@ export default function Attachments({
       if (desktopFiles.current) desktopFiles.current.value = '';
     }
   }
-  async function uploadSingleExam(file: File): Promise<string> {
+  async function uploadSingleExam(rawFile: File): Promise<string> {
+    const file = await compressImageFile(rawFile);
     const allowed = new Set([
       'image/jpeg',
       'image/png',
