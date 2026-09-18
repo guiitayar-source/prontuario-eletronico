@@ -10,6 +10,7 @@ import {
   Link,
   FileText,
   Download,
+  Upload,
   Trash2,
   Image as ImageIcon,
   ScanText,
@@ -79,6 +80,7 @@ export default function Attachments({
   const [remove, setRemove] = useState<Received | null>(null),
     [now, setNow] = useState(Date.now());
   const closeRef = useRef<HTMLButtonElement>(null);
+  const desktopFiles = useRef<HTMLInputElement>(null);
   const kind = tab === 'exames' ? 'exam' : 'other';
   useEffect(() => {
     try {
@@ -233,6 +235,158 @@ export default function Attachments({
       setMessage('Celular desconectado.');
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function uploadFromDesktop(list: FileList | null) {
+    const selected = Array.from(list || []);
+    if (!selected.length) return;
+    const allowed = new Set([
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'application/pdf',
+    ]);
+    if (
+      selected.length > 10 ||
+      selected.some((file) => file.size < 1 || file.size > 12 * 1024 * 1024) ||
+      selected.some((file) => !allowed.has(file.type))
+    ) {
+      setError('Use até 10 arquivos JPG, PNG, WebP ou PDF de até 12 MB.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      let activePair = pair;
+      let activeRequest = request;
+      if (!activePair || activePair.expires_at <= Date.now()) {
+        const result = await api('connect', {
+          category: kind,
+          patientId: patient.id,
+        });
+        activePair = result;
+        activeRequest = result.request;
+        setPair(result);
+        setRequest(result.request);
+        try {
+          sessionStorage.setItem('capture-desktop', JSON.stringify(result));
+        } catch {
+          /* The current upload may continue without browser persistence. */
+        }
+      } else if (
+        !activeRequest ||
+        activeRequest.state !== 'pending' ||
+        activeRequest.expires_at <= Date.now() ||
+        activeRequest.patient_id !== patient.id ||
+        activeRequest.category !== kind
+      ) {
+        const result = await api('request', {
+          id: activePair.id,
+          category: kind,
+          patientId: patient.id,
+        });
+        activeRequest = result.request;
+        setRequest(result.request);
+      }
+      if (!activePair || !activeRequest)
+        throw new Error('Não foi possível preparar o envio do arquivo.');
+      for (const file of selected) {
+        const uploadId = crypto.randomUUID();
+        const form = new FormData();
+        form.set('requestId', activeRequest.id);
+        form.set('uploadId', uploadId);
+        form.set('file', file);
+        await api('upload', form, activePair.token);
+        if (kind === 'exam' || kind === 'other') {
+          await api('classify', {
+            id: uploadId,
+            category: kind,
+            patientId: patient.id,
+          });
+        }
+      }
+      await refresh();
+      setMessage(
+        kind === 'exam'
+          ? `${selected.length} exame${selected.length === 1 ? '' : 's'} anexado${selected.length === 1 ? '' : 's'} com sucesso.`
+          : `${selected.length} arquivo${selected.length === 1 ? '' : 's'} recebido${selected.length === 1 ? '' : 's'}.`,
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+      if (desktopFiles.current) desktopFiles.current.value = '';
+    }
+  }
+  async function uploadSingleExam(file: File): Promise<string> {
+    const allowed = new Set([
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'application/pdf',
+    ]);
+    if (
+      file.size < 1 ||
+      file.size > 12 * 1024 * 1024 ||
+      !allowed.has(file.type)
+    ) {
+      throw new Error('Use um arquivo JPG, PNG, WebP ou PDF de até 12 MB.');
+    }
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      let activePair = pair;
+      let activeRequest = request;
+      if (!activePair || activePair.expires_at <= Date.now()) {
+        const result = await api('connect', {
+          category: 'exam',
+          patientId: patient.id,
+        });
+        activePair = result;
+        activeRequest = result.request;
+        setPair(result);
+        setRequest(result.request);
+        try {
+          sessionStorage.setItem('capture-desktop', JSON.stringify(result));
+        } catch {
+          /* The current upload may continue without browser persistence. */
+        }
+      } else if (
+        !activeRequest ||
+        activeRequest.state !== 'pending' ||
+        activeRequest.expires_at <= Date.now() ||
+        activeRequest.patient_id !== patient.id ||
+        activeRequest.category !== 'exam'
+      ) {
+        const result = await api('request', {
+          id: activePair.id,
+          category: 'exam',
+          patientId: patient.id,
+        });
+        activeRequest = result.request;
+        setRequest(result.request);
+      }
+      if (!activePair || !activeRequest)
+        throw new Error('Não foi possível preparar o envio do arquivo.');
+
+      const uploadId = crypto.randomUUID();
+      const form = new FormData();
+      form.set('requestId', activeRequest.id);
+      form.set('uploadId', uploadId);
+      form.set('file', file);
+      await api('upload', form, activePair.token);
+      await api('classify', {
+        id: uploadId,
+        category: 'exam',
+        patientId: patient.id,
+      });
+      await refresh();
+      setMessage('Laudo anexado com sucesso e pronto para leitura com IA.');
+      return uploadId;
     } finally {
       setBusy(false);
     }
@@ -433,6 +587,7 @@ export default function Attachments({
           key={patient.id}
           patientId={patient.id}
           attachments={files.filter((f) => f.category === 'exam')}
+          onUploadAttachment={uploadSingleExam}
         />
       )}
       <div className="attachments-heading">
@@ -457,6 +612,22 @@ export default function Attachments({
             <Smartphone size={17} />
             {pair && !expired ? 'Solicitar novo envio' : 'Anexar pelo celular'}
           </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy}
+            onClick={() => desktopFiles.current?.click()}
+          >
+            <Upload size={16} /> Anexar arquivo
+          </button>
+          <input
+            ref={desktopFiles}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            multiple
+            hidden
+            onChange={(event) => void uploadFromDesktop(event.target.files)}
+          />
         </div>
       </div>
       <div className="capture-notice">

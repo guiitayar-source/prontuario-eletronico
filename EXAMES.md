@@ -30,7 +30,7 @@ Resultados são incluídos na exportação existente como `DiagnosticReport` + `
 
 ## Leitura por IA
 
-PDFs e imagens classificados como exame podem ser enviados à ação **Ler com IA**. Depois do clique, o profissional escolhe entre os provedores configurados (OpenAI ou Gemini). O backend confirma clínica, paciente, tipo e integridade do anexo, baixa o arquivo do Storage privado e o envia diretamente ao provedor escolhido. As chaves nunca são enviadas ao navegador. O modelo recebe o catálogo atual e devolve uma proposta estruturada com página, trecho original, sugestões, incerteza e avisos. Datas e valores desconhecidos permanecem ausentes.
+PDFs e imagens classificados como exame podem ser enviados à ação **Ler com IA**. Depois do clique, o profissional escolhe entre Gemini 2.5 Flash, GPT-5.6 Luna e GPT-4o mini, desde que a chave do respectivo provedor esteja configurada. O backend confirma clínica, paciente, tipo e integridade do anexo, baixa o arquivo do Storage privado e o envia diretamente ao modelo escolhido. As chaves nunca são enviadas ao navegador. O modelo recebe o catálogo atual e devolve uma proposta estruturada com página, trecho original, sugestões, incerteza e avisos. Datas e valores desconhecidos permanecem ausentes.
 
 A proposta fica apenas no navegador e não é um resultado. Cada exame precisa ser aberto, conferido e confirmado pelo médico. Somente então passa pela mesma validação de preenchimento manual e entra no histórico como `ai_reviewed`, com provedor, modelo, horário de extração, horário de revisão, autor e anexo de origem. Trechos extraídos não são duplicados no banco.
 

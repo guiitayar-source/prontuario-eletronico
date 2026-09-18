@@ -71,11 +71,13 @@
   line-height: 1.6;
 }
 .exam-ai .exam-actions {
-  flex-wrap: nowrap;
-  align-items: end;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
 }
 .exam-ai label {
-  min-width: 230px;
+  min-width: 200px;
+  flex: 1 1 200px;
 }
 .exam-proposals {
   padding: 18px;
@@ -153,10 +155,33 @@
   font-weight: 600;
   color: var(--theme-primary, #24583e);
 }
-.exam-provider-note {
-  padding: 12px;
+.exam-provider-list > button.unconfigured .exam-provider-status {
+  color: #718096;
+}
+.exam-provider-warning {
+  margin: 14px 0 0;
+  padding: 10px 14px;
   border-radius: 8px;
-  background: #fff4e8;
+  background: #fdf2e9;
+  border: 1px solid #fbd38d;
+  color: #7c2d12;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.exam-provider-note {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.exam-provider-note p {
+  margin: 0 0 6px;
+}
+.exam-provider-note p:last-child {
+  margin-bottom: 0;
 }
 .exam-value-block {
   margin-bottom: 12px;

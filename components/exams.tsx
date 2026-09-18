@@ -1,5 +1,6 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Upload } from 'lucide-react';
 import { apiFetch } from '@/lib/supabase/http';
 import { Modal } from '@/components/modal';
 import {
@@ -29,8 +30,8 @@ import {
 import './exams.css';
 
 type Attachment = { id: string; name: string };
-type AiProvider = {
-  id: 'openai' | 'gemini';
+type AiModel = {
+  id: 'gemini-flash' | 'openai-luna' | 'openai-mini' | 'demo';
   label: string;
   model: string;
   configured: boolean;
@@ -66,9 +67,11 @@ const emptyField = (): ExamField => ({
 export default function Exams({
   patientId,
   attachments,
+  onUploadAttachment,
 }: {
   patientId: string;
   attachments: Attachment[];
+  onUploadAttachment?: (file: File) => Promise<string | void>;
 }) {
   const [definitions, setDefinitions] = useState<ExamDefinition[]>([]);
   const [results, setResults] = useState<ExamResult[]>([]);
@@ -84,12 +87,34 @@ export default function Exams({
   const [extracting, setExtracting] = useState(false);
   const [providerModal, setProviderModal] = useState(false);
   const [providerLoading, setProviderLoading] = useState(false);
-  const [providers, setProviders] = useState<AiProvider[]>([]);
+  const [models, setModels] = useState<AiModel[]>([]);
+  const [providerKeyNote, setProviderKeyNote] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const examFileInputRef = useRef<HTMLInputElement>(null);
   const [extractionAttachment, setExtractionAttachment] = useState('');
   const [extraction, setExtraction] = useState<ExamExtractionProposal | null>(
     null,
   );
   const [reviewing, setReviewing] = useState<Reviewing | null>(null);
+
+  async function handleExamUpload(file: File) {
+    if (!onUploadAttachment) return;
+    setError('');
+    setMessage('');
+    setUploading(true);
+    try {
+      const newId = await onUploadAttachment(file);
+      if (newId) {
+        setExtractionAttachment(newId);
+        setExtraction(null);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setUploading(false);
+      if (examFileInputRef.current) examFileInputRef.current.value = '';
+    }
+  }
   const endpoint = `/api/exams?patientId=${encodeURIComponent(patientId)}`;
   const call = useCallback(
     async (payload?: unknown) => {
@@ -161,6 +186,7 @@ export default function Exams({
   async function chooseProvider() {
     if (!extractionAttachment) return;
     setError('');
+    setProviderKeyNote('');
     setProviderModal(true);
     setProviderLoading(true);
     try {
@@ -169,14 +195,14 @@ export default function Exams({
         { cache: 'no-store' },
       );
       const data = (await response.json()) as {
-        providers?: AiProvider[];
+        models?: AiModel[];
         error?: string;
       };
-      if (!response.ok || !data.providers)
+      if (!response.ok || !data.models)
         throw new Error(
           data.error || 'Não foi possível carregar os modelos disponíveis.',
         );
-      setProviders(data.providers);
+      setModels(data.models);
     } catch (error) {
       setProviderModal(false);
       setError((error as Error).message);
@@ -184,7 +210,7 @@ export default function Exams({
       setProviderLoading(false);
     }
   }
-  async function extractExams(provider: AiProvider['id']) {
+  async function extractExams(model: AiModel['id']) {
     if (!extractionAttachment) return;
     setProviderModal(false);
     setError('');
@@ -202,7 +228,7 @@ export default function Exams({
           body: JSON.stringify({
             action: 'extract-exams',
             attachmentId: extractionAttachment,
-            provider,
+            model,
           }),
         },
       );
@@ -390,22 +416,49 @@ export default function Exams({
                 <div>
                   <h3 id="exam-ai-title">Preencher a partir do laudo</h3>
                   <p>
-                    A IA prepara sugestões. Nada entra no prontuário sem sua
-                    revisão e confirmação.
+                    A IA prepara sugestões a partir do laudo anexado. Nada entra no
+                    prontuário sem sua revisão e confirmação.
                   </p>
                 </div>
                 <div className="exam-actions">
+                  {onUploadAttachment && (
+                    <>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={uploading || extracting}
+                        onClick={() => examFileInputRef.current?.click()}
+                      >
+                        <Upload size={16} />
+                        {uploading ? 'Enviando laudo…' : 'Anexar laudo'}
+                      </button>
+                      <input
+                        ref={examFileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        hidden
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void handleExamUpload(file);
+                        }}
+                      />
+                    </>
+                  )}
                   <label>
                     Laudo anexado
                     <select
                       value={extractionAttachment}
-                      disabled={extracting || !attachments.length}
+                      disabled={extracting || uploading || !attachments.length}
                       onChange={(event) => {
                         setExtractionAttachment(event.target.value);
                         setExtraction(null);
                       }}
                     >
-                      <option value="">Selecione um arquivo</option>
+                      <option value="">
+                        {attachments.length
+                          ? 'Selecione um arquivo'
+                          : 'Nenhum laudo anexado'}
+                      </option>
                       {attachments.map((attachment) => (
                         <option key={attachment.id} value={attachment.id}>
                           {attachment.name}
@@ -416,7 +469,7 @@ export default function Exams({
                   <button
                     type="button"
                     className="primary"
-                    disabled={extracting || !extractionAttachment}
+                    disabled={extracting || uploading || !extractionAttachment}
                     onClick={() => void chooseProvider()}
                   >
                     {extracting ? 'Lendo laudo…' : 'Ler com IA'}
@@ -424,7 +477,7 @@ export default function Exams({
                 </div>
                 {!attachments.length && (
                   <small>
-                    Classifique primeiro uma imagem ou um PDF como exame.
+                    Anexe um laudo (PDF ou imagem) ou selecione um arquivo para leitura com IA.
                   </small>
                 )}
               </section>
@@ -1192,30 +1245,57 @@ export default function Exams({
             <output>Carregando modelos…</output>
           ) : (
             <div className="exam-provider-list">
-              {providers.map((provider) => (
+              {models.map((model) => (
                 <button
                   type="button"
-                  key={provider.id}
-                  disabled={!provider.configured || extracting}
-                  onClick={() => void extractExams(provider.id)}
+                  key={model.id}
+                  disabled={extracting}
+                  className={model.configured ? 'configured' : 'unconfigured'}
+                  onClick={() => {
+                    if (!model.configured) {
+                      const keyName =
+                        model.id === 'gemini-flash'
+                          ? 'GEMINI_API_KEY'
+                          : 'OPENAI_API_KEY';
+                      setProviderKeyNote(
+                        `Para usar ${model.label}, adicione ${keyName} ao arquivo .env.local do servidor.`,
+                      );
+                      return;
+                    }
+                    void extractExams(model.id);
+                  }}
                 >
                   <span>
-                    <strong>{provider.label}</strong>
-                    <small>{provider.model}</small>
+                    <strong>{model.label}</strong>
+                    <small>{model.model}</small>
                   </span>
                   <span className="exam-provider-status">
-                    {provider.configured ? 'Usar modelo' : 'Não configurado'}
+                    {model.configured ? 'Usar modelo' : 'Não configurado'}
                   </span>
                 </button>
               ))}
             </div>
           )}
-          {!providerLoading && !providers.some((item) => item.configured) && (
-            <p className="exam-provider-note">
-              Configure ao menos uma chave de IA no ambiente do servidor para
-              habilitar a leitura.
+          {providerKeyNote && (
+            <p className="exam-provider-warning" role="alert">
+              {providerKeyNote}
             </p>
           )}
+          {!providerLoading &&
+            !models.some((item) => item.configured && item.id !== 'demo') && (
+              <div className="exam-provider-note">
+                <p>
+                  <strong>Chaves de IA:</strong> Configure{' '}
+                  <code>GEMINI_API_KEY</code> ou <code>OPENAI_API_KEY</code> no
+                  arquivo <code>.env.local</code> para habilitar a extração real.
+                </p>
+                <p>
+                  Você pode usar a opção{' '}
+                  <strong>Demonstração · Simulação Local</strong> para testar a
+                  extração e o preenchimento de exames agora mesmo.
+                </p>
+              </div>
+            )}
         </Modal>
       )}
     </section>
