@@ -109,6 +109,14 @@ try {
       .status,
     201,
   );
+  const resendRes = await call(owner, 'resend_invite', { user_id: doctor.id });
+  assert.equal(resendRes.status, 200);
+  assert.equal(resendRes.data.ok, true);
+  assert.equal(resendRes.data.email, doctor.email);
+  assert.equal(
+    (await call(owner, 'resend_invite', { user_id: owner.id })).status,
+    403,
+  );
   assert.equal(
     (await call(owner, 'revoke', { user_id: owner.id })).status,
     403,
@@ -122,11 +130,12 @@ try {
   assert.deepEqual(audits.data.map((x) => x.action).sort(), [
     'invite',
     'invite',
+    'invite',
     'revoke',
     'role_update',
   ]);
   console.log(
-    'PASS: lista, convite de conta existente, permissão do proprietário, mudança de papel, revogação e auditoria.',
+    'PASS: lista, convite, reenvio de convite, permissão do proprietário, mudança de papel, revogação e auditoria.',
   );
 } finally {
   if (clinic)

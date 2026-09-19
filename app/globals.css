@@ -3364,6 +3364,32 @@ h1 {
   cursor: not-allowed;
 }
 
+.team-resend-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #2b6cb0;
+  background: transparent;
+  border: 1px solid #bee3f8;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.team-resend-button:hover:not(:disabled) {
+  background: #ebf8ff;
+  border-color: #90cdf4;
+  color: #2c5282;
+}
+
+.team-resend-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Card: Guia de Permissões e Segurança */
 .team-roles-guide {
   background: #fbfdfa;

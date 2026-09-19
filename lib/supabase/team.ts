@@ -176,6 +176,39 @@ export const team = handle(async (request, ctx) => {
       403,
       'O proprietário não pode ser alterado ou removido nesta tela.',
     );
+  if (action === 'resend_invite') {
+    const userRes = await admin.auth.admin.getUserById(userId);
+    if (userRes.error || !userRes.data.user?.email)
+      throw new HttpError(404, 'Conta não encontrada no Supabase.');
+    const email = userRes.data.user.email;
+    const siteOrigin = resolveOrigin(request, data.origin);
+    const redirectTo = `${siteOrigin}/`;
+    const invited = await admin.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+    });
+    if (invited.error) {
+      const reset = await admin.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      });
+      if (reset.error) {
+        throw new HttpError(
+          503,
+          'Não foi possível reenviar o convite. Confira a configuração de e-mail do Supabase.',
+        );
+      }
+    }
+    await admin
+      .from('audit_events')
+      .insert({
+        clinic_id: ctx.clinic,
+        actor_id: ctx.user,
+        action: 'invite',
+        entity_type: 'clinic_member',
+        entity_id: userId,
+        context: { role: target.data.role, resend: true },
+      });
+    return json({ ok: true, email });
+  }
   if (action === 'role') {
     const role = data.role;
     if (!['doctor', 'secretary'].includes(String(role)))

@@ -15,6 +15,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Palette,
+  Send,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/supabase/http';
 import { useAccess } from './auth';
@@ -84,16 +85,22 @@ export default function Team({
         headers: { 'Content-Type': 'application/json', 'X-Team-Action': '1' },
         body: JSON.stringify(data),
       });
-      const d = (await r.json()) as { invitationSent?: boolean; error?: string };
+      const d = (await r.json()) as {
+        invitationSent?: boolean;
+        error?: string;
+        email?: string;
+      };
       if (!r.ok) throw new Error(d.error);
       setMessage(
         action === 'invite'
           ? d.invitationSent
             ? 'Convite enviado por e-mail com sucesso.'
             : 'Acesso concedido. Esta conta já possuía cadastro ativo.'
-          : action === 'revoke'
-            ? 'Acesso revogado com sucesso.'
-            : 'Papel do integrante atualizado com sucesso.',
+          : action === 'resend_invite'
+            ? `Convite reenviado por e-mail com sucesso para ${d.email || 'o integrante'}.`
+            : action === 'revoke'
+              ? 'Acesso revogado com sucesso.'
+              : 'Papel do integrante atualizado com sucesso.',
       );
       setEmail('');
       await load();
@@ -289,6 +296,24 @@ export default function Team({
                           </div>
                         ) : (
                           <div className="team-actions team-member-actions">
+                            <button
+                              className="team-resend-button"
+                              disabled={busy}
+                              type="button"
+                              title="Reenviar e-mail de convite para este integrante"
+                              onClick={() => {
+                                void change('resend_invite', {
+                                  user_id: member.user_id,
+                                  origin:
+                                    typeof window !== 'undefined'
+                                      ? window.location.origin
+                                      : undefined,
+                                });
+                              }}
+                            >
+                              <Send size={14} />
+                              Reenviar convite
+                            </button>
                             <select
                               aria-label={'Papel de ' + member.email}
                               value={member.role}
