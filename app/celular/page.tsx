@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import {
   api,
+  compressImageFile,
   formatBytes,
   type CaptureRequest,
   type Pairing,
@@ -100,15 +101,18 @@ export default function MobileCapture() {
   const available = Boolean(
     current && current.state === 'pending' && !expired && !stale && verified,
   );
-  function select(list: FileList | null) {
+  async function select(list: FileList | null) {
     if (!list || !request) return;
     setError('');
     setMessage('');
-    const selected = Array.from(list);
-    if (pages.length + selected.length > 10) {
+    const rawSelected = Array.from(list);
+    if (pages.length + rawSelected.length > 10) {
       setError('Envie até 10 arquivos por solicitação.');
       return;
     }
+    const selected = await Promise.all(
+      rawSelected.map((file) => compressImageFile(file)),
+    );
     if (selected.some((f) => f.size > 12 * 1024 * 1024 || !f.size)) {
       setError('Cada arquivo precisa ter entre 1 byte e 12 MB.');
       return;
