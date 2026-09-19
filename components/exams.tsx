@@ -1103,6 +1103,7 @@ export default function Exams({
                   {examSeries(
                     results.filter((r) => r.definition_id === history),
                     graph,
+                    historyDefinition.fields.find((f) => f.id === graph)?.unit,
                   ).map((series) => {
                     const chartData = series.points.map((p, index, array) => {
                       const sameDateIndex = array
@@ -1135,6 +1136,11 @@ export default function Exams({
                                       (dataMax: number) => dataMax + 86400000,
                                     ]
                                   : ['dataMin', 'dataMax']
+                              }
+                              ticks={
+                                series.points.length === 1 && chartData.length === 1
+                                  ? [chartData[0].time]
+                                  : undefined
                               }
                               tickFormatter={(v) =>
                                 dateLabel(
@@ -1181,6 +1187,7 @@ export default function Exams({
                   {!examSeries(
                     results.filter((r) => r.definition_id === history),
                     graph,
+                    historyDefinition.fields.find((f) => f.id === graph)?.unit,
                   ).length && (
                     <p>
                       Nenhum valor numérico exato disponível para o gráfico.

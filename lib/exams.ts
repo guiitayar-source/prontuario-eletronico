@@ -62,7 +62,123 @@ export function activeExamResults(results: ExamResult[]) {
   const replaced = new Set(results.map((r) => r.supersedes_id).filter(Boolean));
   return results.filter((r) => !replaced.has(r.id));
 }
-export function examSeries(results: ExamResult[], field: string) {
+export function normalizeExamUnit(
+  rawUnit: string,
+  defaultUnit = '',
+): { key: string; label: string } {
+  let u = (rawUnit || '').trim();
+  if (!u && defaultUnit) u = defaultUnit.trim();
+  if (!u) return { key: '', label: 'Unidade não informada' };
+
+  const cleaned = u
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[µμ]/g, 'u')
+    .replace(/³/g, '3')
+    .replace(/⁶/g, '6')
+    .replace(/\^3/g, '3')
+    .replace(/\^6/g, '6')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // 1. Milhões / uL / mm3 (Hemácias: milhões/µL, milhões/mm3, 10^6/mm3, etc.)
+  if (
+    /^(?:milhoes|milhao)\s*\/\s*(?:ul|mm3|micro?litro|milimetro\s*cubico)$/.test(cleaned) ||
+    /^(?:x\s*)?10\s*6\s*\/\s*(?:ul|mm3|l)$/.test(cleaned) ||
+    /^(?:x\s*)?10e6\s*\/\s*(?:ul|mm3|l)$/.test(cleaned) ||
+    /^m\s*\/\s*(?:ul|mm3)$/.test(cleaned) ||
+    /^(?:tera|t)\s*\/\s*l$/.test(cleaned)
+  ) {
+    return { key: 'milhoes/ul', label: 'milhões/µL' };
+  }
+
+  // 2. Mil / uL / mm3 (Plaquetas ou contagens em milhares: mil/mm3, 10^3/mm3, etc.)
+  if (
+    /^mil\s*\/\s*(?:ul|mm3|micro?litro|milimetro\s*cubico)$/.test(cleaned) ||
+    /^(?:x\s*)?10\s*3\s*\/\s*(?:ul|mm3|l)$/.test(cleaned) ||
+    /^(?:x\s*)?10e3\s*\/\s*(?:ul|mm3|l)$/.test(cleaned) ||
+    /^k\s*\/\s*(?:ul|mm3)$/.test(cleaned) ||
+    /^(?:giga|g)\s*\/\s*l$/.test(cleaned)
+  ) {
+    return { key: 'mil/ul', label: 'mil/µL' };
+  }
+
+  // 3. /uL / mm3 (Leucócitos, Plaquetas, contagens absolutas: /µL, /mm3, etc.)
+  if (
+    /^(?:\/|por\s+)?(?:cel(?:ulas)?|leucocitos)?\s*\/?\s*(?:ul|mm3|micro?litro|milimetro\s*cubico)$/.test(cleaned) ||
+    cleaned === '/ul' ||
+    cleaned === '/mm3' ||
+    cleaned === 'ul' ||
+    cleaned === 'mm3' ||
+    cleaned === '/ u'
+  ) {
+    return { key: '/ul', label: '/µL' };
+  }
+
+  // 4. Porcentagem (%)
+  if (cleaned === '%' || cleaned === 'pct' || cleaned === 'por cento' || cleaned === 'porcento') {
+    return { key: '%', label: '%' };
+  }
+
+  // 5. g/dL (Hemoglobina, CHCM, etc.)
+  if (/^g\s*\/\s*(?:dl|100ml)$/.test(cleaned) || cleaned === 'g%' || cleaned === 'g/dl') {
+    return { key: 'g/dl', label: 'g/dL' };
+  }
+
+  // 6. mg/dL (Glicemia, Colesterol, etc.)
+  if (/^mg\s*\/\s*(?:dl|100ml)$/.test(cleaned) || cleaned === 'mg%' || cleaned === 'mg/dl') {
+    return { key: 'mg/dl', label: 'mg/dL' };
+  }
+
+  // 7. fL (VCM, VPM: fL, µm3)
+  if (/^fl\.?$/.test(cleaned) || cleaned === 'um3' || cleaned === 'femtolitro' || cleaned === 'femtolitros') {
+    return { key: 'fl', label: 'fL' };
+  }
+
+  // 8. pg (HCM)
+  if (/^pg\.?$/.test(cleaned) || cleaned === 'picograma' || cleaned === 'picogramas') {
+    return { key: 'pg', label: 'pg' };
+  }
+
+  // 9. U/L (Enzimas AST, ALT, etc.)
+  if (/^(?:u|ui)\s*\/\s*l$/.test(cleaned) || cleaned === 'unidades/l') {
+    return { key: 'u/l', label: 'U/L' };
+  }
+
+  // 10. ng/mL
+  if (/^ng\s*\/\s*ml$/.test(cleaned)) {
+    return { key: 'ng/ml', label: 'ng/mL' };
+  }
+
+  // 11. pg/mL
+  if (/^pg\s*\/\s*ml$/.test(cleaned)) {
+    return { key: 'pg/ml', label: 'pg/mL' };
+  }
+
+  // 12. µg/dL, mcg/dL
+  if (/^(?:mcg|ug)\s*\/\s*dl$/.test(cleaned)) {
+    return { key: 'ug/dl', label: 'µg/dL' };
+  }
+
+  // 13. mg/L
+  if (/^mg\s*\/\s*l$/.test(cleaned)) {
+    return { key: 'mg/l', label: 'mg/L' };
+  }
+
+  // 14. mUI/mL, µUI/mL
+  if (/^(?:mui|uui)\s*\/\s*ml$/.test(cleaned) || /^(?:mu|uu)\s*\/\s*ml$/.test(cleaned)) {
+    return { key: 'mui/ml', label: 'mUI/mL' };
+  }
+
+  return { key: cleaned, label: u };
+}
+
+export function examSeries(
+  results: ExamResult[],
+  field: string,
+  defaultUnit = '',
+) {
   const groups = new Map<
     string,
     {
@@ -74,6 +190,7 @@ export function examSeries(results: ExamResult[], field: string) {
       method?: string;
       specimen?: string;
       reference?: string;
+      normalizedLabel: string;
     }[]
   >();
   for (const r of activeExamResults(results)) {
@@ -81,27 +198,29 @@ export function examSeries(results: ExamResult[], field: string) {
     if (!v) continue;
     const number = numericExamValue(v.value);
     if (number === null) continue;
-    const unit = (v.unit || '').trim();
-    const key = unit.toLowerCase();
-    const group = groups.get(key) || [];
+    const rawUnit = (v.unit || '').trim();
+    const { key, label } = normalizeExamUnit(rawUnit, defaultUnit);
+    const groupKey = key || 'sem_unidade';
+    const group = groups.get(groupKey) || [];
     group.push({
       date: r.collected_on,
       value: number,
       id: r.id,
-      unit,
+      unit: rawUnit,
       laboratory: r.laboratory,
       method: r.method,
       specimen: r.specimen,
       reference: v.reference,
+      normalizedLabel: label,
     });
-    groups.set(key, group);
+    groups.set(groupKey, group);
   }
   return [...groups].map(([key, points]) => {
-    const unit = points.find((p) => p.unit)?.unit || '';
+    const label = points[0]?.normalizedLabel || 'Unidade não informada';
     return {
       key,
-      unit,
-      label: unit ? `Unidade: ${unit}` : 'Unidade não informada',
+      unit: label,
+      label: label ? `Unidade: ${label}` : 'Unidade não informada',
       points: points.sort((a, b) => a.date.localeCompare(b.date)),
     };
   });

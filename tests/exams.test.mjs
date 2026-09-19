@@ -6,6 +6,7 @@ import {
   validNumericExamValue,
   activeExamResults,
   examSeries,
+  normalizeExamUnit,
   validateDefinition,
   validateResult,
 } from '../lib/exams.ts';
@@ -176,6 +177,50 @@ test('corrections replace active values, groups series by unit and separates inc
   const ukatSeries = series.find((s) => s.unit.toLowerCase() === 'ukat/l');
   assert.ok(ukatSeries);
   assert.deepEqual(ukatSeries.points.map((p) => p.id), ['incompatible_unit']);
+});
+test('hemogram equivalent units (milhões/mm3, 10^6/mm3, /µL, /mm3) merge into the same chart series', () => {
+  assert.equal(normalizeExamUnit('milhões/mm3').key, 'milhoes/ul');
+  assert.equal(normalizeExamUnit('10^6/mm3').key, 'milhoes/ul');
+  assert.equal(normalizeExamUnit('milhões/µL').key, 'milhoes/ul');
+  assert.equal(normalizeExamUnit('/mm3').key, '/ul');
+  assert.equal(normalizeExamUnit('/µL').key, '/ul');
+
+  const hemaciasRows = [
+    result('h1', {
+      collected_on: '2025-04-29',
+      values: { hemacias: { value: '5.23', unit: 'milhões/mm3', reference: '4,1 a 5,3' } },
+    }),
+    result('h2', {
+      collected_on: '2026-07-08',
+      values: { hemacias: { value: '4.10', unit: '10^6/mm3', reference: '4,1 a 5,3' } },
+    }),
+  ];
+  const hSeries = examSeries(hemaciasRows, 'hemacias', 'milhões/µL');
+  assert.equal(hSeries.length, 1);
+  assert.equal(hSeries[0].points.length, 2);
+  assert.deepEqual(
+    hSeries[0].points.map((p) => p.id).sort((a, b) => a.localeCompare(b)),
+    ['h1', 'h2'],
+  );
+  assert.equal(hSeries[0].unit, 'milhões/µL');
+
+  const leucoRows = [
+    result('l1', {
+      collected_on: '2025-04-29',
+      values: { leucocitos: { value: '6400', unit: '/mm3', reference: '4000 a 10000' } },
+    }),
+    result('l2', {
+      collected_on: '2026-07-08',
+      values: { leucocitos: { value: '7100', unit: '/µL', reference: '4000 a 10000' } },
+    }),
+  ];
+  const lSeries = examSeries(leucoRows, 'leucocitos', '/µL');
+  assert.equal(lSeries.length, 1);
+  assert.equal(lSeries[0].points.length, 2);
+  assert.deepEqual(
+    lSeries[0].points.map((p) => p.id).sort((a, b) => a.localeCompare(b)),
+    ['l1', 'l2'],
+  );
 });
 test('validation rejects impossible dates, unknown fields and missing correction reason', () => {
   validateDefinition(definition);
