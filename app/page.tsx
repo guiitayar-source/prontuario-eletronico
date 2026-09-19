@@ -1,19 +1,30 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Registry, { fetchPatient } from '@/components/patients/registry';
 import Consultation from '@/components/consultation';
 import Agenda from '@/components/agenda';
 import Team from '@/components/team';
 import Imports from '@/components/imports';
 import Settings from '@/components/settings';
+import { PatientSearchModal } from '@/components/patient-search-modal';
 import type { Patient } from '@/lib/patient-fields';
+
 export default function Home() {
   const [appointmentId, setAppointmentId] = useState<string | undefined>();
   const [patient, setPatient] = useState<Patient | null>(null),
     [error, setError] = useState(''),
+    [searchOpen, setSearchOpen] = useState(false),
     [section, setSection] = useState<
       'patients' | 'agenda' | 'team' | 'imports' | 'settings'
     >('patients');
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(''), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   async function open(id: string, appointment?: string) {
     try {
       setPatient(await fetchPatient(id));
@@ -26,14 +37,48 @@ export default function Home() {
   const selectPatient = (p: Patient) => {
     setAppointmentId(undefined);
     setPatient(p);
+    setError('');
   };
   return (
     <>
       {error && (
-        <div role="alert" className="capture-error">
-          {error}
+        <div
+          role="alert"
+          className="capture-error"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setError('')}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'inherit',
+              font: 'inherit',
+              fontSize: '20px',
+              lineHeight: 1,
+              padding: '0 8px',
+            }}
+            aria-label="Fechar mensagem"
+          >
+            ×
+          </button>
         </div>
       )}
+      <PatientSearchModal
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelect={(p) => {
+          setSearchOpen(false);
+          selectPatient(p);
+        }}
+      />
       {patient ? (
         <Consultation
           key={patient.id}
@@ -42,6 +87,7 @@ export default function Home() {
           onHome={() => {
             setPatient(null);
             setSection('patients');
+            setError('');
           }}
           onUpdated={setPatient}
           onSelect={selectPatient}
@@ -49,53 +95,104 @@ export default function Home() {
           onAgenda={() => {
             setPatient(null);
             setSection('agenda');
+            setError('');
           }}
           onSettings={() => {
             setPatient(null);
             setSection('settings');
+            setError('');
           }}
         />
       ) : section === 'settings' ? (
         <Settings
-          onPatients={() => setSection('patients')}
-          onAgenda={() => setSection('agenda')}
-          onTeam={() => setSection('team')}
+          onPatients={() => {
+            setError('');
+            setSection('patients');
+          }}
+          onAgenda={() => {
+            setError('');
+            setSection('agenda');
+          }}
+          onTeam={() => {
+            setError('');
+            setSection('team');
+          }}
           onOpenPatient={selectPatient}
         />
       ) : section === 'imports' ? (
         <Imports
-          onPatients={() => setSection('patients')}
-          onAgenda={() => setSection('agenda')}
-          onTeam={() => setSection('team')}
+          onPatients={() => {
+            setError('');
+            setSection('patients');
+          }}
+          onAgenda={() => {
+            setError('');
+            setSection('agenda');
+          }}
+          onTeam={() => {
+            setError('');
+            setSection('team');
+          }}
           onOpenPatient={open}
           onSelectPatient={selectPatient}
-          onSettings={() => setSection('settings')}
+          onSettings={() => {
+            setError('');
+            setSection('settings');
+          }}
         />
       ) : section === 'agenda' ? (
         <Agenda
-          onPatients={() => setSection('patients')}
+          onPatients={() => {
+            setError('');
+            setSection('patients');
+          }}
           onOpenPatient={open}
           onSelectPatient={selectPatient}
-          onTeam={() => setSection('team')}
-          onSettings={() => setSection('settings')}
+          onTeam={() => {
+            setError('');
+            setSection('team');
+          }}
+          onSettings={() => {
+            setError('');
+            setSection('settings');
+          }}
         />
       ) : section === 'team' ? (
         <Team
-          onPatients={() => setSection('patients')}
-          onAgenda={() => setSection('agenda')}
-          onSettings={() => setSection('settings')}
+          onPatients={() => {
+            setError('');
+            setSection('patients');
+          }}
+          onAgenda={() => {
+            setError('');
+            setSection('agenda');
+          }}
+          onSettings={() => {
+            setError('');
+            setSection('settings');
+          }}
           onOpenPatient={selectPatient}
         />
       ) : (
         <Registry
-          onImports={() => setSection('imports')}
+          onImports={() => {
+            setError('');
+            setSection('imports');
+          }}
           onOpen={selectPatient}
-          onAgenda={() => setSection('agenda')}
-          onTeam={() => setSection('team')}
-          onSettings={() => setSection('settings')}
-          onConsultation={() =>
-            setError('Selecione um paciente na lista para abrir o prontuário.')
-          }
+          onAgenda={() => {
+            setError('');
+            setSection('agenda');
+          }}
+          onTeam={() => {
+            setError('');
+            setSection('team');
+          }}
+          onSettings={() => {
+            setError('');
+            setSection('settings');
+          }}
+          onConsultation={() => setSearchOpen(true)}
         />
       )}
     </>
