@@ -27,10 +27,13 @@ export function PatientSearchModal({
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;

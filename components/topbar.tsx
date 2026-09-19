@@ -14,15 +14,18 @@ export function TopBar({
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
-    if (onOpenSearch) return;
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setModalOpen(true);
+        if (onOpenSearch) {
+          onOpenSearch();
+        } else {
+          setModalOpen(true);
+        }
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
   }, [onOpenSearch]);
 
   const handleSearch = () => {
@@ -49,11 +52,14 @@ export function TopBar({
         </button>
         <span className="demo-label">Protótipo · dados fictícios</span>
       </header>
-      {!onOpenSearch && onSelectPatient && (
+      {!onOpenSearch && (
         <PatientSearchModal
           isOpen={modalOpen}
           onClose={() => setModalOpen(false)}
-          onSelect={onSelectPatient}
+          onSelect={(p) => {
+            setModalOpen(false);
+            onSelectPatient?.(p);
+          }}
         />
       )}
     </>
