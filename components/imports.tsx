@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '@/lib/supabase/http';
 import { useAccess } from './auth';
-import { fieldGroups } from '@/lib/patient-fields';
+import { TopBar } from './topbar';
+import { fieldGroups, type Patient } from '@/lib/patient-fields';
 const fieldLabels = Object.fromEntries(
   fieldGroups.flatMap((g) => g.fields.map(([key, label]) => [key, label])),
 );
@@ -75,12 +76,14 @@ export default function Imports({
   onAgenda,
   onTeam,
   onOpenPatient,
+  onSelectPatient,
   onSettings,
 }: {
   onPatients: () => void;
   onAgenda: () => void;
   onTeam: () => void;
   onOpenPatient: (id: string) => void;
+  onSelectPatient?: (p: Patient) => void;
   onSettings?: () => void;
 }) {
   const medical = ['owner', 'doctor'].includes(useAccess().role);
@@ -263,12 +266,7 @@ export default function Imports({
         </nav>
       </aside>
       <div className="main-shell">
-        <header className="topbar">
-          <div className="wordmark">
-            meu prontuário<span>CONSULTÓRIO</span>
-          </div>
-          <span className="demo-label">Protótipo · dados fictícios</span>
-        </header>
+        <TopBar onSelectPatient={onSelectPatient || ((p) => onOpenPatient(p.id))} />
         <main className="imports-page">
           <div className="registry-title">
             <div>

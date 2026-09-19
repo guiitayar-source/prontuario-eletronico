@@ -13,6 +13,7 @@ import { apiFetch } from '@/lib/supabase/http';
 import { PatientDetails, PatientSearch } from './patients/registry';
 import Attachments from './capture/desktop';
 import { DEMO_ID, initials, age, type Patient } from '@/lib/patient-fields';
+import { TopBar } from './topbar';
 import {
   Activity,
   CalendarDays,
@@ -267,7 +268,7 @@ export default function ClinicalRecord({
   }
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         if (modal === 'documento' && !docs.close()) return;
         setModal('busca');
@@ -325,15 +326,7 @@ export default function ClinicalRecord({
         </div>
       </aside>
       <div className="main-shell">
-        <header className="topbar">
-          <div className="wordmark">
-            meu prontuário<span>CONSULTÓRIO</span>
-          </div>
-          <button className="search" onClick={() => setModal('busca')}>
-            <Search size={16} /> Buscar paciente <kbd>Ctrl K</kbd>
-          </button>
-          <span className="demo-label">Protótipo · dados fictícios</span>
-        </header>
+        <TopBar onOpenSearch={() => setModal('busca')} />
         <main>
           <div className="breadcrumb">
             <button onClick={() => leave(onAgenda)}>Consultório</button>

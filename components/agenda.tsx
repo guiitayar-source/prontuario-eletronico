@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { Patient } from '@/lib/patient-fields';
 import { initials } from '@/lib/patient-fields';
+import { TopBar } from './topbar';
 
 type Appointment = {
   id: string;
@@ -328,11 +329,13 @@ function AppointmentForm({
 export default function Agenda({
   onPatients,
   onOpenPatient,
+  onSelectPatient,
   onTeam,
   onSettings,
 }: {
   onPatients: () => void;
   onOpenPatient: (id: string, appointmentId?: string) => void;
+  onSelectPatient?: (p: Patient) => void;
   onTeam?: () => void;
   onSettings?: () => void;
 }) {
@@ -413,12 +416,7 @@ export default function Agenda({
         onSettings={onSettings}
       />
       <div className="main-shell">
-        <header className="topbar">
-          <div className="wordmark">
-            meu prontuário<span>CONSULTÓRIO</span>
-          </div>
-          <span className="demo-label">Protótipo · dados fictícios</span>
-        </header>
+        <TopBar onSelectPatient={onSelectPatient || ((p) => onOpenPatient(p.id))} />
         <main>
           <section className="agenda-heading">
             <div>

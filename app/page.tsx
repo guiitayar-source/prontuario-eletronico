@@ -23,6 +23,10 @@ export default function Home() {
       setError((e as Error).message);
     }
   }
+  const selectPatient = (p: Patient) => {
+    setAppointmentId(undefined);
+    setPatient(p);
+  };
   return (
     <>
       {error && (
@@ -40,10 +44,7 @@ export default function Home() {
             setSection('patients');
           }}
           onUpdated={setPatient}
-          onSelect={(p) => {
-            setAppointmentId(undefined);
-            setPatient(p);
-          }}
+          onSelect={selectPatient}
           onOpenId={open}
           onAgenda={() => {
             setPatient(null);
@@ -59,6 +60,7 @@ export default function Home() {
           onPatients={() => setSection('patients')}
           onAgenda={() => setSection('agenda')}
           onTeam={() => setSection('team')}
+          onOpenPatient={selectPatient}
         />
       ) : section === 'imports' ? (
         <Imports
@@ -66,12 +68,14 @@ export default function Home() {
           onAgenda={() => setSection('agenda')}
           onTeam={() => setSection('team')}
           onOpenPatient={open}
+          onSelectPatient={selectPatient}
           onSettings={() => setSection('settings')}
         />
       ) : section === 'agenda' ? (
         <Agenda
           onPatients={() => setSection('patients')}
           onOpenPatient={open}
+          onSelectPatient={selectPatient}
           onTeam={() => setSection('team')}
           onSettings={() => setSection('settings')}
         />
@@ -80,14 +84,12 @@ export default function Home() {
           onPatients={() => setSection('patients')}
           onAgenda={() => setSection('agenda')}
           onSettings={() => setSection('settings')}
+          onOpenPatient={selectPatient}
         />
       ) : (
         <Registry
           onImports={() => setSection('imports')}
-          onOpen={(p) => {
-            setAppointmentId(undefined);
-            setPatient(p);
-          }}
+          onOpen={selectPatient}
           onAgenda={() => setSection('agenda')}
           onTeam={() => setSection('team')}
           onSettings={() => setSection('settings')}

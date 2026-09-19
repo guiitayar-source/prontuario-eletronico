@@ -12,15 +12,19 @@ import {
 } from 'lucide-react';
 import { useTheme, THEMES, type ThemeName } from '@/lib/theme';
 import { useAccess } from './auth';
+import { TopBar } from './topbar';
+import type { Patient } from '@/lib/patient-fields';
 
 export default function Settings({
   onPatients,
   onAgenda,
   onTeam,
+  onOpenPatient,
 }: {
   onPatients: () => void;
   onAgenda: () => void;
   onTeam: () => void;
+  onOpenPatient?: (p: Patient) => void;
 }) {
   const { theme, setTheme, gradient, setGradient } = useTheme();
   const { role } = useAccess();
@@ -66,12 +70,7 @@ export default function Settings({
       </aside>
 
       <div className="main-shell">
-        <header className="topbar">
-          <div className="wordmark">
-            meu prontuário<span>CONSULTÓRIO</span>
-          </div>
-          <span className="demo-label">Protótipo · dados fictícios</span>
-        </header>
+        <TopBar onSelectPatient={onOpenPatient} />
 
         <main>
           <div className="breadcrumb">
