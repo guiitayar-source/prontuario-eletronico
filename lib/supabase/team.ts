@@ -21,6 +21,57 @@ async function usersById(ids: string[]) {
   }));
 }
 
+function resolveOrigin(request: Request, clientOrigin?: unknown): string {
+  if (typeof clientOrigin === 'string' && clientOrigin.trim()) {
+    try {
+      const u = new URL(clientOrigin.trim());
+      if (['http:', 'https:'].includes(u.protocol)) {
+        return u.origin;
+      }
+    } catch {}
+  }
+
+  const envOrigin =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.APP_URL ||
+    process.env.SITE_URL;
+  if (envOrigin) {
+    try {
+      const u = new URL(envOrigin.trim());
+      return u.origin;
+    } catch {}
+  }
+
+  const originHeader = request.headers.get('origin');
+  if (originHeader) {
+    try {
+      return new URL(originHeader).origin;
+    } catch {}
+  }
+
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  if (forwardedHost) {
+    const proto = request.headers.get('x-forwarded-proto') || 'https';
+    try {
+      return new URL(`${proto}://${forwardedHost}`).origin;
+    } catch {}
+  }
+
+  const referer = request.headers.get('referer');
+  if (referer) {
+    try {
+      return new URL(referer).origin;
+    } catch {}
+  }
+
+  try {
+    return new URL(request.url).origin;
+  } catch {
+    return 'http://localhost:3000';
+  }
+}
+
 export const team = handle(async (request, ctx) => {
   if (ctx.role !== 'owner')
     throw new HttpError(
@@ -64,8 +115,9 @@ export const team = handle(async (request, ctx) => {
     );
     let invitationSent = false;
     if (!user) {
+      const siteOrigin = resolveOrigin(request, data.origin);
       const invited = await admin.auth.admin.inviteUserByEmail(email, {
-        redirectTo: new URL(request.url).origin + '/',
+        redirectTo: `${siteOrigin}/`,
       });
       if (invited.error || !invited.data.user)
         throw new HttpError(

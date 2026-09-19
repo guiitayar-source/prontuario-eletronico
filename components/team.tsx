@@ -185,7 +185,14 @@ export default function Team({
                     className="team-invite-form"
                     onSubmit={(e) => {
                       e.preventDefault();
-                      void change('invite', { email, role: newRole });
+                      void change('invite', {
+                        email,
+                        role: newRole,
+                        origin:
+                          typeof window !== 'undefined'
+                            ? window.location.origin
+                            : undefined,
+                      });
                     }}
                   >
                     <div className="team-field-group">
