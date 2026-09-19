@@ -65,34 +65,46 @@ export function activeExamResults(results: ExamResult[]) {
 export function examSeries(results: ExamResult[], field: string) {
   const groups = new Map<
     string,
-    { date: string; value: number; id: string }[]
+    {
+      date: string;
+      value: number;
+      id: string;
+      unit: string;
+      laboratory?: string;
+      method?: string;
+      specimen?: string;
+      reference?: string;
+    }[]
   >();
   for (const r of activeExamResults(results)) {
     const v = r.values[field];
     if (!v) continue;
     const number = numericExamValue(v.value);
     if (number === null) continue;
-    const key = JSON.stringify([v.unit, r.method, r.specimen, r.laboratory]);
+    const unit = (v.unit || '').trim();
+    const key = unit.toLowerCase();
     const group = groups.get(key) || [];
-    group.push({ date: r.collected_on, value: number, id: r.id });
+    group.push({
+      date: r.collected_on,
+      value: number,
+      id: r.id,
+      unit,
+      laboratory: r.laboratory,
+      method: r.method,
+      specimen: r.specimen,
+      reference: v.reference,
+    });
     groups.set(key, group);
   }
-  return [...groups].map(([key, points]) => ({
-    key,
-    label: JSON.parse(key)
-      .map(
-        (v: string, i: number) =>
-          v ||
-          [
-            'Unidade não informada',
-            'Método não informado',
-            'Material não informado',
-            'Laboratório não informado',
-          ][i],
-      )
-      .join(' · '),
-    points: points.sort((a, b) => a.date.localeCompare(b.date)),
-  }));
+  return [...groups].map(([key, points]) => {
+    const unit = points.find((p) => p.unit)?.unit || '';
+    return {
+      key,
+      unit,
+      label: unit ? `Unidade: ${unit}` : 'Unidade não informada',
+      points: points.sort((a, b) => a.date.localeCompare(b.date)),
+    };
+  });
 }
 export function validateDefinition(d: ExamDefinition) {
   if (

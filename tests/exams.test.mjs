@@ -149,25 +149,33 @@ test('numbers preserve comparators and reject ambiguous punctuation', () => {
   assert.equal(numericExamValue(''), null);
   assert.equal(validNumericExamValue('< 0,1'), true);
 });
-test('corrections replace active values, never mix incompatible series', () => {
+test('corrections replace active values, groups series by unit and separates incompatible units', () => {
   const rows = [
     result('old'),
     result('new', { supersedes_id: 'old' }),
-    result('different', { method: 'Another' }),
+    result('different', { method: 'Another', laboratory: 'Another Lab' }),
     result('limit', {
       values: { value: { value: '< 1', unit: 'U/L', reference: '' } },
+    }),
+    result('incompatible_unit', {
+      values: { value: { value: '0,35', unit: 'ukat/L', reference: '' } },
     }),
   ];
   assert.deepEqual(
     activeExamResults(rows).map((r) => r.id),
-    ['new', 'different', 'limit'],
+    ['new', 'different', 'limit', 'incompatible_unit'],
   );
   const series = examSeries(rows, 'value');
   assert.equal(series.length, 2);
-  assert.deepEqual(series.flatMap((s) => s.points.map((p) => p.id)).sort(), [
-    'different',
-    'new',
-  ]);
+  const ulSeries = series.find((s) => s.unit.toLowerCase() === 'u/l');
+  assert.ok(ulSeries);
+  assert.deepEqual(
+    ulSeries.points.map((p) => p.id).sort((a, b) => a.localeCompare(b)),
+    ['different', 'new'],
+  );
+  const ukatSeries = series.find((s) => s.unit.toLowerCase() === 'ukat/l');
+  assert.ok(ukatSeries);
+  assert.deepEqual(ukatSeries.points.map((p) => p.id), ['incompatible_unit']);
 });
 test('validation rejects impossible dates, unknown fields and missing correction reason', () => {
   validateDefinition(definition);
