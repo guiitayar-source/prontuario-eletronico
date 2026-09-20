@@ -2588,6 +2588,44 @@ h1 {
 .auth-card { width: min(100%, 440px); display: grid; gap: 18px; background: white; padding: 32px; border-radius: 18px; border: 1px solid #dce3df; }
 .auth-card label { display: grid; gap: 8px; }
 .auth-card input { width: 100%; min-height: 44px; padding: 10px; border: 1px solid #aab9b1; border-radius: 6px; }
+.auth-account-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f1f6f4;
+  border: 1px solid #cfe0d8;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #234739;
+  word-break: break-all;
+}
+.auth-account-badge strong {
+  font-weight: 600;
+  color: #123326;
+}
+.auth-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: -4px;
+  font-size: 12.5px;
+}
+.auth-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #687971;
+  transition: color 0.15s ease;
+}
+.auth-checklist-item.valid {
+  color: #186c47;
+  font-weight: 500;
+}
+.auth-checklist-item.invalid {
+  color: #a43828;
+  font-weight: 500;
+}
 /* ==========================================================================
    Cabeçalho Principal Unificado (Account Bar)
    ========================================================================== */

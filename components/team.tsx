@@ -27,6 +27,7 @@ type Member = {
   role: 'owner' | 'doctor' | 'secretary';
   email: string;
   created_at: string;
+  pendingFirstAccess?: boolean;
 };
 
 const label = {
@@ -279,6 +280,22 @@ export default function Team({
                               <span className={`role-badge ${member.role}`}>
                                 {label[member.role]}
                               </span>
+                              {member.pendingFirstAccess && (
+                                <span
+                                  className="role-badge"
+                                  style={{
+                                    background: '#fff8eb',
+                                    color: '#9c5b05',
+                                    border: '1px solid #fedf89',
+                                    fontSize: '11px',
+                                    padding: '2px 8px',
+                                    fontWeight: 500,
+                                  }}
+                                  title="Este integrante foi convidado mas ainda não cadastrou a senha individual no primeiro acesso"
+                                >
+                                  Primeiro acesso pendente
+                                </span>
+                              )}
                             </div>
                             <span className="team-member-meta">
                               Incluído em{' '}

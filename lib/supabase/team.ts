@@ -15,10 +15,18 @@ async function usersById(ids: string[]) {
   if (result.error)
     throw new HttpError(503, 'Não foi possível carregar as contas da equipe.');
   const index = new Map(result.data.users.map((user) => [user.id, user]));
-  return ids.map((id) => ({
-    id,
-    email: index.get(id)?.email || 'Conta indisponível',
-  }));
+  return ids.map((id) => {
+    const user = index.get(id);
+    const pendingFirstAccess = Boolean(
+      user?.user_metadata?.must_set_password ||
+        (user?.invited_at && !user?.user_metadata?.password_set),
+    );
+    return {
+      id,
+      email: user?.email || 'Conta indisponível',
+      pendingFirstAccess,
+    };
+  });
 }
 
 function resolveOrigin(request: Request, clientOrigin?: unknown): string {
@@ -87,12 +95,16 @@ export const team = handle(async (request, ctx) => {
         .order('created_at'),
     ) as Member[];
     const users = await usersById(rows.map((row) => row.user_id));
-    const email = new Map(users.map((user) => [user.id, user.email]));
+    const userMap = new Map(users.map((user) => [user.id, user]));
     return json({
-      members: rows.map((row) => ({
-        ...row,
-        email: email.get(row.user_id) || 'Conta indisponível',
-      })),
+      members: rows.map((row) => {
+        const u = userMap.get(row.user_id);
+        return {
+          ...row,
+          email: u?.email || 'Conta indisponível',
+          pendingFirstAccess: u?.pendingFirstAccess ?? false,
+        };
+      }),
     });
   }
   writeGuard(request, 'X-Team-Action');
@@ -116,8 +128,13 @@ export const team = handle(async (request, ctx) => {
     let invitationSent = false;
     if (!user) {
       const siteOrigin = resolveOrigin(request, data.origin);
+      const redirectTo = `${siteOrigin}/?first_access=true`;
       const invited = await admin.auth.admin.inviteUserByEmail(email, {
-        redirectTo: `${siteOrigin}/`,
+        redirectTo,
+        data: {
+          must_set_password: true,
+          invited_role: role,
+        },
       });
       if (invited.error || !invited.data.user)
         throw new HttpError(
@@ -126,6 +143,13 @@ export const team = handle(async (request, ctx) => {
         );
       user = invited.data.user;
       invitationSent = true;
+    } else if (!user.user_metadata?.password_set) {
+      await admin.auth.admin.updateUserById(user.id, {
+        user_metadata: {
+          ...(user.user_metadata || {}),
+          must_set_password: true,
+        },
+      });
     }
     const old = await admin
       .from('clinic_members')
@@ -182,9 +206,20 @@ export const team = handle(async (request, ctx) => {
       throw new HttpError(404, 'Conta não encontrada no Supabase.');
     const email = userRes.data.user.email;
     const siteOrigin = resolveOrigin(request, data.origin);
-    const redirectTo = `${siteOrigin}/`;
+    const redirectTo = `${siteOrigin}/?first_access=true`;
+
+    await admin.auth.admin.updateUserById(userId, {
+      user_metadata: {
+        ...(userRes.data.user.user_metadata || {}),
+        must_set_password: true,
+      },
+    });
+
     const invited = await admin.auth.admin.inviteUserByEmail(email, {
       redirectTo,
+      data: {
+        must_set_password: true,
+      },
     });
     if (invited.error) {
       const reset = await admin.auth.resetPasswordForEmail(email, {
