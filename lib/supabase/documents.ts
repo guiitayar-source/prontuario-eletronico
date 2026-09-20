@@ -29,9 +29,38 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
           .maybeSingle(),
       );
       if (!d) throw new HttpError(404, 'Documento não encontrado.');
+      const doc = d as ClinicalDocument;
+      if (doc.kind === 'Receita') {
+        const patientData = check(
+          await db
+            .from('patients')
+            .select('street,address_number,complement,neighborhood,city,state')
+            .eq('clinic_id', clinic)
+            .eq('id', pid)
+            .maybeSingle(),
+        ) as {
+          street?: string;
+          address_number?: string;
+          complement?: string;
+          neighborhood?: string;
+          city?: string;
+          state?: string;
+        } | null;
+        if (patientData) {
+          const parts = [
+            patientData.street,
+            patientData.address_number ? `nº ${patientData.address_number}` : '',
+            patientData.complement,
+            patientData.neighborhood,
+          ].filter(Boolean);
+          doc.patient_address = parts.join(', ');
+          doc.patient_city = patientData.city || '';
+          doc.patient_state = patientData.state || '';
+        }
+      }
       let bytes;
       try {
-        bytes = await documentPdf(d as ClinicalDocument);
+        bytes = await documentPdf(doc);
       } catch (e) {
         throw new HttpError(422, (e as Error).message);
       }

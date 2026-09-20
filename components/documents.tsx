@@ -7,7 +7,7 @@ import {
   type ClinicalDocument,
 } from '@/lib/document-fields';
 import type { Patient } from '@/lib/patient-fields';
-import { Sparkles, Trash2 } from 'lucide-react';
+import { Sparkles, Trash2, Download } from 'lucide-react';
 type Profile = { physician_name: string; physician_registration: string };
 type AiModel = {
   id: string;
@@ -761,7 +761,14 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
         <select
           id="doctype"
           value={d.kind}
-          onChange={(e) => update({ kind: e.target.value })}
+          onChange={(e) => {
+            const nextKind = e.target.value;
+            if (!d.text.trim()) {
+              update({ kind: nextKind, text: documentTemplate(nextKind) });
+            } else {
+              update({ kind: nextKind });
+            }
+          }}
         >
           {documentKinds.map((k) => (
             <option key={k}>{k}</option>
@@ -815,6 +822,26 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
           >
             Preparar modelo
           </button>
+          {d.kind === 'Receita' && (
+            <a
+              href="/templates/Receituario-padrao.docx"
+              download="Receituario-padrao.docx"
+              className="secondary"
+              style={{
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '0 12px',
+                height: '36px',
+                fontSize: '13px',
+              }}
+              title="Baixar modelo original do receituário em Word (.docx)"
+            >
+              <Download size={14} />
+              Baixar modelo Word (.docx)
+            </a>
+          )}
           <DocumentAiBox
             key={`${d.id}:${d.kind}`}
             document={d}

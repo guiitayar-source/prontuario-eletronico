@@ -19,6 +19,9 @@ export type ClinicalDocument = {
   version: number;
   updated_at?: string;
   author_id?: string;
+  patient_address?: string;
+  patient_city?: string;
+  patient_state?: string;
 };
 export function documentTemplate(kind: string) {
   return (
@@ -31,7 +34,7 @@ export function documentTemplate(kind: string) {
         Relatório:
           'Finalidade do relatório: [informar]\n\nHistórico e acompanhamento:\n[Descrever]\n\nAvaliação e recomendações:\n[Descrever]',
         Receita:
-          '[Medicamento, apresentação e concentração]\n[Via de administração, dose, frequência e duração]\n[Quantidade]\n\nOrientações:\n[Preencher]',
+          'Via de administração: Uso oral\n\n1) [Medicamento, forma farmacêutica e concentração] — [Quantidade]\n   Tomar [dose, posologia, horários e duração do tratamento]\n\nOrientações gerais:\n[Instruções de uso, cuidados e retorno]',
         'Pedido de exames':
           'Solicito:\n\n[Exames]\n\nIndicação clínica, quando necessária:\n[Preencher]',
         'Documento livre': '',
