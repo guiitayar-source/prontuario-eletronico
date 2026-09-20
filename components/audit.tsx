@@ -36,6 +36,10 @@ const ACTION_MAP: Record<
   patient_update: { label: 'Paciente atualizado', variant: 'blue' },
   document_create: { label: 'Documento emitido', variant: 'blue' },
   document_update: { label: 'Documento editado', variant: 'blue' },
+  ai_document_request: {
+    label: 'Rascunho solicitado à IA',
+    variant: 'purple',
+  },
   invite: { label: 'Integrante convidado', variant: 'green' },
   role_change: { label: 'Papel alterado', variant: 'amber' },
   revoke: { label: 'Acesso revogado', variant: 'red' },
@@ -84,7 +88,7 @@ export function Audit() {
           e.action.includes('consultation') ||
           e.action.includes('document') ||
           e.action.includes('patient') ||
-          ['patients', 'consultations', 'clinical_documents', 'clinical_context', 'exam_results', 'exam_definitions'].includes(
+          ['patients', 'consultations', 'clinical_documents', 'document_ai_templates', 'clinical_context', 'exam_results', 'exam_definitions'].includes(
             e.entity_type,
           );
         if (!isClinical) return false;

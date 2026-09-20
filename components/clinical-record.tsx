@@ -695,7 +695,13 @@ export default function ClinicalRecord({
           }}
         >
           <section
-            className={modal === 'contexto' ? 'modal context-modal' : 'modal'}
+            className={
+              modal === 'contexto'
+                ? 'modal context-modal'
+                : modal === 'documento'
+                  ? 'modal document-modal'
+                  : 'modal'
+            }
             role="dialog"
             aria-modal="true"
             aria-labelledby="dialog-title"

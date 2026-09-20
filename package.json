@@ -20,6 +20,7 @@
     "test:supabase": "node tests/supabase-flow.mjs",
     "test:consultations": "node tests/consultations.mjs",
     "test:documents": "node tests/documents.mjs",
+    "test:document-ai": "node tests/document-ai.mjs",
     "test:team": "node tests/team.mjs",
     "test:clinical-context": "node tests/clinical-context.mjs",
     "test:imports": "node tests/imports.mjs",
