@@ -1,5 +1,10 @@
 import { documentKinds } from '../document-fields.ts';
-import { geminiOutputText, responseOutputText } from '../openai-files.ts';
+import {
+  isAiProviderConfigured,
+  requestOpenAiText,
+  requestGeminiText,
+  type AiUsage,
+} from '../ai/client.ts';
 import {
   boundedBody,
   check,
@@ -49,11 +54,7 @@ function models(): Record<ModelId, ModelChoice> {
 }
 
 function configured(provider: Provider) {
-  return Boolean(
-    provider === 'gemini'
-      ? process.env.GEMINI_API_KEY
-      : process.env.OPENAI_API_KEY,
-  );
+  return isAiProviderConfigured(provider);
 }
 
 function availableModels() {
@@ -95,135 +96,21 @@ Não inclua comentários sobre o processo, alertas genéricos, assinatura ou cam
 Responda apenas com o texto do rascunho, em português do Brasil, sem Markdown.`;
 
 async function askOpenAI(model: string, prompt: string) {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new HttpError(503, 'OpenAI não configurada no servidor.');
-  let response: Response;
-  try {
-    response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        store: false,
-        instructions: systemInstructions,
-        input: prompt,
-        max_output_tokens: 5_000,
-        ...(model.includes('gpt-5.6') ? { reasoning: { effort: 'low' } } : {}),
-      }),
-      signal: AbortSignal.timeout(90_000),
-    });
-  } catch (error) {
-    if (error instanceof Error && error.name === 'TimeoutError')
-      throw new HttpError(
-        504,
-        'A geração demorou além do esperado. Tente novamente.',
-      );
-    throw new HttpError(
-      503,
-      'Não foi possível conectar à OpenAI. Tente novamente.',
-    );
-  }
-  let result: Record<string, unknown>;
-  try {
-    result = (await response.json()) as Record<string, unknown>;
-  } catch {
-    throw new HttpError(502, 'A OpenAI devolveu uma resposta inválida.');
-  }
-  if (!response.ok) {
-    const message = (result.error as { message?: string } | undefined)?.message;
-    console.error('OpenAI document draft failed', response.status, message);
-    throw new HttpError(
-      response.status === 429 ? 429 : 502,
-      response.status === 429
-        ? 'O limite temporário da OpenAI foi atingido. Tente novamente em instantes.'
-        : 'A OpenAI não conseguiu gerar o rascunho.',
-    );
-  }
-  const text = responseOutputText(result).trim();
-  if (!text) throw new HttpError(422, 'A IA não devolveu um rascunho.');
-  const raw = result.usage as
-    | { input_tokens?: number; output_tokens?: number; total_tokens?: number }
-    | undefined;
-  return {
-    text,
-    usage: {
-      inputTokens: raw?.input_tokens,
-      outputTokens: raw?.output_tokens,
-      totalTokens: raw?.total_tokens,
-    } satisfies Usage,
-  };
+  return requestOpenAiText({
+    model,
+    instructions: systemInstructions,
+    prompt,
+    maxOutputTokens: 5_000,
+  });
 }
 
 async function askGemini(model: string, prompt: string) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new HttpError(503, 'Gemini não configurado no servidor.');
-  if (!/^[a-zA-Z0-9._-]{1,100}$/.test(model))
-    throw new HttpError(503, 'O modelo Gemini configurado é inválido.');
-  let response: Response;
-  try {
-    response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'x-goog-api-key': key,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstructions }] },
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 5_000, temperature: 0.2 },
-        }),
-        signal: AbortSignal.timeout(90_000),
-      },
-    );
-  } catch (error) {
-    if (error instanceof Error && error.name === 'TimeoutError')
-      throw new HttpError(
-        504,
-        'A geração demorou além do esperado. Tente novamente.',
-      );
-    throw new HttpError(
-      503,
-      'Não foi possível conectar ao Gemini. Tente novamente.',
-    );
-  }
-  let result: Record<string, unknown>;
-  try {
-    result = (await response.json()) as Record<string, unknown>;
-  } catch {
-    throw new HttpError(502, 'O Gemini devolveu uma resposta inválida.');
-  }
-  if (!response.ok) {
-    const message = (result.error as { message?: string } | undefined)?.message;
-    console.error('Gemini document draft failed', response.status, message);
-    throw new HttpError(
-      response.status === 429 ? 429 : 502,
-      response.status === 429
-        ? 'O limite temporário do Gemini foi atingido. Tente novamente em instantes.'
-        : 'O Gemini não conseguiu gerar o rascunho.',
-    );
-  }
-  const text = geminiOutputText(result).trim();
-  if (!text) throw new HttpError(422, 'A IA não devolveu um rascunho.');
-  const raw = result.usageMetadata as
-    | {
-        promptTokenCount?: number;
-        candidatesTokenCount?: number;
-        totalTokenCount?: number;
-      }
-    | undefined;
-  return {
-    text,
-    usage: {
-      inputTokens: raw?.promptTokenCount,
-      outputTokens: raw?.candidatesTokenCount,
-      totalTokens: raw?.totalTokenCount,
-    } satisfies Usage,
-  };
+  return requestGeminiText({
+    model,
+    instructions: systemInstructions,
+    prompt,
+    maxOutputTokens: 5_000,
+  });
 }
 
 function section(title: string, value: string) {

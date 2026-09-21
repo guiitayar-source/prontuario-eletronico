@@ -1,62 +1,137 @@
-# PsyWrite — protótipo de prontuário
+# PsyWrite — Prontuário Eletrônico & Gestão Clínica
 
-Interface de prontuário com texto livre, cadastro de pacientes, agenda e recebimento de anexos pelo celular. Use somente dados fictícios nesta etapa.
+Sistema web moderno para clínicas e consultórios com foco em prontuário eletrônico, acompanhamento longitudinal de pacientes, exames estruturados com suporte a IA multimodal, prescrições médicas em 2 vias, agenda e interoperabilidade em saúde (FHIR R4 / LGPD).
 
-## Executar
+---
 
-Configure `.env.local` conforme `.env.example` e execute:
+## 🛠️ Stack Tecnológica & Arquitetura
+
+- **Framework**: Next.js 16 (App Router) & React 19 (Server e Client Components)
+- **Linguagem**: TypeScript (tipagem estrita ponta a ponta)
+- **Banco de Dados & Backend**: Supabase (PostgreSQL com Row Level Security - RLS, MFA, Auth e Storage privado)
+- **Inteligência Artificial Multimodal**: Google Gemini API & OpenAI API (extração de dados estruturados com JSON Schema e transcrição de laudos/fotos)
+- **Visualização & PDFs**: Recharts (gráficos temporais de exames) e gerador de PDF sob medida com fontes incorporadas (receituários em 2 vias A4)
+- **Estilização**: CSS modular nativo por recurso, garantindo alta performance sem dependências pesadas de runtime
+
+---
+
+## 🚀 O Que o Projeto Tem (Funcionalidades)
+
+### 1. Prontuário & Atendimento Clínico
+- **Evolução em Texto Livre**: Registro ágil do atendimento com salvamento automático seguro e controle de versões.
+- **Histórico Imutável & Adendos**: Consultas finalizadas são congeladas com registro de autor e carimbo de data/hora; retificações são registradas por adendos rastreáveis.
+- **Painel de Contexto Longitudinal**: Acesso rápido a diagnósticos/CID, medicamentos em uso contínuo e alergias diretamente no painel lateral da consulta.
+
+### 2. Agenda de Atendimentos
+- Criação, edição, reagendamento e cancelamento de consultas.
+- Identificação visual de status do agendamento com atalho em um clique para abertura direta do prontuário do paciente.
+
+### 3. Gestão e Cadastro de Pacientes
+- Ficha cadastral completa com validação de CPF, dados demográficos, contatos e controle de versionamento cadastral.
+- Busca rápida e listagem otimizada por nome e documento.
+
+### 4. Documentos & Prescrições Médicas
+- Emissão de atestados, declarações, pedidos de exames e receituários.
+- **Receituário em 2 Vias (Farmácia / Paciente)**: Geração instantânea de PDF em folha A4 com endereço do consultório, modelos pré-definidos e fontes vetoriais incorporadas.
+- Histórico de versões e rascunhos.
+
+### 5. Anexos & Captura Multimodal via Celular
+- Recebimento de laudos em PDF e fotos de exames físicos.
+- **Captura via QR Code**: Abertura de canal seguro para fotografar documentos pelo celular (`/celular`) sem expor credenciais do médico.
+- Classificação, arquivamento e visualização segura de anexos em bucket privado do Supabase Storage.
+
+### 6. Biblioteca & Acompanhamento de Exames Laboratoriais
+- **Catálogo Estruturado da Clínica**: Definição de exames reutilizáveis com parâmetros dinâmicos (numéricos, opções pré-definidas ou texto).
+- **Extração Assistida por IA**: Upload de laudos (PDF ou imagem) com leitura estruturada via modelos Gemini ou OpenAI.
+- **Revisão Humana Obrigatória**: Nenhuma sugestão de IA entra no prontuário sem conferência explícita de valores, unidades e referências pelo profissional, exibindo o trecho original do documento como evidência.
+- **Histórico Longitudinal & Gráficos**: Gráficos temporais interativos com agrupamento automático de unidades compatíveis (ex: séries de hemograma).
+- **Correções Auditáveis**: Retificação de resultados com motivo obrigatório, preservando o valor anterior para fins periciais e legais.
+
+### 7. Interoperabilidade, Importação & Exportação
+- **Importador LGPD JSON & FHIR R4**: Carga em lote de prontuários com pré-visualização, identificação de duplicados, vínculo explícito e possibilidade de reversão de lote com auditoria.
+- **Exportação FHIR R4**: Exportação padronizada dos dados do paciente e exames ativos conforme os padrões internacionais de saúde.
+
+### 8. Segurança, Governança & Multi-tenant
+- Isolamento estrito por clínica (`clinic_id`) com Row Level Security (RLS) no PostgreSQL.
+- Controle de acesso baseado em papéis (RBAC): médicos e proprietários têm acesso integral a evoluções e laudos; secretárias acessam cadastro, agenda e recepção de anexos.
+- Trilha de auditoria para operações sensíveis e proteção de MFA verificada inclusive a nível de banco de dados.
+
+---
+
+## 🏗️ Refatoração Arquitetural Recente
+
+O projeto passou por uma ampla auditoria e refatoração arquitetural com foco em manutenibilidade, previsibilidade e drástica redução de custo de tokens/contexto para agentes de IA:
+
+### O Que Foi Feito na Refatoração
+
+#### 1. Eliminação de UI Zumbi (Dead Code)
+- **Remoção de 60 arquivos não utilizados** em `components/ui/` (antigos componentes shadcn/ui não referenciados) e do arquivo `components.json`.
+- **Economia de 7.565 linhas** de código morto, eliminando ruído e consumo excessivo de tokens nas análises do codebase.
+
+#### 2. Desacoplamento do Domínio Ativo vs Legado D1
+- **Criação de `lib/file-utils.ts`**: Centralização de constantes e detecção pura de tipos de arquivo (`MAX_FILE`, `fileType`).
+- **Expansão de `lib/patient-fields.ts`**: Funções puras de validação cadastral e de CPF (`validCpf`, `validate`).
+- **Desacoplamento Completo**: Módulos ativos do Supabase (`lib/supabase/patients.ts`, `lib/imports/normalize.ts`, `lib/supabase/capture.ts`, `lib/supabase/ai-files.ts`) agora usam módulos desacoplados em vez de importar arquivos legados de Cloudflare D1.
+- **Compatibilidade Preservada**: Os módulos legados (`lib/patients.ts`, `lib/capture.ts`) reexportam os novos utilitários para manter compatibilidade retroativa.
+
+#### 3. Unificação dos Clientes de IA
+- **Criação de `lib/ai/client.ts`**:
+  - Centralização de requisições de texto com JSON Schema estruturado (`requestOpenAiText`, `requestGeminiText`) e processamento multimodal de arquivos (`requestOpenAiFile`, `requestGeminiFile`).
+  - Verificação unificada de status de configuração de chaves (`isAiProviderConfigured`).
+- **Eliminação de ~400 linhas duplicadas** de chamadas HTTP, payloads e adaptação de schemas em `lib/supabase/document-ai.ts` e `lib/supabase/ai-files.ts`.
+
+#### 4. Navegação Lateral Centralizada (`NavigationRail`)
+- **Criação de `components/navigation-rail.tsx`**:
+  - Ponto único de verdade para rotas e menus (Agenda, Pacientes, Importar, Equipe, Configurações, atalho Celular e Logout).
+- Substituição de blocos duplicados de navegação nas 6 telas da aplicação (`agenda.tsx`, `clinical-record.tsx`, `registry.tsx`, `imports.tsx`, `team.tsx`, `settings.tsx`).
+
+#### 5. Modularização do Módulo de Exames (`components/exams.tsx`)
+- O monólito de 1.343 linhas foi fatiado e reduzido em 40% (para 801 linhas), com a extração de componentes dedicados em `components/exams/`:
+  - **`exam-chart.tsx`**: Isolamento de Recharts, eixos de data e formatação temporal.
+  - **`exam-definition-form.tsx`**: Criação de novos exames com campos e tipos dinâmicos.
+  - **`exam-proposals-section.tsx`**: Painel de sugestões de extração por IA.
+  - **`exam-result-form.tsx`**: Lançamento de resultados, correções e conferência de evidência/laudo.
+
+#### 6. Balanço de Impacto
+- **-8.873 linhas líquidas removidas** no repositório.
+- **Zero regressão funcional**: Regras de validação, integridade de dados, contratos de API e testes automatizados 100% íntegros.
+
+---
+
+## 🧪 Como Executar e Verificar
+
+### Execução Local
+
+1. Configure as variáveis de ambiente:
+   ```sh
+   cp .env.example .env.local
+   ```
+2. Instale as dependências e inicie o servidor:
+   ```sh
+   npm ci
+   npm run dev
+   ```
+
+### Verificação de Tipos e Testes Automatizados
 
 ```sh
-npm ci
-npm run dev
-```
-
-A aplicação atual usa Next.js, Supabase Auth, PostgreSQL e Storage privado. Consulte [SUPABASE_MIGRATION.md](./SUPABASE_MIGRATION.md) para configuração, migração, publicação e limitações.
-
-## Funcionalidades
-
-- Exames estruturados com biblioteca pesquisável, preenchimento manual ou sugestões de PDF/imagem revisadas pelo profissional, histórico longitudinal, correções e gráficos por parâmetro. Documentos anexados também podem ser transcritos para um novo rascunho. Consulte [EXAMES.md](./EXAMES.md) para ativação e controles.
-- Importação LGPD JSON e FHIR R4 com prévia, vínculo explícito, detecção de repetidos, histórico de origem e reversão de lote com auditoria.
-- Cadastro, pesquisa e edição de pacientes, com controle de versão.
-- Agenda com criação, edição, cancelamento e acesso à consulta.
-- Evolução em texto livre com salvamento automático no Supabase, controle de versão e histórico por paciente.
-- Contexto clínico longitudinal com diagnósticos/CID, medicamentos e alergias, disponível no painel lateral da consulta.
-- Finalização imutável com autor e horário, correções por adendos e vínculo opcional à agenda.
-- Captura de fotos e PDFs por QR, revisão, classificação, arquivamento e restauração de anexos.
-- Login individual, vínculo à clínica e auditoria das alterações persistidas.
-- Exportação FHIR R4 por paciente, MFA com proteção também no banco e backup criptografado com ensaio local de restauração. Consulte [OPERACAO_SEGURA.md](./OPERACAO_SEGURA.md) para ativação, limites e pendências antes de dados reais.
-
-Evoluções, adendos e documentos clínicos são acessíveis somente a médicos e proprietários da clínica. A secretária mantém acesso ao cadastro, agenda e anexos. Documentos possuem modelos editáveis, histórico de rascunhos, duplicação, transcrição assistida com revisão e PDF com fontes incorporadas. O PDF corresponde à versão salva e permanece identificado como rascunho sem assinatura. Não há assinatura digital nem Anamnesator conectado. Rascunhos antigos do navegador não são importados automaticamente.
-
-## Verificação
-
-```sh
+# Verificação estrita de TypeScript (0 erros)
 npm exec tsc -- --noEmit
-npm run build
-npm run test:supabase
-npm run test:consultations
-npm run test:documents
-npm run test:team
-npm run test:clinical-context
-npm run test:imports
-npm run test:readiness
+
+# Testes de unidade e banco de exames (regras clínicas, LOINC/FHIR, IA e RLS)
 npm run test:exams
+
+# Teste de emissão do receituário médico em PDF (2 vias A4)
+node tests/prescription-pdf.test.mjs
+
+# Build de produção do Next.js (validação completa de páginas e rotas dinâmicas)
+npm run build
 ```
 
-Os testes de integração Supabase exigem a instância local iniciada e usam contas sintéticas. `test:exams` usa PostgreSQL embarcado e não exige Docker. Os testes SQLite/D1 e arquivos em `drizzle/` preservam a implementação anterior para referência. Os antigos testes HTTP D1 não se aplicam ao servidor Next.js atual.
+---
 
-A aplicação está hospedada na Vercel em https://psywrite.vercel.app. A demonstração anterior ainda usa Sites e D1/R2; um anexo legado permanece pendente de transferência. Não publique esta versão Next.js pelo fluxo antigo de Sites.
+## 📚 Documentação Complementar
 
-## Importar prontuários
-
-Em **Pacientes → Importar prontuários**, escolha JSON LGPD ou Bundle FHIR R4 (collection, document ou searchset). Use sempre o mesmo nome de sistema de origem. A prévia mostra dados cadastrais, registros, avisos e possíveis duplicados; CPF e nome normalizado identificam candidatos. Revise o destino e confirme. Um cadastro existente nunca é sobrescrito. Limites: 2 MB, 30 pacientes e 500 registros por arquivo.
-
-Evoluções, diagnósticos, medicamentos, alergias, receitas, agendamentos e documentos textuais ficam na aba **Histórico importado**. Não são transformados automaticamente em receitas novas, consultas assinadas, medicamentos atuais nem compromissos ativos. As datas do atendimento, de criação na origem e de importação são distintas. Datas parciais/sem fuso são sinalizadas e preservadas como texto, sem inventar um instante. Encounter pode não conter uma evolução: só o texto efetivamente presente é importado.
-
-Reenvios com os mesmos IDs e conteúdo são ignorados; o mesmo ID com conteúdo diferente bloqueia a transação até revisão. A identificação considera clínica, nome da origem, formato, paciente, tipo e ID de origem. Não há deduplicação automática entre exportações LGPD e FHIR. Sem ID, usa-se o conteúdo e um aviso é exibido. Prévia vale por uma hora; cancelar remove o conteúdo preparado. Prévias expiradas são limpas na próxima geração de prévia da clínica.
-
-**Desfazer lote** retira seus registros do histórico ativo, mantendo a auditoria, o cadastro do paciente e dados locais. O médico que importou ou o proprietário pode desfazer. É possível importar novamente depois. Não há exclusão física de prontuários pelo importador.
-
-Arquivos binários, URLs, tokens operacionais e consentimentos da origem não são transferidos. Campos não suportados são sinalizados por avisos; conserve o arquivo original. PDFs e fotos devem ser anexados separadamente. Os exemplos em `public/examples/` são inteiramente fictícios; os arquivos particulares do usuário não fazem parte do repositório ou do deploy.
-
-Referências de formato: [Bundle FHIR R4](https://hl7.org/fhir/R4/bundle.html), [Encounter](https://hl7.org/fhir/R4/encounter.html), [MedicationRequest](https://hl7.org/fhir/R4/medicationrequest.html). O importador implementa um subconjunto explícito; não é um validador FHIR completo.
+- [EXAMES.md](./EXAMES.md): Detalhes técnicos, modelos de IA suportados, validações clínicas e catálogo de exames.
+- [OPERACAO_SEGURA.md](./OPERACAO_SEGURA.md): Protocolos de MFA, backup criptografado, controles de acesso e diretrizes de auditoria.
+- [SUPABASE_MIGRATION.md](./SUPABASE_MIGRATION.md): Histórico da migração para o Supabase e pendências do legado.

@@ -20,6 +20,7 @@ import {
 import { apiFetch } from '@/lib/supabase/http';
 import { useAccess } from './auth';
 import { TopBar } from './topbar';
+import { NavigationRail } from './navigation-rail';
 import type { Patient } from '@/lib/patient-fields';
 
 type Member = {
@@ -114,39 +115,12 @@ export default function Team({
 
   return (
     <div className="app-shell">
-      <aside className="rail">
-        <div className="brand">
-          <Activity size={23} />
-        </div>
-        <nav aria-label="Navegação principal">
-          <button className="nav-item" onClick={onAgenda}>
-            <CalendarDays size={21} />
-            <span>Agenda</span>
-          </button>
-          <button className="nav-item" onClick={onPatients}>
-            <Users size={21} />
-            <span>Pacientes</span>
-          </button>
-          <button className="nav-item" disabled>
-            <Stethoscope size={21} />
-            <span>Consulta</span>
-          </button>
-          <button className="nav-item active">
-            <ShieldCheck size={21} />
-            <span>Equipe</span>
-          </button>
-          {onSettings && (
-            <button className="nav-item" onClick={onSettings}>
-              <Palette size={21} />
-              <span>Ajustes</span>
-            </button>
-          )}
-        </nav>
-        <div className="rail-bottom">
-          <span className="avatar doctor">G</span>
-          <span>{label[role as keyof typeof label] || 'Equipe'}</span>
-        </div>
-      </aside>
+      <NavigationRail
+        active="team"
+        onAgenda={onAgenda}
+        onPatients={onPatients}
+        onSettings={onSettings}
+      />
 
       <div className="main-shell">
         <TopBar onSelectPatient={onOpenPatient} />

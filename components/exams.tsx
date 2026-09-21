@@ -9,7 +9,6 @@ import {
 } from '@/lib/exam-extraction';
 import {
   activeExamResults,
-  examSeries,
   searchExams,
   validateDefinition,
   validateResult,
@@ -18,51 +17,24 @@ import {
   type ExamResult,
   type ExamValue,
 } from '@/lib/exams';
+import { ExamChart } from './exams/exam-chart';
+import { ExamDefinitionForm, emptyField } from './exams/exam-definition-form';
+import { ExamProposalsSection } from './exams/exam-proposals-section';
 import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from 'recharts';
+  ExamResultForm,
+  type Attachment,
+  type Draft,
+  type Reviewing,
+} from './exams/exam-result-form';
 import './exams.css';
 
-type Attachment = { id: string; name: string };
 type AiModel = {
   id: 'gemini-flash' | 'openai-luna' | 'openai-mini' | 'demo';
   label: string;
   model: string;
   configured: boolean;
 };
-type Draft = {
-  id: string;
-  definition_id: string;
-  collected_on: string;
-  laboratory: string;
-  method: string;
-  specimen: string;
-  values: Record<string, ExamValue>;
-  notes: string;
-  attachment_id: string;
-  supersedes_id: string | null;
-  correction_reason: string;
-  source: 'manual' | 'ai_reviewed';
-  provenance: Record<string, unknown>;
-};
-type Reviewing = {
-  proposalIndex: number;
-  originalName: string;
-  fields: ExamExtractionProposal['exams'][number]['fields'];
-};
 const dateLabel = (date: string) => date.split('-').reverse().join('/');
-const emptyField = (): ExamField => ({
-  id: `f_${crypto.randomUUID().replaceAll('-', '')}`,
-  name: '',
-  type: 'number',
-  unit: '',
-});
 
 export default function Exams({
   patientId,
@@ -482,70 +454,12 @@ export default function Exams({
                 )}
               </section>
               {extraction && (
-                <section
-                  className="exam-proposals"
-                  aria-label="Sugestões da IA"
-                >
-                  <div className="exam-proposal-heading">
-                    <div>
-                      <h3>Sugestões para revisar</h3>
-                      <small>
-                        {extraction.provider} · {extraction.model} · estimativas
-                        de confiança não garantem exatidão
-                      </small>
-                    </div>
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => setExtraction(null)}
-                    >
-                      Descartar sugestões
-                    </button>
-                  </div>
-                  {extraction.warnings.length > 0 && (
-                    <ul className="exam-ai-warnings">
-                      {extraction.warnings.map((warning, index) => (
-                        <li key={`${warning}-${index}`}>{warning}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {extraction.exams.map((exam, index) => {
-                    const definition = definitions.find(
-                      (item) => item.id === exam.definitionId,
-                    );
-                    const values = exam.fields.filter((field) =>
-                      field.suggested.value?.trim(),
-                    ).length;
-                    return (
-                      <article
-                        className="exam-proposal"
-                        key={`${exam.originalName}-${index}`}
-                      >
-                        <div>
-                          <strong>
-                            {definition?.name || exam.originalName}
-                          </strong>
-                          <small>
-                            {definition
-                              ? `${values} valor(es) sugerido(s)${exam.collectedOn ? ` · coleta ${dateLabel(exam.collectedOn)}` : ''}`
-                              : 'Sem correspondência segura com o catálogo'}
-                          </small>
-                        </div>
-                        <button
-                          type="button"
-                          className="secondary"
-                          disabled={!definition || values === 0}
-                          onClick={() => reviewProposal(exam, index)}
-                        >
-                          Revisar e preencher
-                        </button>
-                      </article>
-                    );
-                  })}
-                  {!extraction.exams.length && (
-                    <p>Nenhum resultado foi identificado neste arquivo.</p>
-                  )}
-                </section>
+                <ExamProposalsSection
+                  extraction={extraction}
+                  definitions={definitions}
+                  onDismiss={() => setExtraction(null)}
+                  onReviewProposal={(exam, index) => reviewProposal(exam, index)}
+                />
               )}
               <div className="exam-search">
                 <label htmlFor="exam-search">Adicionar exame manualmente</label>
@@ -597,395 +511,28 @@ export default function Exams({
           )}
           {message && <output>{message}</output>}
           {custom && (
-            <form onSubmit={saveDefinition} className="exam-editor">
-              <h3>Novo exame da clínica</h3>
-              <p>
-                Defina os parâmetros uma vez para reutilizar em outros
-                pacientes.
-              </p>
-              <div className="exam-meta">
-                <label>
-                  Nome
-                  <input
-                    required
-                    maxLength={160}
-                    value={custom.name}
-                    onChange={(e) =>
-                      setCustom({ ...custom, name: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Sinônimos (separados por vírgula)
-                  <input
-                    value={custom.aliases.join(',')}
-                    onChange={(e) =>
-                      setCustom({
-                        ...custom,
-                        aliases: e.target.value.split(','),
-                      })
-                    }
-                  />
-                </label>
-              </div>
-              {custom.fields.map((field, i) => (
-                <div className="exam-custom-field" key={field.id}>
-                  <label>
-                    Parâmetro {i + 1}
-                    <input
-                      required
-                      maxLength={120}
-                      value={field.name}
-                      onChange={(e) =>
-                        setCustom({
-                          ...custom,
-                          fields: custom.fields.map((f) =>
-                            f.id === field.id
-                              ? { ...f, name: e.target.value }
-                              : f,
-                          ),
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Tipo
-                    <select
-                      aria-label="Tipo"
-                      value={field.type}
-                      onChange={(e) =>
-                        setCustom({
-                          ...custom,
-                          fields: custom.fields.map((f) =>
-                            f.id === field.id
-                              ? {
-                                  ...f,
-                                  type: e.target.value as ExamField['type'],
-                                }
-                              : f,
-                          ),
-                        })
-                      }
-                    >
-                      <option value="number">Número</option>
-                      <option value="text">Texto</option>
-                      <option value="choice">Opções</option>
-                    </select>
-                  </label>
-                  {field.type === 'choice' ? (
-                    <label>
-                      Opções (separadas por vírgula)
-                      <input
-                        required
-                        value={field.options?.join(',') || ''}
-                        onChange={(e) =>
-                          setCustom({
-                            ...custom,
-                            fields: custom.fields.map((f) =>
-                              f.id === field.id
-                                ? { ...f, options: e.target.value.split(',') }
-                                : f,
-                            ),
-                          })
-                        }
-                      />
-                    </label>
-                  ) : (
-                    <label>
-                      Unidade sugerida
-                      <input
-                        maxLength={40}
-                        value={field.unit}
-                        onChange={(e) =>
-                          setCustom({
-                            ...custom,
-                            fields: custom.fields.map((f) =>
-                              f.id === field.id
-                                ? { ...f, unit: e.target.value }
-                                : f,
-                            ),
-                          })
-                        }
-                      />
-                    </label>
-                  )}
-                  <button
-                    type="button"
-                    className="text-button"
-                    disabled={custom.fields.length === 1 || busy}
-                    onClick={() =>
-                      setCustom({
-                        ...custom,
-                        fields: custom.fields.filter((f) => f.id !== field.id),
-                      })
-                    }
-                  >
-                    Remover
-                  </button>
-                </div>
-              ))}
-              <div className="exam-actions">
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={custom.fields.length >= 50 || busy}
-                  onClick={() =>
-                    setCustom({
-                      ...custom,
-                      fields: [...custom.fields, emptyField()],
-                    })
-                  }
-                >
-                  Adicionar parâmetro
-                </button>
-                <button className="primary" disabled={busy}>
-                  Salvar modelo e preencher
-                </button>
-                <button
-                  type="button"
-                  className="text-button"
-                  disabled={busy}
-                  onClick={() => setCustom(null)}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
+            <ExamDefinitionForm
+              custom={custom}
+              setCustom={setCustom}
+              onSave={saveDefinition}
+              busy={busy}
+            />
           )}
           {draft && selected && (
-            <form className="exam-editor" onSubmit={saveResult}>
-              <h3>
-                {draft.supersedes_id ? 'Corrigir resultado' : 'Novo resultado'}{' '}
-                · {selected.name}
-              </h3>
-              {reviewing && (
-                <output className="exam-ai-review">
-                  <strong>Revisão obrigatória da sugestão</strong>
-                  <p>
-                    Confira o laudo original, a data, cada valor, unidade e
-                    referência. O sistema só salvará depois de sua confirmação.
-                  </p>
-                  <small>
-                    Identificado no arquivo como: {reviewing.originalName}
-                  </small>
-                </output>
-              )}
-              <div className="exam-meta">
-                <label>
-                  Data da coleta
-                  <input
-                    type="date"
-                    required
-                    value={draft.collected_on}
-                    onChange={(e) =>
-                      setDraft({ ...draft, collected_on: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Laboratório
-                  <input
-                    maxLength={500}
-                    value={draft.laboratory}
-                    onChange={(e) =>
-                      setDraft({ ...draft, laboratory: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Material
-                  <input
-                    maxLength={500}
-                    placeholder="Conforme o laudo"
-                    value={draft.specimen}
-                    onChange={(e) =>
-                      setDraft({ ...draft, specimen: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Método
-                  <input
-                    maxLength={500}
-                    placeholder="Se informado"
-                    value={draft.method}
-                    onChange={(e) =>
-                      setDraft({ ...draft, method: e.target.value })
-                    }
-                  />
-                </label>
-              </div>
-              <p className="exam-help">
-                Preencha apenas os resultados disponíveis. Confira as unidades
-                no laudo; use números sem separador de milhar (ex.: 250000).
-                Limites como &lt; 0,1 são aceitos.
-              </p>
-              {[
-                ...new Set(selected.fields.map((f) => f.group || 'Resultados')),
-              ].map((group) => (
-                <fieldset key={group}>
-                  <legend>{group}</legend>
-                  {selected.fields
-                    .filter((f) => (f.group || 'Resultados') === group)
-                    .map((field) => {
-                      const evidence = reviewing?.fields.find(
-                        (item) => item.fieldId === field.id,
-                      );
-                      return (
-                        <div className="exam-value-block" key={field.id}>
-                          <div className="exam-value-row">
-                            <label>
-                              {field.name}
-                              {field.type === 'choice' ? (
-                                <select
-                                  aria-label={field.name}
-                                  value={draft.values[field.id]?.value || ''}
-                                  onChange={(e) =>
-                                    updateValue(field, 'value', e.target.value)
-                                  }
-                                >
-                                  <option value="">Não informado</option>
-                                  {field.options?.map((o) => (
-                                    <option key={o}>{o}</option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <input
-                                  maxLength={2000}
-                                  placeholder="Não informado"
-                                  value={draft.values[field.id]?.value || ''}
-                                  onChange={(e) =>
-                                    updateValue(field, 'value', e.target.value)
-                                  }
-                                />
-                              )}
-                            </label>
-                            <label>
-                              Unidade
-                              <input
-                                aria-label={`Unidade · ${field.name}`}
-                                maxLength={40}
-                                value={
-                                  draft.values[field.id]?.unit ?? field.unit
-                                }
-                                onChange={(e) =>
-                                  updateValue(field, 'unit', e.target.value)
-                                }
-                              />
-                            </label>
-                            <label>
-                              Referência do laboratório
-                              <input
-                                aria-label={`Referência · ${field.name}`}
-                                maxLength={500}
-                                placeholder="Opcional"
-                                value={draft.values[field.id]?.reference || ''}
-                                onChange={(e) =>
-                                  updateValue(
-                                    field,
-                                    'reference',
-                                    e.target.value,
-                                  )
-                                }
-                              />
-                            </label>
-                          </div>
-                          {evidence && (
-                            <div className="exam-evidence">
-                              <strong>
-                                Trecho de origem
-                                {evidence.page
-                                  ? ` · página ${evidence.page}`
-                                  : ''}
-                              </strong>
-                              <span>
-                                {evidence.originalText ||
-                                  'Trecho não informado.'}
-                              </span>
-                              {evidence.warnings.map((warning, index) => (
-                                <span key={`${warning}-${index}`}>
-                                  Atenção: {warning}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                </fieldset>
-              ))}
-              <div className="exam-meta">
-                <label>
-                  Laudo de origem
-                  <select
-                    value={draft.attachment_id}
-                    onChange={(e) =>
-                      setDraft({ ...draft, attachment_id: e.target.value })
-                    }
-                  >
-                    <option value="">Sem anexo vinculado</option>
-                    {draft.attachment_id &&
-                      !attachments.some(
-                        (a) => a.id === draft.attachment_id,
-                      ) && (
-                        <option value={draft.attachment_id}>
-                          Anexo anterior indisponível — selecione outro ou
-                          remova o vínculo
-                        </option>
-                      )}
-                    {attachments.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Observações
-                  <textarea
-                    maxLength={4000}
-                    value={draft.notes}
-                    onChange={(e) =>
-                      setDraft({ ...draft, notes: e.target.value })
-                    }
-                  />
-                </label>
-              </div>
-              {draft.supersedes_id && (
-                <label>
-                  Motivo da correção
-                  <input
-                    required
-                    maxLength={500}
-                    value={draft.correction_reason}
-                    onChange={(e) =>
-                      setDraft({ ...draft, correction_reason: e.target.value })
-                    }
-                  />
-                  <small>O registro anterior será preservado.</small>
-                </label>
-              )}
-              <div className="exam-actions">
-                <button className="primary" disabled={busy}>
-                  {busy
-                    ? 'Salvando…'
-                    : reviewing
-                      ? 'Confirmar e salvar resultado'
-                      : 'Salvar resultado'}
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={busy}
-                  onClick={() => {
-                    setDraft(null);
-                    setReviewing(null);
-                  }}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
+            <ExamResultForm
+              draft={draft}
+              setDraft={setDraft}
+              selected={selected}
+              reviewing={reviewing}
+              attachments={attachments}
+              busy={busy}
+              onSave={saveResult}
+              onCancel={() => {
+                setDraft(null);
+                setReviewing(null);
+              }}
+              updateValue={updateValue}
+            />
           )}
           {!used.length && !draft && !custom && (
             <p className="exam-empty">
@@ -1100,99 +647,11 @@ export default function Exams({
                     Resultados com &lt; ou &gt; ficam apenas na tabela. Datas e
                     valores exatos estão disponíveis no histórico.
                   </p>
-                  {examSeries(
-                    results.filter((r) => r.definition_id === history),
-                    graph,
-                    historyDefinition.fields.find((f) => f.id === graph)?.unit,
-                  ).map((series) => {
-                    const chartData = series.points.map((p, index, array) => {
-                      const sameDateIndex = array
-                        .slice(0, index)
-                        .filter((item) => item.date === p.date).length;
-                      const baseTime = new Date(
-                        `${p.date}T12:00:00Z`,
-                      ).getTime();
-                      return {
-                        ...p,
-                        time: baseTime + sameDateIndex * 3600000,
-                      };
-                    });
-                    return (
-                      <div key={series.key}>
-                        <p>{series.label}</p>
-                        <ResponsiveContainer width="100%" height={240}>
-                          <LineChart
-                            data={chartData}
-                            margin={{ top: 10, right: 25, bottom: 10, left: 15 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis
-                              dataKey="time"
-                              type="number"
-                              domain={
-                                series.points.length === 1
-                                  ? [
-                                      (dataMin: number) => dataMin - 86400000,
-                                      (dataMax: number) => dataMax + 86400000,
-                                    ]
-                                  : ['dataMin', 'dataMax']
-                              }
-                              ticks={
-                                series.points.length === 1 && chartData.length === 1
-                                  ? [chartData[0].time]
-                                  : undefined
-                              }
-                              tickFormatter={(v) =>
-                                dateLabel(
-                                  new Date(v).toISOString().slice(0, 10),
-                                )
-                              }
-                            />
-                            <YAxis domain={['auto', 'auto']} />
-                            <Tooltip
-                              labelFormatter={(v) =>
-                                dateLabel(
-                                  new Date(Number(v)).toISOString().slice(0, 10),
-                                )
-                              }
-                              formatter={(value, _name, item) => {
-                                const p = (item as { payload?: { unit?: string; laboratory?: string; method?: string; specimen?: string; reference?: string } })?.payload;
-                                const parts = [
-                                  p?.unit,
-                                  p?.laboratory ? `Lab: ${p.laboratory}` : null,
-                                  p?.method ? `Método: ${p.method}` : null,
-                                  p?.specimen ? `Material: ${p.specimen}` : null,
-                                  p?.reference ? `Ref: ${p.reference}` : null,
-                                ].filter(Boolean);
-                                const suffix = parts.length
-                                  ? ` (${parts.join(' · ')})`
-                                  : '';
-                                return [`${value}${suffix}`, 'Resultado'];
-                              }}
-                            />
-                            <Line
-                              name="Resultado"
-                              type="linear"
-                              dataKey="value"
-                              stroke="var(--exam-accent, #537d98)"
-                              strokeWidth={2}
-                              dot={{ r: 4 }}
-                              isAnimationActive={false}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    );
-                  })}
-                  {!examSeries(
-                    results.filter((r) => r.definition_id === history),
-                    graph,
-                    historyDefinition.fields.find((f) => f.id === graph)?.unit,
-                  ).length && (
-                    <p>
-                      Nenhum valor numérico exato disponível para o gráfico.
-                    </p>
-                  )}
+                  <ExamChart
+                    results={results}
+                    definition={historyDefinition}
+                    graph={graph}
+                  />
                 </div>
               )}
               <details>

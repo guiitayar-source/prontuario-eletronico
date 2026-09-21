@@ -1,4 +1,4 @@
-import { fileType, MAX_FILE } from '../capture.ts';
+import { fileType, MAX_FILE } from '../file-utils.ts';
 import { body, check, handle, HttpError, json, writeGuard } from './server.ts';
 import { patient } from './patients.ts';
 import { adminClient } from './admin.ts';

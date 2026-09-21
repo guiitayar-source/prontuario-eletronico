@@ -11,8 +11,8 @@ import {
   Sliders,
 } from 'lucide-react';
 import { useTheme, THEMES, type ThemeName } from '@/lib/theme';
-import { useAccess } from './auth';
 import { TopBar } from './topbar';
+import { NavigationRail } from './navigation-rail';
 import type { Patient } from '@/lib/patient-fields';
 
 export default function Settings({
@@ -27,47 +27,15 @@ export default function Settings({
   onOpenPatient?: (p: Patient) => void;
 }) {
   const { theme, setTheme, gradient, setGradient } = useTheme();
-  const { role } = useAccess();
-
-  const roleLabels: Record<string, string> = {
-    owner: 'Proprietário',
-    doctor: 'Médico',
-    secretary: 'Secretária',
-  };
 
   return (
     <div className="app-shell">
-      <aside className="rail">
-        <div className="brand">
-          <Activity size={23} />
-        </div>
-        <nav aria-label="Navegação principal">
-          <button className="nav-item" onClick={onAgenda}>
-            <CalendarDays size={21} />
-            <span>Agenda</span>
-          </button>
-          <button className="nav-item" onClick={onPatients}>
-            <Users size={21} />
-            <span>Pacientes</span>
-          </button>
-          <button className="nav-item" onClick={onPatients}>
-            <Stethoscope size={21} />
-            <span>Consulta</span>
-          </button>
-          <button className="nav-item" onClick={onTeam}>
-            <ShieldCheck size={21} />
-            <span>Equipe</span>
-          </button>
-          <button className="nav-item active" aria-current="page">
-            <Palette size={21} />
-            <span>Ajustes</span>
-          </button>
-        </nav>
-        <div className="rail-bottom">
-          <span className="avatar doctor">G</span>
-          <span>{roleLabels[role] || 'Equipe'}</span>
-        </div>
-      </aside>
+      <NavigationRail
+        active="settings"
+        onAgenda={onAgenda}
+        onPatients={onPatients}
+        onTeam={onTeam}
+      />
 
       <div className="main-shell">
         <TopBar onSelectPatient={onOpenPatient} />

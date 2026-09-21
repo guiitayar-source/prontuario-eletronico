@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import { validate } from '../patients.ts';
-import { fields, type PatientInput } from '../patient-fields.ts';
+import { fields, validate, type PatientInput } from '../patient-fields.ts';
 import { kindLabels, type Kind, type ImportPlan } from './types.ts';
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj =>

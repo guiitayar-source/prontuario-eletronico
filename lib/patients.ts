@@ -2,9 +2,12 @@ import {
   DEMO_ID,
   fields,
   emptyPatient,
+  validCpf,
+  validate,
   type PatientInput,
   type Patient,
 } from './patient-fields.ts';
+export { validCpf, validate };
 const normalize = (s: string) =>
   s
     .normalize('NFD')
@@ -50,94 +53,6 @@ async function present(row: Patient & { owner: string }) {
     updated_at: row.updated_at,
     draft_key,
   } as Patient;
-}
-function validCpf(cpf: string) {
-  if (!/^\d{11}$/.test(cpf) || /^(\d)\1+$/.test(cpf)) return false;
-  for (let n = 9; n < 11; n++) {
-    let sum = 0;
-    for (let i = 0; i < n; i++) sum += Number(cpf[i]) * (n + 1 - i);
-    let digit = (sum * 10) % 11;
-    if (digit === 10) digit = 0;
-    if (digit !== Number(cpf[n])) return false;
-  }
-  return true;
-}
-export function validate(data: Record<string, unknown>) {
-  const p = emptyPatient(),
-    errors: Record<string, string> = {};
-  for (const f of fields) {
-    if (data[f] != null && typeof data[f] !== 'string') {
-      errors[f] = 'Informe um texto.';
-      continue;
-    }
-    p[f] = String(data[f] || '').trim();
-    if (p[f].length > (f === 'admin_notes' ? 2000 : 180))
-      errors[f] = 'Texto muito longo.';
-  }
-  if (p.name.length < 2) errors.name = 'Informe o nome completo.';
-  if (p.dob) {
-    const parsed = new Date(p.dob + 'T12:00:00Z');
-    if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(p.dob) ||
-      Number.isNaN(parsed.getTime()) ||
-      parsed.toISOString().slice(0, 10) !== p.dob ||
-      p.dob > new Date().toISOString().slice(0, 10) ||
-      Number(p.dob.slice(0, 4)) < 1850
-    )
-      errors.dob = 'Informe uma data de nascimento válida.';
-  }
-  p.cpf = p.cpf.replace(/[.\-\s]/g, '');
-  if (p.cpf && !validCpf(p.cpf))
-    errors.cpf = 'CPF inválido. Você também pode deixar este campo vazio.';
-  if (p.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email))
-    errors.email = 'Confira o e-mail.';
-  for (const f of [
-    'phone',
-    'secondary_phone',
-    'guardian_phone',
-    'emergency_phone',
-  ] as const) {
-    if (p[f] && !/^[+\d() .-]{7,30}$/.test(p[f]))
-      errors[f] = 'Confira o número de telefone.';
-  }
-  p.state = p.state.toUpperCase();
-  if (
-    p.state &&
-    ![
-      'AC',
-      'AL',
-      'AP',
-      'AM',
-      'BA',
-      'CE',
-      'DF',
-      'ES',
-      'GO',
-      'MA',
-      'MT',
-      'MS',
-      'MG',
-      'PA',
-      'PB',
-      'PR',
-      'PE',
-      'PI',
-      'RJ',
-      'RN',
-      'RS',
-      'RO',
-      'RR',
-      'SC',
-      'SP',
-      'SE',
-      'TO',
-    ].includes(p.state)
-  )
-    errors.state = 'Use a sigla da UF.';
-  p.zip_code = p.zip_code.replace(/[-\s]/g, '');
-  if (p.zip_code && !/^\d{8}$/.test(p.zip_code))
-    errors.zip_code = 'Informe os 8 dígitos do CEP.';
-  return { p, errors };
 }
 export function patientsHandler(db: D1Database) {
   return async (request: Request) => {

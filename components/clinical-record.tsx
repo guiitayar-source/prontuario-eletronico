@@ -14,6 +14,7 @@ import { PatientDetails, PatientSearch } from './patients/registry';
 import Attachments from './capture/desktop';
 import { DEMO_ID, initials, age, type Patient } from '@/lib/patient-fields';
 import { TopBar } from './topbar';
+import { NavigationRail } from './navigation-rail';
 import {
   Activity,
   CalendarDays,
@@ -288,43 +289,12 @@ export default function ClinicalRecord({
   }, [modal]);
   return (
     <div className="app-shell">
-      <aside className="rail">
-        <div className="brand">
-          <Activity size={23} />
-        </div>
-        <nav aria-label="Navegação principal">
-          {[
-            { id: 'agenda', icon: CalendarDays, label: 'Agenda' },
-            { id: 'pacientes', icon: Users, label: 'Pacientes' },
-            { id: 'consulta', icon: Stethoscope, label: 'Consulta' },
-            ...(onSettings
-              ? [{ id: 'ajustes', icon: Palette, label: 'Ajustes' }]
-              : []),
-          ].map(({ id, icon: Icon, label }) => (
-            <button
-              key={id}
-              className={view === id ? 'nav-item active' : 'nav-item'}
-              onClick={() =>
-                id === 'pacientes'
-                  ? leave(onHome)
-                  : id === 'agenda'
-                    ? leave(onAgenda)
-                    : id === 'ajustes'
-                      ? leave(onSettings!)
-                      : setView(id)
-              }
-              aria-current={view === id ? 'page' : undefined}
-            >
-              <Icon size={21} />
-              <span>{label}</span>
-            </button>
-          ))}
-        </nav>
-        <div className="rail-bottom">
-          <span className="avatar doctor">G</span>
-          <span>{medical ? 'Médico' : 'Administrativo'}</span>
-        </div>
-      </aside>
+      <NavigationRail
+        active="consultation"
+        onAgenda={() => leave(onAgenda)}
+        onPatients={() => leave(onHome)}
+        onSettings={onSettings ? () => leave(onSettings) : undefined}
+      />
       <div className="main-shell">
         <TopBar onOpenSearch={() => setModal('busca')} />
         <main>

@@ -1,8 +1,9 @@
 import { ensureDemo, findPatient } from './patients.ts';
+import { MAX_FILE, fileType } from './file-utils.ts';
+export { MAX_FILE, fileType };
 // Authentication headers are trusted only behind the private Sites dispatcher.
 // Clinical records are not supported by this demonstration.
 export const PATIENT = { id: 'demo-helena-0001', name: 'Helena Costa' };
-export const MAX_FILE = 12 * 1024 * 1024;
 const SESSION_MS = 2 * 60 * 60 * 1000;
 const REQUEST_MS = 15 * 60 * 1000;
 const categories = ['exam', 'report', 'other'];
@@ -75,18 +76,6 @@ function category(value: unknown): string {
     'Selecione exame, relatório externo ou outro documento.',
   );
   return value as string;
-}
-export function fileType(data: Uint8Array): string | null {
-  const prefix = (...n: number[]) => n.every((v, i) => data[i] === v);
-  if (prefix(0xff, 0xd8, 0xff)) return 'image/jpeg';
-  if (prefix(137, 80, 78, 71, 13, 10, 26, 10)) return 'image/png';
-  if (prefix(37, 80, 68, 70, 45)) return 'application/pdf';
-  if (
-    prefix(82, 73, 70, 70) &&
-    new TextDecoder().decode(data.slice(8, 12)) === 'WEBP'
-  )
-    return 'image/webp';
-  return null;
 }
 async function boundedBody(request: Request, max: number) {
   ensure(

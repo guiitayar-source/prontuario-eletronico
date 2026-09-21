@@ -25,6 +25,7 @@ import {
   type PatientInput,
 } from '@/lib/patient-fields';
 import { TopBar } from '@/components/topbar';
+import { NavigationRail } from '../navigation-rail';
 import { PatientSearch } from './search';
 export { PatientSearch };
 export async function fetchPatient(id: string) {
@@ -290,39 +291,13 @@ export default function Registry({
   const medical = ['owner', 'doctor'].includes(useAccess().role);
   return (
     <div className="app-shell">
-      <aside className="rail">
-        <div className="brand">
-          <Activity size={23} />
-        </div>
-        <nav aria-label="Navegação principal">
-          <button className="nav-item" onClick={onAgenda}>
-            <CalendarDays size={21} />
-            <span>Agenda</span>
-          </button>
-          <button className="nav-item active">
-            <Users size={21} />
-            <span>Pacientes</span>
-          </button>
-          <button className="nav-item" onClick={onConsultation}>
-            <Stethoscope size={21} />
-            <span>Consulta</span>
-          </button>
-          <button className="nav-item" onClick={onTeam}>
-            <ShieldCheck size={21} />
-            <span>Equipe</span>
-          </button>
-          {onSettings && (
-            <button className="nav-item" onClick={onSettings}>
-              <Palette size={21} />
-              <span>Ajustes</span>
-            </button>
-          )}
-        </nav>
-        <div className="rail-bottom">
-          <span className="avatar doctor">G</span>
-          <span>Médico</span>
-        </div>
-      </aside>
+      <NavigationRail
+        active="patients"
+        onAgenda={onAgenda}
+        onConsultation={onConsultation}
+        onTeam={onTeam}
+        onSettings={onSettings}
+      />
       <div className="main-shell">
         <TopBar onSelectPatient={onOpen} />
         <main>

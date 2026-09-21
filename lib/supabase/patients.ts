@@ -1,5 +1,4 @@
-import { fields, DEMO_ID, type Patient } from '../patient-fields.ts';
-import { validate } from '../patients.ts';
+import { fields, DEMO_ID, validate, type Patient } from '../patient-fields.ts';
 import { body, check, handle, HttpError, json, writeGuard, type Context } from './server.ts';
 const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 export function present(row: Record<string, unknown>, clinic: string): Patient {

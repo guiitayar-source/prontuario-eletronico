@@ -3,21 +3,17 @@ import { apiFetch as fetch } from '@/lib/supabase/http';
 
 import { useEffect, useMemo, useState, useRef } from 'react';
 import {
-  Activity,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Plus,
-  ShieldCheck,
-  Stethoscope,
-  Users,
-  Palette,
   X,
 } from 'lucide-react';
 import type { Patient } from '@/lib/patient-fields';
 import { initials } from '@/lib/patient-fields';
 import { TopBar } from './topbar';
+import { NavigationRail } from './navigation-rail';
 
 type Appointment = {
   id: string;
@@ -50,56 +46,6 @@ const localDateTime = (timestamp: number) => {
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 };
-
-function Navigation({
-  onPatients,
-  onConsultation,
-  onTeam,
-  onSettings,
-}: {
-  onPatients: () => void;
-  onConsultation: () => void;
-  onTeam?: () => void;
-  onSettings?: () => void;
-}) {
-  return (
-    <aside className="rail">
-      <div className="brand">
-        <Activity size={23} />
-      </div>
-      <nav aria-label="Navegação principal">
-        <button className="nav-item active">
-          <CalendarDays size={21} />
-          <span>Agenda</span>
-        </button>
-        <button className="nav-item" onClick={onPatients}>
-          <Users size={21} />
-          <span>Pacientes</span>
-        </button>
-        <button className="nav-item" onClick={onConsultation}>
-          <Stethoscope size={21} />
-          <span>Consulta</span>
-        </button>
-        {onTeam && (
-          <button className="nav-item" onClick={onTeam}>
-            <ShieldCheck size={21} />
-            <span>Equipe</span>
-          </button>
-        )}
-        {onSettings && (
-          <button className="nav-item" onClick={onSettings}>
-            <Palette size={21} />
-            <span>Ajustes</span>
-          </button>
-        )}
-      </nav>
-      <div className="rail-bottom">
-        <span className="avatar doctor">G</span>
-        <span>Médico</span>
-      </div>
-    </aside>
-  );
-}
 
 function AppointmentForm({
   day,
@@ -409,7 +355,8 @@ export default function Agenda({
 
   return (
     <div className="app-shell">
-      <Navigation
+      <NavigationRail
+        active="agenda"
         onPatients={onPatients}
         onConsultation={onPatients}
         onTeam={onTeam}

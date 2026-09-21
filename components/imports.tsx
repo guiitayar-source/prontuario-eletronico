@@ -12,6 +12,7 @@ import {
 import { apiFetch } from '@/lib/supabase/http';
 import { useAccess } from './auth';
 import { TopBar } from './topbar';
+import { NavigationRail } from './navigation-rail';
 import { fieldGroups, type Patient } from '@/lib/patient-fields';
 const fieldLabels = Object.fromEntries(
   fieldGroups.flatMap((g) => g.fields.map(([key, label]) => [key, label])),
@@ -232,39 +233,14 @@ export default function Imports({
   );
   return (
     <div className="app-shell">
-      <aside className="rail">
-        <div className="brand">
-          <Activity size={23} />
-        </div>
-        <nav aria-label="Navegação principal">
-          <button className="nav-item" disabled={busy} onClick={onAgenda}>
-            <CalendarDays size={21} />
-            <span>Agenda</span>
-          </button>
-          <button className="nav-item" disabled={busy} onClick={onPatients}>
-            <Users size={21} />
-            <span>Pacientes</span>
-          </button>
-          <button className="nav-item" disabled={busy} onClick={onPatients}>
-            <Stethoscope size={21} />
-            <span>Consulta</span>
-          </button>
-          <button className="nav-item" disabled={busy} onClick={onTeam}>
-            <ShieldCheck size={21} />
-            <span>Equipe</span>
-          </button>
-          <button className="nav-item active" aria-current="page">
-            <Upload size={21} />
-            <span>Importar</span>
-          </button>
-          {onSettings && (
-            <button className="nav-item" disabled={busy} onClick={onSettings}>
-              <Palette size={21} />
-              <span>Ajustes</span>
-            </button>
-          )}
-        </nav>
-      </aside>
+      <NavigationRail
+        active="imports"
+        disabled={busy}
+        onAgenda={onAgenda}
+        onPatients={onPatients}
+        onTeam={onTeam}
+        onSettings={onSettings}
+      />
       <div className="main-shell">
         <TopBar onSelectPatient={onSelectPatient || ((p) => onOpenPatient(p.id))} />
         <main className="imports-page">
