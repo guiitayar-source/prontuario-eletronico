@@ -205,7 +205,7 @@ export function DocumentHistory({
         <div className="consultation-history-link" key={d.id}>
           <strong>{d.kind}</strong>
           <span>
-            {d.document_date.split('-').reverse().join('/')} · Rascunho · versão{' '}
+            {(d.document_date ? d.document_date.split('-').reverse().join('/') : 'Sem data')} · Rascunho · versão{' '}
             {d.version}
             {d.consultation_id ? ' · Vinculado à consulta' : ''}
           </span>
@@ -404,7 +404,7 @@ function DocumentAiBox({
           patientId: d.patient_id,
           consultationId: d.consultation_id,
           kind: d.kind,
-          documentDate: d.document_date,
+          documentDate: d.document_date || '',
           modelId,
           instructions,
           includeConsultation:
@@ -779,10 +779,10 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
           <input value={d.patient_name} readOnly />
         </label>
         <label>
-          Data
+          {d.kind === 'Receita' ? 'Data (opcional)' : 'Data'}
           <input
             type="date"
-            value={d.document_date}
+            value={d.document_date || ''}
             onChange={(e) => update({ document_date: e.target.value })}
           />
         </label>

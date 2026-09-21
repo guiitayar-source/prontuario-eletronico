@@ -648,7 +648,7 @@ export async function documentPdf(d: ClinicalDocument) {
   paragraph(d.kind.toUpperCase(), 16, true);
   y -= 12;
   paragraph('Paciente: ' + d.patient_name, 11, true);
-  paragraph('Data: ' + d.document_date.split('-').reverse().join('/'));
+  paragraph('Data: ' + (d.document_date || '').split('-').reverse().join('/'));
   y -= 16;
   paragraph(d.text);
   y -= 24;

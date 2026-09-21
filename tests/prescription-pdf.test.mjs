@@ -64,6 +64,11 @@ const customPdfBytes = await documentPdf(docReceitaCustom);
 const customPdfDoc = await PDFDocument.load(customPdfBytes);
 assert.equal(customPdfDoc.getPageCount(), 2, 'Custom prescription must also have 2 pages');
 
+for (const document_date of ['', null]) {
+  const undated = await documentPdf({ ...docReceita, document_date });
+  assert.equal((await PDFDocument.load(undated)).getPageCount(), 2);
+}
+
 // 5. Test other kind generates standard single page
 const docAtestado = {
   id: 'atestado-teste-1',

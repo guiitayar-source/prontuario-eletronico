@@ -14,7 +14,7 @@ export type ClinicalDocument = {
   patient_name: string;
   physician_name: string;
   physician_registration: string;
-  document_date: string;
+  document_date: string | null;
   text: string;
   version: number;
   updated_at?: string;

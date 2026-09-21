@@ -192,7 +192,7 @@ export const documentAi = handle(
       60_000,
       'Texto atual',
     );
-    const documentDate = cleanText(data.documentDate, 10, 'Data do documento');
+    const documentDate = cleanText(data.documentDate ?? '', 10, 'Data do documento');
     const modelId = data.modelId as ModelId;
     const choice = models()[modelId];
     if (!patientId || !documentKinds.includes(kind) || !choice)
@@ -200,7 +200,7 @@ export const documentAi = handle(
         422,
         'Confira o paciente, o documento e o modelo de IA.',
       );
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(documentDate))
+    if (!(kind === 'Receita' && !documentDate) && !/^\d{4}-\d{2}-\d{2}$/.test(documentDate))
       throw new HttpError(422, 'Data do documento inválida.');
     if (!configured(choice.provider))
       throw new HttpError(
@@ -298,7 +298,7 @@ export const documentAi = handle(
 
     const prompt = `Crie um rascunho do tipo "${kind}".
 Paciente: ${patient.social_name || patient.name}
-Data do documento: ${documentDate}
+Data do documento: ${documentDate || 'Não informada; deixar em branco, sem presumir uma data.'}
 ${instructions ? `\nInstruções do médico:\n${instructions}` : ''}${section('Consulta vinculada', consultationText)}${section('Adendos da consulta', addendaText)}${section('Contexto clínico selecionado', clinicalContext)}${section('Texto atual selecionado pelo médico', currentText)}`;
     if (prompt.length > 150_000)
       throw new HttpError(

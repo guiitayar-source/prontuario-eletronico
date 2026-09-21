@@ -111,7 +111,10 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
     d.physician_name.length > 180 ||
     typeof d.physician_registration !== 'string' ||
     d.physician_registration.length > 120 ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(d.document_date || '')
+    !(
+      (d.kind === 'Receita' && (d.document_date == null || d.document_date === '')) ||
+      (typeof d.document_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.document_date))
+    )
   )
     throw new HttpError(422, 'Confira os campos do documento.');
   return json({

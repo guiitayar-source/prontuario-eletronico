@@ -208,7 +208,7 @@ export function exportFHIR(
     textDocument(
       'document:' + d.id,
       d.kind,
-      `${d.kind}\nData do documento: ${d.document_date}\n${d.physician_name}\n${d.physician_registration}\n\n${d.text}`,
+      `${d.kind}\nData do documento: ${d.document_date || 'Não informada'}\n${d.physician_name}\n${d.physician_registration}\n\n${d.text}`,
       {
         docStatus: 'preliminary',
         date: d.created_at,
