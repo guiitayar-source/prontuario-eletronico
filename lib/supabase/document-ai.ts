@@ -43,7 +43,7 @@ function models(): Record<ModelId, ModelChoice> {
       model:
         process.env.OPENAI_DOCUMENT_MODEL ||
         process.env.OPENAI_LUNA_MODEL ||
-        'gpt-5.6-luna',
+        'gpt-6-luna',
     },
     'openai-mini': {
       provider: 'openai',
