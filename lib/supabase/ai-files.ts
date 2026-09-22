@@ -135,7 +135,7 @@ const EXAM_MODELS: Record<
     model:
       process.env.OPENAI_LUNA_MODEL ||
       process.env.OPENAI_EXAM_MODEL ||
-      'gpt-5.6-luna',
+      'gpt-6-luna',
   },
   'openai-mini': {
     provider: 'openai',
