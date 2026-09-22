@@ -12,6 +12,7 @@ import { useDocuments, DocumentHistory, DocumentEditor } from './documents';
 import { apiFetch } from '@/lib/supabase/http';
 import { PatientDetails, PatientSearch } from './patients/registry';
 import Attachments from './capture/desktop';
+import { AnamnesatorAssistant } from './anamnesator-assistant';
 import { DEMO_ID, initials, age, type Patient } from '@/lib/patient-fields';
 import { TopBar } from './topbar';
 import { NavigationRail } from './navigation-rail';
@@ -668,6 +669,8 @@ export default function ClinicalRecord({
             className={
               modal === 'contexto'
                 ? 'modal context-modal'
+                : modal === 'anamnesator'
+                  ? 'modal anamnesator-modal'
                 : modal === 'documento'
                   ? 'modal document-modal'
                   : 'modal'
@@ -717,20 +720,17 @@ export default function ClinicalRecord({
                   <Mic />
                 </div>
                 <h2 id="dialog-title">Anamnesator</h2>
-                <p>
-                  Este será o ponto de integração com o aplicativo que você já
-                  utiliza.
-                </p>
-                <ol>
-                  <li>Receber a transcrição do Anamnesator.</li>
-                  <li>Revisar e editar a transcrição.</li>
-                  <li>Gerar e revisar o rascunho da evolução.</li>
-                  <li>Incorporar o texto aprovado à consulta.</li>
-                </ol>
-                <div className="info-box">
-                  Integração ainda não conectada. Nenhum áudio é capturado ou
-                  enviado neste protótipo.
-                </div>
+                <p>Grave, transcreva e revise cada etapa antes de incorporar o texto ao prontuário.</p>
+                <AnamnesatorAssistant
+                  disabled={!current || finalized}
+                  onApply={(value, mode) => {
+                    const next = mode === 'replace' ? value : [latest.current.trim(), value].filter(Boolean).join('\n\n');
+                    latest.current = next;
+                    setText(next);
+                    setStatus('Alterações pendentes');
+                    closeModal();
+                  }}
+                />
               </>
             ) : modal === 'contexto' ? (
               <ClinicalContextEditor
