@@ -15,6 +15,7 @@ import { pipeline } from 'node:stream/promises';
 import { randomUUID, createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { encrypt, decrypt, digest, pack, unpack } from './backup-crypto.mjs';
+import { remoteConnection } from './backup-connection.mjs';
 
 const args = process.argv.slice(2),
   command = args[0],
@@ -36,8 +37,36 @@ const work = await mkdtemp(join(tmpdir(), 'psywrite-backup-')),
   scratch = 'psy_restore_' + randomUUID().replaceAll('-', '');
 let created = false,
   completed = false,
-  outputCreated = false;
+  outputCreated = false,
+  phase = 'preparação';
 const file = resolve(value('--file'));
+class SafeBackupError extends Error {}
+function postgresFailure(diagnostics) {
+  const detail = diagnostics.toLowerCase();
+  if (/password authentication failed|sasl authentication failed|scram/.test(detail))
+    return new SafeBackupError(
+      'A senha do banco foi recusada. Use a senha do banco do projeto, não a senha da conta Supabase, a chave da API ou a senha do backup.',
+    );
+  if (/tenant or user not found|user not found/.test(detail))
+    return new SafeBackupError(
+      'O Session pooler não reconheceu o projeto ou usuário da URI. Copie novamente a opção Session pooler na porta 5432.',
+    );
+  if (/server version[\s\S]*pg_dump version|aborting because of server version mismatch/.test(detail))
+    return new SafeBackupError(
+      'A versão do pg_dump local é incompatível com o PostgreSQL hospedado.',
+    );
+  if (/could not translate host|timeout expired|timed out|network is unreachable|connection refused|could not connect/.test(detail))
+    return new SafeBackupError(
+      'Não foi possível alcançar o banco hospedado. Confira a rede e use o Session pooler na porta 5432.',
+    );
+  if (/permission denied|must be owner|insufficient privilege/.test(detail))
+    return new SafeBackupError(
+      'O banco recusou uma permissão necessária para o backup.',
+    );
+  return new SafeBackupError(
+    'O PostgreSQL interrompeu a operação na etapa atual. A causa não continha uma categoria segura reconhecida.',
+  );
+}
 function sql(query, database = scratch) {
   return execFileSync(
     'docker',
@@ -67,21 +96,20 @@ async function processFile(params, path, direction, env = process.env) {
   const child = spawn('docker', params, {
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  }), diagnostics = [];
   // Capture no database diagnostics in logs: these can contain clinical values.
-  if (args.includes('--local') && process.env.PSYWRITE_TEST_DIAGNOSTICS === '1')
-    child.stderr.pipe(process.stderr);
-  else child.stderr.resume();
+  child.stderr.on('data', (chunk) => {
+    if (diagnostics.reduce((total, item) => total + item.length, 0) < 64 * 1024)
+      diagnostics.push(Buffer.from(chunk));
+    if (args.includes('--local') && process.env.PSYWRITE_TEST_DIAGNOSTICS === '1')
+      process.stderr.write(chunk);
+  });
   const exit = new Promise((yes, no) => {
-    child.on('error', no);
+    child.on('error', () => no(new SafeBackupError('Não foi possível iniciar o Docker para executar o PostgreSQL.')));
     child.on('close', (code) =>
       code === 0
         ? yes()
-        : no(
-            new Error(
-              'Operação PostgreSQL falhou. Nenhum banco existente foi substituído.',
-            ),
-          ),
+        : no(postgresFailure(Buffer.concat(diagnostics).toString('utf8'))),
     );
   });
   const transfer =
@@ -157,20 +185,13 @@ try {
     } else if (args.includes('--remote')) {
       api = process.env.NEXT_PUBLIC_SUPABASE_URL;
       key = process.env.SUPABASE_SECRET_KEY;
-      const db = new URL(process.env.PSYWRITE_DB_URL || '');
-      const ref = new URL(api).hostname.split('.')[0];
-      if (db.hostname !== `db.${ref}.supabase.co`)
-        throw new Error(
-          'Use a conexão direta do mesmo projeto Supabase do aplicativo.',
-        );
       env = {
         ...process.env,
-        PGHOST: db.hostname,
-        PGPORT: db.port || '5432',
-        PGUSER: decodeURIComponent(db.username),
-        PGPASSWORD: decodeURIComponent(db.password),
-        PGDATABASE: db.pathname.slice(1),
-        PGSSLMODE: 'require',
+        ...remoteConnection(
+          api,
+          process.env.PSYWRITE_DB_URL || '',
+          process.env.PSYWRITE_DB_PASSWORD || '',
+        ),
       };
       params = [
         'exec',
@@ -181,11 +202,13 @@ try {
           'PGPASSWORD',
           'PGDATABASE',
           'PGSSLMODE',
+          'PGCONNECT_TIMEOUT',
         ].flatMap((k) => ['-e', k]),
         container,
         'pg_dump',
       ];
     } else throw new Error('Escolha --local ou --remote.');
+    phase = args.includes('--remote') ? 'download do banco hospedado' : 'dump do banco local';
     await processFile(
       [
         ...params,
@@ -201,12 +224,14 @@ try {
       env,
     );
     // Read the attachment inventory from the restored dump, not a later live query.
+    phase = 'restauração do dump em banco local descartável';
     await restoreDatabase();
     const db = createClient(api, key, {
         auth: { persistSession: false, autoRefreshToken: false },
       }),
       objects = inventory(),
       files = [['database.dump', join(work, 'database.dump')]];
+    phase = 'cópia e conferência dos anexos';
     await mkdir(join(work, 'objects'), { mode: 0o700 });
     for (const object of objects) {
       const result = await db.storage
@@ -242,6 +267,7 @@ try {
       mode: 0o600,
     });
     files.push(['manifest.json', join(work, 'manifest.json')]);
+    phase = 'empacotamento e criptografia';
     await pack(files, join(work, 'bundle'));
     await encrypt(join(work, 'bundle'), file, password);
     outputCreated = true;
@@ -256,6 +282,7 @@ try {
       'Backup criptografado criado. Dump restaurado em banco descartável; anexos e integridade conferidos. Execute verify também na cópia externa.',
     );
   } else {
+    phase = 'descriptografia e leitura do pacote';
     await decrypt(file, join(work, 'bundle'), password);
     const manifest = await unpack(join(work, 'bundle'), work);
     if (
@@ -263,6 +290,7 @@ try {
       (await digest(join(work, 'database.dump'))) !== manifest.database_sha256
     )
       throw new Error('Manifesto inconsistente.');
+    phase = 'restauração do dump em banco local descartável';
     await restoreDatabase();
     if (JSON.stringify(counts()) !== JSON.stringify(manifest.counts))
       throw new Error('Contagens restauradas divergentes.');
@@ -283,6 +311,7 @@ try {
         throw new Error('Anexo restaurado inconsistente.');
     }
     // Exercise restoring the bytes through the local Storage API in a separate private bucket.
+    phase = 'ensaio de restauração dos anexos';
     const raw = execFileSync(
         'node_modules/.bin/supabase',
         ['status', '-o', 'json'],
@@ -342,8 +371,11 @@ try {
     );
   }
 } catch (error) {
-  if (args.includes('--local') && process.env.PSYWRITE_TEST_DIAGNOSTICS === '1')
+  if (error instanceof SafeBackupError)
     console.error(error.message);
+  else if (args.includes('--local') && process.env.PSYWRITE_TEST_DIAGNOSTICS === '1')
+    console.error(error.message);
+  else console.error(`Etapa interrompida: ${phase}.`);
   console.error(
     'Backup/restauração não concluído. Confira senha, conexão, espaço em disco e compatibilidade do PostgreSQL. Nenhum banco existente foi substituído.',
   );

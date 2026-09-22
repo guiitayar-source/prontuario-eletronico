@@ -48,7 +48,9 @@ Requisitos: Node, Docker e Supabase local iniciado. O container local é `supaba
 
 No terminal, dentro da pasta do projeto:
 
-**Destino escolhido pelo titular:** `/home/Guilherme/Backups/PsyWrite`, no disco do Arch. A pasta foi criada com permissão privada. Não há backup da origem hospedada feito ainda. Para iniciar o assistente (solicita senhas ocultas no terminal): `bash scripts/backup-interactive.sh`. A segunda cópia independente fica pendente.
+**Destino escolhido pelo titular:** `/home/Guilherme/Backups/PsyWrite`, no disco do Arch. A pasta foi criada com permissão privada. Para iniciar o assistente (solicita senhas ocultas no terminal): `bash scripts/backup-interactive.sh`. A segunda cópia independente fica pendente.
+
+Em 21/09/2026, o titular confirmou que este Arch é o PC de casa. O fluxo inicial é Supabase → PC de casa, com criptografia local, sem passagem pelo notebook. O ensaio `npm run test:readiness` passou nesta data: criação do pacote, restauração em banco e Storage descartáveis, conferência dos bytes dos anexos e rejeição de senha errada e pacote corrompido. A primeira cópia da origem hospedada também foi criada nessa data em `/home/Guilherme/Backups/PsyWrite`, com 13.176.010 bytes e permissão `0600`, após o ensaio de restauração executado pelo assistente.
 
 Para testar os comandos manualmente:
 
@@ -60,10 +62,12 @@ npm run backup:verify -- --file /caminho/privado/copia.psybackup
 unset PSYWRITE_BACKUP_PASSPHRASE
 ```
 
-`--local` copia **somente os dados locais de teste**. Para a origem hospedada, use `--remote` e forneça `PSYWRITE_DB_URL` pelo terminal com a conexão direta do projeto (a senha não vai no comando nem no chat). `.env.local` fornece URL e credencial de servidor do Supabase. A referência da conexão deve coincidir com o projeto do aplicativo. O script não cria senha do banco, não configura rede IPv6/pooler e não altera a origem.
+`--local` copia **somente os dados locais de teste**. Para a origem hospedada, use `--remote` e forneça `PSYWRITE_DB_URL` pelo terminal (a senha não vai no comando nem no chat). `.env.local` fornece URL e credencial de servidor do Supabase. O script aceita a conexão direta do projeto ou o **Session pooler na porta 5432**, com TLS obrigatório. No pooler, o usuário deve ser `postgres.<referência-do-projeto>`; conexões para outro projeto, hosts não reconhecidos e porta de transação 6543 são recusadas. O script não cria senha do banco nem altera a origem.
+
+O teste de rede de 21/09/2026 encontrou a conexão direta IPv6 inacessível neste PC (`ENETUNREACH`). No painel do projeto, abra **Connect → Session pooler** e copie a URI completa, já com a senha embutida. O assistente recebe essa URI em uma entrada oculta. Se a senha for inserida manualmente na URI, seus caracteres especiais precisam estar codificados; a URI pronta fornecida pelo painel já pode ser colada como aparece. O [guia oficial de backup do Supabase](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore) descreve o uso do Session pooler. A validação das conexões pode ser testada sem credenciais reais com `node --test tests/backup-connection.test.mjs`.
 
 ```bash
-read -rsp 'Conexão PostgreSQL direta: ' PSYWRITE_DB_URL
+read -rsp 'Conexão PostgreSQL (direta ou Session pooler): ' PSYWRITE_DB_URL
 export PSYWRITE_DB_URL
 npm run backup:create -- --remote --file /caminho/privado/copia.psybackup
 unset PSYWRITE_DB_URL
@@ -94,7 +98,7 @@ Validação: esquema JSON oficial R4 e testes de referências, recursos, permiss
 ## Pendências antes de qualquer dado real
 
 - Ativação efetiva do TOTP pelo titular e exigência para a clínica; teste de cada conta e recuperação.
-- Backup da origem hospedada com senha escolhida pelo titular, segunda cópia independente e ensaio dessa cópia. O teste automatizado usa somente dados sintéticos locais.
+- Criar uma segunda cópia independente do `.psybackup` hospedado e executar `backup:verify` sobre essa cópia. A primeira cópia no PC de casa e o ensaio automatizado local foram concluídos em 21/09/2026.
 - Aprovação da política de retenção, acesso administrativo a anexos e responsabilidades de auditoria/privacidade.
 - Definir rotina e responsável pelos backups, monitorar falhas, medir duração de restauração e perda de dados tolerável. O script não é um serviço agendado.
 - Revisar ambientes, e-mails, contas privilegiadas e logs de leitura; corrigir qualquer lacuna apontada nessa revisão. Validar portabilidade no sistema destinatário quando definido.
