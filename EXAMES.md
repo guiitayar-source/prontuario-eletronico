@@ -30,13 +30,15 @@ Resultados são incluídos na exportação existente como `DiagnosticReport` + `
 
 ## Leitura por IA
 
-PDFs e imagens classificados como exame podem ser enviados à ação **Ler com IA**. Depois do clique, o profissional escolhe entre Gemini 2.5 Flash, GPT-5.6 Luna e GPT-4o mini, desde que a chave do respectivo provedor esteja configurada. O backend confirma clínica, paciente, tipo e integridade do anexo, baixa o arquivo do Storage privado e o envia diretamente ao modelo escolhido. As chaves nunca são enviadas ao navegador. O modelo recebe o catálogo atual e devolve uma proposta estruturada com página, trecho original, sugestões, incerteza e avisos. Datas e valores desconhecidos permanecem ausentes.
+PDFs e imagens classificados como exame podem ser enviados à ação **Ler com IA**. Depois do clique, o profissional escolhe entre Gemini 2.5 Flash, GPT-6 Luna e GPT-4o mini, desde que a chave do respectivo provedor esteja configurada. O backend confirma clínica, paciente, tipo e integridade do anexo, baixa o arquivo do Storage privado e o envia diretamente ao modelo escolhido. As chaves nunca são enviadas ao navegador. O modelo recebe o catálogo atual e devolve uma proposta estruturada com página, trecho original, sugestões, incerteza e avisos. Datas e valores desconhecidos permanecem ausentes.
 
 A proposta fica apenas no navegador e não é um resultado. Cada exame precisa ser aberto, conferido e confirmado pelo médico. Somente então passa pela mesma validação de preenchimento manual e entra no histórico como `ai_reviewed`, com provedor, modelo, horário de extração, horário de revisão, autor e anexo de origem. Trechos extraídos não são duplicados no banco.
 
 Em Documentos, **Transcrever** abre o texto como um novo rascunho não salvo. O profissional deve comparar com o arquivo, editar e salvar manualmente. A transcrição não resume, interpreta nem cria automaticamente um documento clínico definitivo.
 
 Configure `OPENAI_API_KEY` e/ou `GEMINI_API_KEY` exclusivamente no servidor/Vercel. `OPENAI_EXAM_MODEL`, `OPENAI_TRANSCRIPTION_MODEL`, `GEMINI_EXAM_MODEL` e `GEMINI_TRANSCRIPTION_MODEL` são opcionais; os padrões são `gpt-4o-mini` e `gemini-2.5-flash`. Antes de dados reais, revise contrato, retenção, transferência internacional, base legal e demais controles LGPD. A configuração de não retenção de um provedor não equivale, sozinha, a Zero Data Retention.
+
+Na opção OpenAI Luna, o padrão para rascunhos e leitura de exames é `gpt-6-luna` com `reasoning.effort: medium`. As variáveis `OPENAI_DOCUMENT_MODEL` e `OPENAI_LUNA_MODEL` podem substituir esse padrão; se estiverem configuradas com um modelo anterior no servidor, atualize-as para `gpt-6-luna`.
 
 ## Verificação
 
