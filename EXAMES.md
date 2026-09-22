@@ -38,7 +38,7 @@ Em Documentos, **Transcrever** abre o texto como um novo rascunho não salvo. O 
 
 Configure `OPENAI_API_KEY` e/ou `GEMINI_API_KEY` exclusivamente no servidor/Vercel. `OPENAI_EXAM_MODEL`, `OPENAI_TRANSCRIPTION_MODEL`, `GEMINI_EXAM_MODEL` e `GEMINI_TRANSCRIPTION_MODEL` são opcionais; os padrões são `gpt-4o-mini` e `gemini-2.5-flash`. Antes de dados reais, revise contrato, retenção, transferência internacional, base legal e demais controles LGPD. A configuração de não retenção de um provedor não equivale, sozinha, a Zero Data Retention.
 
-Na opção OpenAI Luna, o padrão para rascunhos e leitura de exames é `gpt-6-luna` com `reasoning.effort: medium`. As variáveis `OPENAI_DOCUMENT_MODEL` e `OPENAI_LUNA_MODEL` podem substituir esse padrão; se estiverem configuradas com um modelo anterior no servidor, atualize-as para `gpt-6-luna`.
+Na opção OpenAI Luna, o padrão para rascunhos e leitura de exames é `gpt-6-luna` com `reasoning.effort: medium`. As variáveis `OPENAI_DOCUMENT_MODEL`, `OPENAI_LUNA_MODEL` e `OPENAI_EXAM_MODEL` podem substituir esse padrão; se estiverem configuradas com um modelo anterior no servidor, atualize-as para `gpt-6-luna`.
 
 ## Verificação
 
