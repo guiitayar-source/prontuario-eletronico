@@ -4,6 +4,7 @@ import Exams from '@/components/exams';
 import type { Patient } from '@/lib/patient-fields';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
+import { useAccess } from '@/components/auth';
 import {
   Smartphone,
   X,
@@ -40,9 +41,13 @@ export default function Attachments({
   canCreateDocument = true,
   patient,
 }: Props) {
+  const { role } = useAccess();
+  const isOwner = role === 'owner';
+  const isDoctor = role === 'doctor';
   const [files, setFiles] = useState<Received[]>([]),
     [pair, setPair] = useState<Pairing | null>(null);
   const [archived, setArchived] = useState<Received[] | null>(null);
+  const [purgeConfirm, setPurgeConfirm] = useState<Received | null>(null);
   async function loadArchived() {
     try {
       const r = await api(
@@ -424,6 +429,24 @@ export default function Attachments({
       setBusy(false);
     }
   }
+  async function purgeFile(file: Received) {
+    setBusy(true);
+    setError('');
+    try {
+      await api('purge', { id: file.id, patientId: patient.id });
+      setRemove(null);
+      setPurgeConfirm(null);
+      await refresh();
+      if (archived) await loadArchived();
+      setMessage(
+        'Anexo excluído definitivamente. Espaço liberado no banco e armazenamento.',
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function open(file: Received) {
     setBusy(true);
     setError('');
@@ -509,6 +532,7 @@ export default function Attachments({
       setDialog(false);
       setPreview(null);
       setRemove(null);
+      setPurgeConfirm(null);
     }
     if (e.key === 'Tab') {
       const elements = e.currentTarget.querySelectorAll<HTMLElement>(
@@ -544,7 +568,23 @@ export default function Attachments({
             {new Date(file.created_at).toLocaleString('pt-BR')} ·{' '}
             {formatBytes(file.size)}
           </small>
-          <span className="file-category">{categoryNames[file.category]}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+            <span className="file-category" style={{ margin: 0 }}>{categoryNames[file.category]}</span>
+            {file.category === 'exam' && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  background: file.has_exams ? '#e8f5e9' : '#fff3e0',
+                  color: file.has_exams ? '#2e7d32' : '#b26a00',
+                  fontWeight: 500,
+                }}
+              >
+                {file.has_exams ? 'Exames preenchidos' : 'Sem exames preenchidos'}
+              </span>
+            )}
+          </div>
         </div>
         <select
           aria-label={`Classificar ${file.name}`}
@@ -643,7 +683,7 @@ export default function Attachments({
         recuperá-los.
       </div>
       {canCreateDocument && (
-        <div>
+        <div style={{ marginTop: '16px' }}>
           <button
             className="secondary"
             disabled={busy}
@@ -652,20 +692,79 @@ export default function Attachments({
             {archived ? 'Fechar arquivados' : 'Ver anexos arquivados'}
           </button>
           {archived && (
-            <section aria-label="Anexos arquivados">
+            <section aria-label="Anexos arquivados" style={{ marginTop: '12px' }}>
               {!archived.length && <p>Nenhum anexo arquivado.</p>}
-              {archived.map((file) => (
-                <p key={file.id}>
-                  {file.name}{' '}
-                  <button
-                    className="secondary"
-                    disabled={busy}
-                    onClick={() => restore(file)}
+              {archived.map((file) => {
+                const canPurge = isOwner || (isDoctor && Boolean(file.has_exams));
+                return (
+                  <div
+                    key={file.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      background: '#faf9f5',
+                      border: '1px solid #e8e6e1',
+                      borderRadius: '6px',
+                      marginBottom: '8px',
+                      gap: '12px',
+                      flexWrap: 'wrap',
+                    }}
                   >
-                    Restaurar
-                  </button>
-                </p>
-              ))}
+                    <div>
+                      <strong>{file.name}</strong>{' '}
+                      <small style={{ color: '#7c8975' }}>
+                        ({formatBytes(file.size)}) · {categoryNames[file.category]}
+                      </small>
+                      {file.category === 'exam' && (
+                        <span
+                          style={{
+                            marginLeft: '8px',
+                            fontSize: '11px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: file.has_exams ? '#e8f5e9' : '#fff3e0',
+                            color: file.has_exams ? '#2e7d32' : '#b26a00',
+                          }}
+                        >
+                          {file.has_exams ? 'Exames preenchidos' : 'Sem exames preenchidos'}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <button
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => restore(file)}
+                      >
+                        Restaurar
+                      </button>
+                      {canPurge ? (
+                        <button
+                          className="secondary"
+                          style={{ color: '#894832', borderColor: '#e0c4ba' }}
+                          disabled={busy}
+                          onClick={() => setPurgeConfirm(file)}
+                          title="Excluir permanentemente do banco e armazenamento"
+                        >
+                          <Trash2 size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                          Excluir definitivamente
+                        </button>
+                      ) : (
+                        isDoctor && (
+                          <span
+                            style={{ fontSize: '11px', color: '#999' }}
+                            title="Preencha os resultados do exame no sistema para liberar a exclusão definitiva ou solicite ao administrador"
+                          >
+                            Exclusão requer exames preenchidos
+                          </span>
+                        )
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </section>
           )}
         </div>
@@ -775,7 +874,7 @@ export default function Attachments({
           Ver relatórios externos e outros documentos →
         </button>
       )}
-      {(dialog || preview || remove) && (
+      {(dialog || preview || remove || purgeConfirm) && (
         <div className="modal-backdrop">
           <section
             className={`modal ${preview ? 'file-preview-modal' : ''}`}
@@ -792,6 +891,7 @@ export default function Attachments({
                 setDialog(false);
                 setPreview(null);
                 setRemove(null);
+                setPurgeConfirm(null);
               }}
             >
               <X size={20} />
@@ -816,22 +916,92 @@ export default function Attachments({
                   <Download size={16} /> Baixar arquivo
                 </a>
               </>
+            ) : purgeConfirm ? (
+              <>
+                <h2 id="capture-title">Excluir anexo definitivamente?</h2>
+                <p><strong>{purgeConfirm.name}</strong> ({formatBytes(purgeConfirm.size)})</p>
+                <p>
+                  O arquivo físico será removido permanentemente do armazenamento e do banco de dados para liberar espaço. Esta ação não poderá ser desfeita.
+                </p>
+                {error && <p role="alert" style={{ color: '#894832', margin: '8px 0' }}>{error}</p>}
+                <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                  <button
+                    className="primary danger"
+                    style={{ margin: 0, background: '#894832' }}
+                    disabled={busy}
+                    onClick={() => purgeFile(purgeConfirm)}
+                  >
+                    Confirmar exclusão definitiva
+                  </button>
+                  <button
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() => {
+                      setPurgeConfirm(null);
+                      setError('');
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
             ) : remove ? (
               <>
-                <h2 id="capture-title">Arquivar este anexo?</h2>
-                <p>{remove.name}</p>
-                <p>
-                  O arquivo sairá da lista ativa, mas será preservado e poderá
-                  ser restaurado pelo médico.
-                </p>
-                {error && <p role="alert">{error}</p>}
-                <button
-                  className="primary danger"
-                  disabled={busy}
-                  onClick={deleteFile}
-                >
-                  Arquivar arquivo
-                </button>
+                <h2 id="capture-title">Remover este anexo?</h2>
+                <p><strong>{remove.name}</strong> ({formatBytes(remove.size)})</p>
+                {remove.category === 'exam' && (
+                  <p style={{ fontSize: '13px', color: remove.has_exams ? '#2e7d32' : '#b26a00', margin: '8px 0' }}>
+                    {remove.has_exams
+                      ? '✓ Os resultados deste exame já estão registrados no prontuário.'
+                      : 'ℹ Esta foto ainda não possui resultados de exames preenchidos no prontuário.'}
+                  </p>
+                )}
+                <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ border: '1px solid #dcdad5', borderRadius: '8px', padding: '12px' }}>
+                    <strong style={{ display: 'block', marginBottom: '4px' }}>Arquivar anexo (recomendado)</strong>
+                    <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>
+                      O arquivo sairá da lista ativa, mas será preservado com segurança e poderá ser restaurado a qualquer momento.
+                    </p>
+                    <button
+                      className="secondary"
+                      style={{ marginTop: '10px' }}
+                      disabled={busy}
+                      onClick={deleteFile}
+                    >
+                      Arquivar anexo
+                    </button>
+                  </div>
+                  <div style={{ border: '1px solid #e0c4ba', borderRadius: '8px', padding: '12px', background: '#fdf9f8' }}>
+                    <strong style={{ display: 'block', marginBottom: '4px', color: '#894832' }}>Excluir definitivamente (liberar espaço)</strong>
+                    <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>
+                      {isOwner
+                        ? 'Como administrador, você pode excluir permanentemente do banco e do armazenamento para economizar espaço.'
+                        : remove.has_exams
+                          ? 'Como os exames já estão preenchidos, você pode apagar a foto para economizar espaço no armazenamento.'
+                          : 'A exclusão definitiva pelo médico só é permitida após os exames estarem preenchidos no prontuário (ou por um administrador).'}
+                    </p>
+                    {(isOwner || (isDoctor && remove.has_exams)) ? (
+                      <button
+                        className="primary danger"
+                        style={{ marginTop: '10px', background: '#894832' }}
+                        disabled={busy}
+                        onClick={() => purgeFile(remove)}
+                      >
+                        Excluir definitivamente
+                      </button>
+                    ) : (
+                      <button
+                        className="secondary"
+                        style={{ marginTop: '10px', opacity: 0.6 }}
+                        disabled
+                        title="Preencha os exames antes de excluir definitivamente"
+                      >
+                        Exclusão bloqueada (preencha o exame antes)
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {error && <p role="alert" style={{ color: '#894832', marginTop: '12px' }}>{error}</p>}
               </>
             ) : (
               <>

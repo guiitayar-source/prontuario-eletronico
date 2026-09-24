@@ -22,6 +22,7 @@ export type Received = {
   size: number;
   category: string;
   created_at: number;
+  has_exams?: boolean;
 };
 export class ApiError extends Error {
   status: number;

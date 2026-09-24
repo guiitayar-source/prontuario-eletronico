@@ -16,12 +16,34 @@ export const capture = handle(async (request, ctx) => {
   if (request.method === 'GET') {
     if (action === 'list' || action === 'archived') {
       if (action === 'archived' && !['owner','doctor'].includes(ctx.role)) throw new HttpError(403,'Acesso restrito ao médico.');
-      await patient(ctx, url.searchParams.get('patientId'));
+      const patientId = url.searchParams.get('patientId')!;
+      await patient(ctx, patientId);
       let query = ctx.db.from('attachments').select('id,request_id,name,mime,size,category,created_at').eq('clinic_id', ctx.clinic)
-        .eq('patient_id', url.searchParams.get('patientId')!).order('created_at').order('id');
+        .eq('patient_id', patientId).order('created_at').order('id');
       query = action === 'archived' ? query.not('archived_at','is',null) : query.is('archived_at',null);
       const rows = check(await query);
-      return json({ attachments: rows.map(r => ({ ...r, created_at: Date.parse(r.created_at) })) });
+      const filledExamSet = new Set<string>();
+      if (['owner', 'doctor'].includes(ctx.role) && rows.length > 0) {
+        const { data: examData } = await ctx.db
+          .from('exam_results')
+          .select('attachment_id,provenance')
+          .eq('clinic_id', ctx.clinic)
+          .eq('patient_id', patientId);
+        if (examData) {
+          for (const item of examData) {
+            if (item.attachment_id) filledExamSet.add(item.attachment_id);
+            const provId = (item.provenance as Record<string, unknown> | null)?.attachment_id;
+            if (typeof provId === 'string' && provId) filledExamSet.add(provId);
+          }
+        }
+      }
+      return json({
+        attachments: rows.map(r => ({
+          ...r,
+          created_at: Date.parse(r.created_at),
+          has_exams: filledExamSet.has(r.id),
+        })),
+      });
     }
     if (action === 'file') {
       const record = await command('file', { id: url.searchParams.get('id'), patientId: url.searchParams.get('patientId') });
@@ -51,6 +73,17 @@ export const capture = handle(async (request, ctx) => {
       throw new HttpError(415, 'Conteúdo inválido. Use JPG, PNG, WebP ou PDF.');
     }
     return json(check(await adminClient().rpc('commit_verified_upload', { c: ctx.clinic, d, actor: ctx.user, device_token: request.headers.get('x-device-token') })),201);
+  }
+  if (action === 'purge') {
+    const record = (await command('purge', d)) as { storage_path?: string };
+    if (record?.storage_path) {
+      try {
+        await adminClient().storage.from('clinical-files').remove([record.storage_path]);
+      } catch (err) {
+        console.error('Falha ao remover arquivo do storage:', err);
+      }
+    }
+    return json({ ok: true });
   }
   if (action === 'delete' || action === 'restore') {
     await command(action,d);

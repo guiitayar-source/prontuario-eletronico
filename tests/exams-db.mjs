@@ -24,6 +24,8 @@ try {
     create function public.record_change() returns trigger language plpgsql security definer as $$ begin
       if auth.uid() is not null then insert into public.audit_events values(new.clinic_id,auth.uid(),'insert',tg_table_name,new.id::text); end if; return new; end $$;
     create function public.fhir_snapshot(c uuid,p text) returns jsonb language sql as $$ select jsonb_build_object('patient',p) $$;
+    create function public.is_clinic_member(c uuid) returns boolean language sql as $$ select true $$;
+    create function public.capture_internal(c uuid, action text, d jsonb default '{}', device_token text default null) returns jsonb language sql as $$ select '{}'::jsonb $$;
     grant usage on schema public,auth to authenticated;
     grant select on public.clinic_members to authenticated;
     insert into public.clinics values('${clinic}'),('${other}');
@@ -37,6 +39,7 @@ try {
     '20260914010100_exam_catalog.sql',
     '20260914010200_exam_fhir.sql',
     '20260915010000_ai_reviewed_exams.sql',
+    '20260924010000_permanent_attachment_delete.sql',
   ])
     await db.exec(
       await readFile(

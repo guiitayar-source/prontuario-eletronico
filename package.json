@@ -27,6 +27,7 @@
     "test:imports": "node tests/imports.mjs",
     "test:readiness": "node tests/readiness.mjs",
     "test:exams": "node tests/exams.test.mjs && node tests/exams-db.mjs",
+    "test:attachment-delete": "node tests/attachment-delete-db.mjs",
     "backup:create": "node --env-file=.env.local scripts/backup.mjs create",
     "backup:verify": "node scripts/backup.mjs verify"
   },

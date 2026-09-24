@@ -21,8 +21,9 @@ As três migrações abaixo foram aplicadas ao projeto remoto `mywmszbmdqzwewhzd
 2. `20260914010100_exam_catalog.sql`: catálogo inicial.
 3. `20260914010200_exam_fhir.sql`: extensão do snapshot FHIR.
 4. `20260915010000_ai_reviewed_exams.sql`: origem e proveniência de sugestões de IA confirmadas pelo profissional.
+5. `20260924010000_permanent_attachment_delete.sql`: exclusão definitiva de fotos de exames (para proprietários e médicos após o preenchimento dos resultados).
 
-O código depende dessas três migrações. A interface ainda precisa de publicação na Vercel para que o módulo apareça em `https://psywrite.vercel.app`.
+O código depende dessas migrações. A interface permite excluir definitivamente fotos para economia de armazenamento assim que os exames estiverem devidamente lançados no sistema.
 
 `exam_definitions` tem modelos globais e modelos privados da clínica. `exam_results` é append-only, com vínculo clínica/paciente, exame, coleta, valores, anexo e revisão anterior. Gravações passam por `exam_write`, que valida o escopo, os tipos, a referência ao anexo e os conflitos de correção. RLS e `has_clinic_role` mantêm a proteção de MFA já existente. Secretárias continuam com seu acesso anterior aos anexos, mas não acessam resultados estruturados.
 

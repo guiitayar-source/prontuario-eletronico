@@ -19,6 +19,7 @@ O banco protege SELECT, gravações por RPC e Storage com o nível da sessão (`
 | Cadastro e agenda | Sim | Sim | Sim |
 | Receber, visualizar e classificar anexos | Sim | Sim | Sim |
 | Arquivar/restaurar anexos | Sim | Sim | Não |
+| Excluir definitivamente anexos | Sim (qualquer anexo) | Sim (após exames preenchidos) | Não |
 | Evoluções, adendos, diagnósticos, medicamentos, alergias | Sim | Sim | Não |
 | Documentos clínicos, PDF, importação e exportação FHIR | Sim | Sim | Não |
 | Consultar auditoria | Sim | Sim | Não |
@@ -30,7 +31,11 @@ Anexos podem conter informação clínica: o acesso da secretária a eles é uma
 
 ## Retenção proposta
 
-- Nenhuma exclusão física de pacientes, consultas, documentos ou anexos pelo aplicativo. Anexos são arquivados e recuperáveis; arquivos aceitos não podem ser removidos diretamente por usuários do aplicativo. Envios ainda não confirmados podem ser descartados.
+- Nenhuma exclusão física de pacientes, consultas ou documentos pelo aplicativo.
+- Anexos são prioritariamente arquivados e recuperáveis. Para gestão e economia de espaço no banco e no Storage:
+  - O **administrador/proprietário** pode excluir definitivamente qualquer anexo (ex.: fotos de teste ou arquivos dispensáveis).
+  - O **médico** pode excluir definitivamente anexos de exames uma vez que os resultados clínicos referentes à foto já estiverem devidamente preenchidos e salvos no prontuário.
+  - A exclusão física remove o registro da tabela `attachments`, remove o arquivo do bucket de Storage, atualiza a referência em `exam_results` com preservação integral de todos os valores e proveniência do exame, e gera registro auditado em `audit_events`.
 - Importações desfeitas ficam retiradas do histórico ativo e mantêm rastreabilidade. Prévia não confirmada é temporária e não constitui prontuário incorporado.
 - Referência inicial: guarda mínima de 20 anos a partir do último registro, com revisão pelo responsável antes de qualquer eliminação. Não há expurgo automático nem autorização automática ao completar o prazo. Solicitações legais, litígios e outras obrigações podem impedir descarte.
 - A política de auditoria proposta acompanha a retenção do prontuário associado. O sistema ainda não executa expurgo automático de eventos.
