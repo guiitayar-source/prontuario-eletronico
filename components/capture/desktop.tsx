@@ -105,8 +105,8 @@ export default function Attachments({
       try {
         const result = await api(`list&patientId=${patient.id}`);
         if (active) setFiles(result.attachments);
-      } catch (e) {
-        if (active) setError((e as Error).message);
+      } catch {
+        /* Transient background poll glitches should not disrupt the user interface */
       }
       if (active) timer = setTimeout(poll, 4000);
     }
@@ -115,7 +115,7 @@ export default function Attachments({
       active = false;
       clearTimeout(timer);
     };
-  }, []);
+  }, [patient.id]);
   useEffect(() => {
     if (!pair) return;
     let active = true;
@@ -130,7 +130,6 @@ export default function Attachments({
       } catch (e) {
         if (active) {
           setConnected(false);
-          setError((e as Error).message);
           if (e instanceof ApiError && e.status === 410) {
             setPair(null);
             setRequest(null);
@@ -173,7 +172,7 @@ export default function Attachments({
     };
   }, [pair]);
   useEffect(() => {
-    if (!preview) return;
+    if (!preview || !preview.url.startsWith('blob:')) return;
     return () => URL.revokeObjectURL(preview.url);
   }, [preview]);
   useEffect(() => {
@@ -427,6 +426,7 @@ export default function Attachments({
   }
   async function open(file: Received) {
     setBusy(true);
+    setError('');
     try {
       const ticket = await apiFetch(
         `/api/capture?action=file&id=${file.id}&patientId=${patient.id}`,
@@ -436,16 +436,18 @@ export default function Attachments({
       );
       if (!ticket.ok)
         throw new Error('Não foi possível autorizar a abertura do arquivo.');
-      const { url } = (await ticket.json()) as { url: string };
-      const response = await fetch(url);
-      if (
-        !response.ok ||
-        response.headers.get('content-type')?.split(';')[0] !== file.mime
-      )
-        throw new Error(
-          'Não foi possível abrir o arquivo. Verifique o acesso e tente novamente.',
-        );
-      setPreview({ file, url: URL.createObjectURL(await response.blob()) });
+      const { url: remoteUrl } = (await ticket.json()) as { url?: string };
+      if (!remoteUrl) throw new Error('Endereço do anexo indisponível.');
+      let displayUrl = remoteUrl;
+      try {
+        const response = await fetch(remoteUrl, { cache: 'no-store' });
+        if (response.ok) {
+          displayUrl = URL.createObjectURL(await response.blob());
+        }
+      } catch {
+        displayUrl = remoteUrl;
+      }
+      setPreview({ file, url: displayUrl });
     } catch (e) {
       setError((e as Error).message);
     } finally {

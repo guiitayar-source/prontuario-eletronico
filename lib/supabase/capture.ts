@@ -25,7 +25,7 @@ export const capture = handle(async (request, ctx) => {
     }
     if (action === 'file') {
       const record = await command('file', { id: url.searchParams.get('id'), patientId: url.searchParams.get('patientId') });
-      const signed = check(await bucket.createSignedUrl(record.storage_path, 60));
+      const signed = check(await bucket.createSignedUrl(record.storage_path, 3600));
       return json({ url: signed.signedUrl, mime: record.mime, name: record.name });
     }
     if (action === 'pair' || action === 'mobile') return json(normalize(await command(action, { id: url.searchParams.get('id') })));
