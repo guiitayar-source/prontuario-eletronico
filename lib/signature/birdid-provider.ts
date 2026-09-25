@@ -209,7 +209,7 @@ export class BirdIdProvider implements DigitalSignatureProvider {
     }
 
     const data = (await response.json()) as BirdIdDiscoveryResponse;
-    if (data.status && data.status !== 'S') {
+    if (data.status && !['S', 'success', 'OK'].includes(data.status)) {
       throw new HttpError(
         422,
         `Bird ID retornou status de erro ao buscar certificados: ${
@@ -285,32 +285,49 @@ export class BirdIdProvider implements DigitalSignatureProvider {
       );
     }
 
-    const data = (await response.json()) as BirdIdSignatureResponse;
-    if (data.status && data.status !== 'S') {
-      throw new HttpError(
-        422,
-        `Bird ID retornou erro na assinatura: ${
-          data.error_description || data.error || JSON.stringify(data)
-        }`
-      );
-    }
+    const data = (await response.json()) as BirdIdSignatureResponse & {
+      message?: string;
+      detail?: { code?: number; status?: string; message?: string };
+    };
 
-    const signatureContent =
+    const signatureRaw =
       data.signatures?.[0]?.raw_signature ||
       data.signatures?.[0]?.signature ||
       data.signature;
 
-    if (!signatureContent) {
+    const isSuccess =
+      Boolean(signatureRaw) ||
+      data.status === 'S' ||
+      data.status === 'success' ||
+      data.detail?.status === 'SIGNED';
+
+    if (!isSuccess) {
+      throw new HttpError(
+        422,
+        `Bird ID retornou erro na assinatura: ${
+          data.error_description || data.error || data.message || JSON.stringify(data)
+        }`
+      );
+    }
+
+    if (!signatureRaw) {
       throw new HttpError(
         500,
         'Bird ID não retornou o conteúdo da assinatura CMS.'
       );
     }
 
+    // Se vier no formato PEM (ex: -----BEGIN PKCS7----- ... -----END PKCS7-----),
+    // remove os delimitadores PEM e espaços em branco para obter a string Base64 limpa
+    const cmsSignatureBase64 = signatureRaw
+      .replace(/-----[^-]+-----/g, '')
+      .replace(/\s+/g, '');
+
     return {
-      cmsSignatureBase64: signatureContent,
+      cmsSignatureBase64,
       algorithm: 'SHA256withRSA',
-      providerTransactionId: data.transaction_id || data.signatures?.[0]?.id || undefined,
+      providerTransactionId:
+        data.transaction_id || data.signatures?.[0]?.id || undefined,
     };
   }
 
