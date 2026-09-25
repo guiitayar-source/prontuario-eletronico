@@ -30,6 +30,24 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
       );
       if (!d) throw new HttpError(404, 'Documento não encontrado.');
       const doc = d as ClinicalDocument;
+
+      // If document is signed and storage path exists, serve official signed PDF
+      if (doc.status === 'SIGNED' && doc.signed_pdf_path) {
+        const bucket = db.storage.from('clinical-files');
+        const { data: fileData, error: fileErr } = await bucket.download(doc.signed_pdf_path);
+        if (!fileErr && fileData) {
+          const arrayBuf = await fileData.arrayBuffer();
+          return new Response(new Uint8Array(arrayBuf), {
+            headers: {
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': 'inline; filename="documento_assinado.pdf"',
+              'Cache-Control': 'private, no-store',
+              'X-Content-Type-Options': 'nosniff',
+            },
+          });
+        }
+      }
+
       if (doc.kind === 'Receita') {
         const patientData = check(
           await db
@@ -60,7 +78,7 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
       }
       let bytes;
       try {
-        bytes = await documentPdf(doc);
+        bytes = await documentPdf(doc, { isDraft: doc.status !== 'SIGNED' });
       } catch (e) {
         throw new HttpError(422, (e as Error).message);
       }
@@ -85,7 +103,7 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
       profile: check(
         await db
           .from('document_profiles')
-          .select('physician_name,physician_registration')
+          .select('physician_name,physician_registration,cpf')
           .eq('clinic_id', clinic)
           .eq('user_id', user)
           .maybeSingle(),

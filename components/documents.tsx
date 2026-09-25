@@ -7,8 +7,13 @@ import {
   type ClinicalDocument,
 } from '@/lib/document-fields';
 import type { Patient } from '@/lib/patient-fields';
-import { Sparkles, Trash2, Download } from 'lucide-react';
-type Profile = { physician_name: string; physician_registration: string };
+import { Sparkles, Trash2, Download, ShieldCheck, Key, Lock, CheckCircle2, AlertCircle } from 'lucide-react';
+import type { SignatureSessionData } from '@/lib/signature/types';
+type Profile = {
+  physician_name: string;
+  physician_registration: string;
+  cpf?: string | null;
+};
 type AiModel = {
   id: string;
   label: string;
@@ -27,14 +32,58 @@ export function useDocuments(patient: Patient, enabled = true) {
     [profile, setProfile] = useState<Profile>({
       physician_name: '',
       physician_registration: '',
+      cpf: null,
     }),
     [draft, setDraft] = useState<ClinicalDocument | null>(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [saved, setSaved] = useState(''),
-    [preview, setPreview] = useState('');
+    [preview, setPreview] = useState(''),
+    [signatureSession, setSignatureSession] = useState<SignatureSessionData | null>(null),
+    [signatureNotice, setSignatureNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null),
+    [signingDocId, setSigningDocId] = useState<string | null>(null);
   const previewRef = useRef(''),
     saving = useRef(false);
+
+  async function checkSignatureSession() {
+    try {
+      const r = await apiFetch('/api/digital-signature/session');
+      if (r.ok) {
+        const data = (await r.json()) as { active: boolean; session: SignatureSessionData | null };
+        setSignatureSession(data.active ? data.session : null);
+      }
+    } catch {
+      // Ignore background check failure
+    }
+  }
+
+  async function connectBirdId() {
+    try {
+      setError('');
+      const r = await apiFetch('/api/digital-signature/birdid/authorize');
+      const data = (await r.json()) as { authorizationUrl?: string; error?: string };
+      if (!r.ok) throw new Error(data.error || 'Falha ao iniciar autenticação Bird ID');
+      if (data.authorizationUrl) {
+        window.location.href = data.authorizationUrl;
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function disconnectBirdId() {
+    try {
+      await apiFetch('/api/digital-signature/session', { method: 'DELETE' });
+      setSignatureSession(null);
+      setSignatureNotice({
+        type: 'success',
+        message: 'Sessão Bird ID desconectada.',
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   async function load() {
     const r = await apiFetch(
       '/api/documents?patientId=' + encodeURIComponent(patient.id),
@@ -48,6 +97,32 @@ export function useDocuments(patient: Patient, enabled = true) {
     setRows(data.documents);
     if (data.profile) setProfile(data.profile);
   }
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const sigStatus = params.get('signature_status');
+      const sigError = params.get('signature_error');
+      if (sigStatus === 'connected') {
+        queueMicrotask(() => {
+          setSignatureNotice({
+            type: 'success',
+            message: '✓ Certificado digital Bird ID conectado com sucesso para esta sessão!',
+          });
+        });
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (sigError) {
+        queueMicrotask(() => {
+          setSignatureNotice({
+            type: 'error',
+            message: `Falha na conexão Bird ID: ${sigError}`,
+          });
+        });
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+    void checkSignatureSession();
+  }, []);
+
   useEffect(() => {
     if (enabled) void load().catch((e) => setError(e.message));
     return () => {
@@ -160,6 +235,50 @@ export function useDocuments(patient: Patient, enabled = true) {
       setBusy(false);
     }
   }
+  async function sign(documentId: string) {
+    if (!signatureSession) {
+      setError('Conecte sua conta Bird ID antes de assinar o documento.');
+      return false;
+    }
+    let currentDoc = draft;
+    if (dirty || currentDoc?.version === 0) {
+      currentDoc = await save();
+      if (!currentDoc) return false;
+    }
+    setBusy(true);
+    setSigningDocId(documentId);
+    setError('');
+    try {
+      const res = await apiFetch('/api/digital-signature/sign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Signature-Action': '1',
+        },
+        body: JSON.stringify({ documentId }),
+      });
+      const data = (await res.json()) as { error?: string; signedPdfPath?: string };
+      if (!res.ok) throw new Error(data.error || 'Falha ao assinar documento');
+
+      setSignatureNotice({
+        type: 'success',
+        message: '✓ Documento assinado digitalmente com sucesso (ICP-Brasil)!',
+      });
+      await load();
+      if (draft && draft.id === documentId) {
+        setDraft({ ...draft, status: 'SIGNED', signed_pdf_path: data.signedPdfPath });
+        await pdf();
+      }
+      return true;
+    } catch (e) {
+      setError((e as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+      setSigningDocId(null);
+    }
+  }
+
   return {
     rows,
     draft,
@@ -171,6 +290,12 @@ export function useDocuments(patient: Patient, enabled = true) {
     busy,
     dirty,
     preview,
+    signatureSession,
+    signatureNotice,
+    signingDocId,
+    connectBirdId,
+    disconnectBirdId,
+    sign,
     load,
     open,
     close,
@@ -203,15 +328,34 @@ export function DocumentHistory({
       )}
       {docs.rows.map((d) => (
         <div className="consultation-history-link" key={d.id}>
-          <strong>{d.kind}</strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <strong>{d.kind}</strong>
+            {d.status === 'SIGNED' ? (
+              <span style={{ backgroundColor: '#e6f4ea', color: '#137333', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <CheckCircle2 size={12} /> Assinado ICP-Brasil
+              </span>
+            ) : d.status === 'SIGNING' ? (
+              <span style={{ backgroundColor: '#fef7e0', color: '#b06000', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                ⏳ Assinando...
+              </span>
+            ) : d.status === 'SIGNATURE_FAILED' ? (
+              <span style={{ backgroundColor: '#fce8e6', color: '#c5221f', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <AlertCircle size={12} /> Falha na assinatura
+              </span>
+            ) : (
+              <span style={{ backgroundColor: '#f1f3f4', color: '#5f6368', fontSize: '11px', padding: '2px 8px', borderRadius: '12px' }}>
+                Rascunho
+              </span>
+            )}
+          </div>
           <span>
-            {(d.document_date ? d.document_date.split('-').reverse().join('/') : 'Sem data')} · Rascunho · versão{' '}
+            {(d.document_date ? d.document_date.split('-').reverse().join('/') : 'Sem data')} · versão{' '}
             {d.version}
             {d.consultation_id ? ' · Vinculado à consulta' : ''}
           </span>
           <div>
             <button className="text-button" onClick={() => onOpen(d)}>
-              Abrir
+              {d.status === 'SIGNED' ? 'Visualizar' : 'Abrir'}
             </button>{' '}
             ·{' '}
             <button className="text-button" onClick={() => onOpen(d, true)}>
@@ -736,31 +880,124 @@ function DocumentAiBox({
 export function DocumentEditor({ docs }: { docs: DocumentsController }) {
   const d = docs.draft;
   if (!d) return null;
+  const isSigned = d.status === 'SIGNED';
+
   function update(fields: Partial<ClinicalDocument>) {
+    if (isSigned) return;
     docs.setDraft({ ...d!, ...fields });
   }
+
   return (
     <>
       <h2 id="dialog-title">
-        {d.version ? 'Editar documento' : 'Novo documento'}
+        {isSigned
+          ? 'Documento assinado digitalmente'
+          : d.version
+            ? 'Editar documento'
+            : 'Novo documento'}
       </h2>
-      <p>
-        {d.version
-          ? 'Rascunho salvo no prontuário. Sem assinatura digital.'
-          : d.text
-            ? 'Texto inserido em um rascunho não salvo. Confira com o documento original antes de salvar.'
-            : 'Novo rascunho ainda não salvo. Sem assinatura digital.'}
-      </p>
+
+      {docs.signatureNotice && (
+        <output
+          style={{
+            display: 'block',
+            padding: '10px 14px',
+            marginBottom: '12px',
+            borderRadius: '6px',
+            fontSize: '13px',
+            backgroundColor:
+              docs.signatureNotice.type === 'success' ? '#e6f4ea' : '#fce8e6',
+            color:
+              docs.signatureNotice.type === 'success' ? '#137333' : '#c5221f',
+            border: `1px solid ${
+              docs.signatureNotice.type === 'success' ? '#ceead6' : '#fad2cf'
+            }`,
+          }}
+        >
+          {docs.signatureNotice.message}
+        </output>
+      )}
+
+      {isSigned ? (
+        <div
+          style={{
+            padding: '12px 16px',
+            backgroundColor: '#e6f4ea',
+            border: '1px solid #ceead6',
+            borderRadius: '6px',
+            marginBottom: '16px',
+            color: '#137333',
+            fontSize: '13px',
+          }}
+        >
+          <strong>✓ Assinado Digitalmente • ICP-Brasil (PAdES)</strong>
+          <p style={{ margin: '4px 0 0 0' }}>
+            Este documento possui assinatura digital válida e seu conteúdo é imutável. Para realizar alterações, duplique-o como um novo rascunho.
+          </p>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 14px',
+            backgroundColor: docs.signatureSession ? '#f0f7ff' : '#f8f9fa',
+            border: `1px solid ${docs.signatureSession ? '#c2e0ff' : '#dadce0'}`,
+            borderRadius: '6px',
+            marginBottom: '16px',
+            fontSize: '13px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {docs.signatureSession ? (
+              <ShieldCheck size={18} color="#0b66c2" />
+            ) : (
+              <Key size={18} color="#5f6368" />
+            )}
+            <span>
+              {docs.signatureSession ? (
+                <>
+                  <strong>Bird ID Conectado:</strong> {docs.signatureSession.cpf} · {docs.signatureSession.certificateAlias || docs.signatureSession.certificateSubject.slice(0, 40)}
+                </>
+              ) : (
+                'Certificado digital Bird ID não conectado nesta sessão.'
+              )}
+            </span>
+          </div>
+          {docs.signatureSession ? (
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => void docs.disconnectBirdId()}
+              style={{ fontSize: '12px' }}
+            >
+              Desconectar
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void docs.connectBirdId()}
+              style={{ padding: '4px 12px', fontSize: '12px', height: '30px' }}
+            >
+              Conectar Bird ID
+            </button>
+          )}
+        </div>
+      )}
+
       {docs.error && (
         <div className="capture-error" role="alert">
           {docs.error} Seu texto foi mantido para revisão.
         </div>
       )}
-      <fieldset disabled={docs.busy} style={{ border: 0, padding: 0 }}>
+      <fieldset disabled={docs.busy || isSigned} style={{ border: 0, padding: 0 }}>
         <label htmlFor="doctype">Tipo de documento</label>
         <select
           id="doctype"
           value={d.kind}
+          disabled={isSigned}
           onChange={(e) => {
             const nextKind = e.target.value;
             if (!d.text.trim()) {
@@ -783,6 +1020,7 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
           <input
             type="date"
             value={d.document_date || ''}
+            readOnly={isSigned}
             onChange={(e) => update({ document_date: e.target.value })}
           />
         </label>
@@ -791,6 +1029,7 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
           <input
             maxLength={180}
             value={d.physician_name}
+            readOnly={isSigned}
             onChange={(e) => update({ physician_name: e.target.value })}
           />
         </label>
@@ -799,6 +1038,7 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
           <input
             maxLength={120}
             value={d.physician_registration}
+            readOnly={isSigned}
             onChange={(e) => update({ physician_registration: e.target.value })}
           />
         </label>
@@ -807,21 +1047,24 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
             <input
               type="checkbox"
               checked
+              disabled={isSigned}
               onChange={() => update({ consultation_id: null })}
             />{' '}
             Vinculado à consulta selecionada
           </label>
         )}
         <div className="document-tools">
-          <button
-            className="secondary"
-            onClick={() => {
-              if (!d.text || window.confirm('Substituir o texto pelo modelo?'))
-                update({ text: documentTemplate(d.kind) });
-            }}
-          >
-            Preparar modelo
-          </button>
+          {!isSigned && (
+            <button
+              className="secondary"
+              onClick={() => {
+                if (!d.text || window.confirm('Substituir o texto pelo modelo?'))
+                  update({ text: documentTemplate(d.kind) });
+              }}
+            >
+              Preparar modelo
+            </button>
+          )}
           {d.kind === 'Receita' && (
             <a
               href="/templates/Receituario-padrao.docx"
@@ -842,55 +1085,130 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
               Baixar modelo Word (.docx)
             </a>
           )}
-          <DocumentAiBox
-            key={`${d.id}:${d.kind}`}
-            document={d}
-            onApply={(text) => update({ text })}
-          />
+          {!isSigned && (
+            <DocumentAiBox
+              key={`${d.id}:${d.kind}`}
+              document={d}
+              onApply={(text) => update({ text })}
+            />
+          )}
         </div>
         <textarea
           className="document-editor"
           aria-label="Texto do documento"
           maxLength={100000}
           value={d.text}
+          readOnly={isSigned}
           onChange={(e) => update({ text: e.target.value })}
         />
       </fieldset>
       <div className="editor-actions">
-        <button
-          className="secondary"
-          disabled={docs.busy}
-          onClick={() => void docs.save()}
-        >
-          Salvar rascunho
-        </button>
-        <button
-          className="primary"
-          disabled={docs.busy || !d.text.trim()}
-          onClick={() => void docs.pdf()}
-        >
-          Prévia / PDF
-        </button>
+        {isSigned ? (
+          <>
+            <button
+              type="button"
+              className="primary"
+              disabled={docs.busy}
+              onClick={() => void docs.pdf()}
+            >
+              Visualizar / Baixar PDF Assinado
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={docs.busy}
+              onClick={() => docs.open(d, undefined, true)}
+            >
+              Duplicar como novo rascunho
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="secondary"
+              disabled={docs.busy}
+              onClick={() => void docs.save()}
+            >
+              Salvar rascunho
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={docs.busy || !d.text.trim()}
+              onClick={() => void docs.pdf()}
+            >
+              Prévia / PDF
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={docs.busy || docs.signingDocId === d.id || !d.text.trim()}
+              style={{
+                backgroundColor: docs.signatureSession ? '#0d652d' : undefined,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+              onClick={() => {
+                if (!docs.signatureSession) {
+                  void docs.connectBirdId();
+                  return;
+                }
+                const confirmed = window.confirm(
+                  'Deseja assinar digitalmente este documento com seu certificado Bird ID ICP-Brasil? Após a assinatura digital, o documento se tornará imutável e terá plena validade jurídica.'
+                );
+                if (confirmed) {
+                  void docs.sign(d.id);
+                }
+              }}
+            >
+              <Lock size={14} />
+              {docs.signingDocId === d.id
+                ? 'Assinando com Bird ID…'
+                : docs.signatureSession
+                  ? 'Finalizar e assinar (Bird ID)'
+                  : 'Conectar Bird ID para assinar'}
+            </button>
+          </>
+        )}
       </div>
-      <small role="status">
+      <output
+        style={{
+          display: 'block',
+          fontSize: '12px',
+          color: '#5f6368',
+          margin: '6px 0',
+        }}
+      >
         {docs.busy
           ? 'Processando…'
-          : docs.dirty
-            ? 'Alterações não salvas'
-            : d.version
-              ? 'Salvo'
-              : 'Novo rascunho'}
-      </small>
+          : isSigned
+            ? 'Documento assinado digitalmente (imutável)'
+            : docs.dirty
+              ? 'Alterações não salvas'
+              : d.version
+                ? 'Salvo'
+                : 'Novo rascunho'}
+      </output>
       {docs.preview && (
         <>
-          <p>Prévia da versão salva. Use o visualizador para imprimir.</p>
+          <p>
+            {isSigned
+              ? 'PDF oficial com assinatura digital ICP-Brasil.'
+              : 'Prévia da versão salva. Use o visualizador para imprimir.'}
+          </p>
           <iframe
             title="Prévia do documento em PDF"
             src={docs.preview}
             style={{ width: '100%', height: 440, border: '1px solid #ddd' }}
           />
-          <a className="secondary" href={docs.preview} download="documento.pdf">
-            Baixar PDF
+          <a
+            className="secondary"
+            href={docs.preview}
+            download={isSigned ? 'documento_assinado.pdf' : 'documento.pdf'}
+          >
+            Baixar PDF {isSigned ? 'Assinado' : ''}
           </a>
         </>
       )}

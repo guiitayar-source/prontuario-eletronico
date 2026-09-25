@@ -22,6 +22,8 @@ export type ClinicalDocument = {
   patient_address?: string;
   patient_city?: string;
   patient_state?: string;
+  status?: 'DRAFT' | 'FINALIZED' | 'SIGNING' | 'SIGNED' | 'SIGNATURE_FAILED' | 'SUPERSEDED';
+  signed_pdf_path?: string | null;
 };
 export function documentTemplate(kind: string) {
   return (

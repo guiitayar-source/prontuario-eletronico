@@ -568,7 +568,10 @@ async function prescriptionPdf(
     });
   }
 }
-export async function documentPdf(d: ClinicalDocument) {
+export async function documentPdf(
+  d: ClinicalDocument,
+  options?: { isDraft?: boolean }
+) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const font = await pdf.embedFont(
@@ -657,6 +660,10 @@ export async function documentPdf(d: ClinicalDocument) {
     d.physician_registration || 'Registro profissional não informado',
     10,
   );
+  const isDraft =
+    options?.isDraft !== false &&
+    d.status !== 'SIGNED' &&
+    d.status !== 'SIGNING';
   const pages = pdf.getPages();
   pages.forEach((p, i) => {
     p.drawLine({
@@ -665,12 +672,14 @@ export async function documentPdf(d: ClinicalDocument) {
       thickness: 0.5,
       color: rgb(0.8, 0.83, 0.8),
     });
-    p.drawText('RASCUNHO - SEM ASSINATURA - SEM VALIDADE CLÍNICA', {
-      x: 54,
-      y: 42,
-      font,
-      size: 8,
-    });
+    if (isDraft) {
+      p.drawText('RASCUNHO - SEM ASSINATURA - SEM VALIDADE CLÍNICA', {
+        x: 54,
+        y: 42,
+        font,
+        size: 8,
+      });
+    }
     p.drawText(`${i + 1} / ${pages.length}`, { x: 505, y: 42, font, size: 8 });
   });
   pdf.setTitle(d.kind);
