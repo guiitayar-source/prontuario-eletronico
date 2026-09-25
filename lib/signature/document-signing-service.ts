@@ -604,6 +604,160 @@ export class DocumentSigningService {
       throw error;
     }
   }
+
+  /**
+   * Signs a synthetic test document (no clinical data) to validate end-to-end PAdES signature with real Bird ID.
+   */
+  async signTestDocument(params: {
+    clinicId: string;
+    userId: string;
+  }): Promise<{
+    success: boolean;
+    verification: PadesVerificationResult;
+    signedPdfBase64: string;
+    storagePath: string;
+    certInfo: {
+      subject: string;
+      issuer: string;
+      cpf: string;
+      validFrom: string;
+      validTo: string;
+    };
+  }> {
+    const admin = adminClient();
+    const { data: sessionRecord } = await admin
+      .from('signature_sessions')
+      .select('*')
+      .eq('clinic_id', params.clinicId)
+      .eq('user_id', params.userId)
+      .eq('revoked', false)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!sessionRecord) {
+      throw new HttpError(
+        401,
+        'Nenhuma sessão ativa de certificado digital Bird ID. Conecte sua conta Bird ID para assinar.'
+      );
+    }
+
+    const accessToken = decryptToken(sessionRecord.access_token_encrypted);
+    const provider = getSignatureProvider();
+
+    // 1. Create a clean synthetic test PDF
+    const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595.28, 841.89]); // A4
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const testId = crypto.randomUUID();
+    const timestampStr = new Date().toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+    });
+
+    page.drawText('PROVA DE CONCEITO - ASSINATURA DIGITAL ICP-BRASIL', {
+      x: 50,
+      y: 780,
+      size: 16,
+      font: fontBold,
+      color: rgb(0.08, 0.2, 0.4),
+    });
+
+    page.drawText('Validação Técnica PAdES com Certificado em Nuvem Bird ID', {
+      x: 50,
+      y: 755,
+      size: 12,
+      font,
+      color: rgb(0.2, 0.2, 0.2),
+    });
+
+    const lines = [
+      `Data e Hora da Emissão: ${timestampStr} (Horário de Brasília)`,
+      `Identificador do Documento: ${testId}`,
+      `Titular do Certificado: ${sessionRecord.certificate_subject}`,
+      `CPF do Signatário: ${formatCpf(sessionRecord.cpf)}`,
+      `Emissor da AC: ${sessionRecord.certificate_issuer}`,
+      `Validade: ${new Date(sessionRecord.certificate_valid_from).toLocaleDateString('pt-BR')} até ${new Date(sessionRecord.certificate_valid_to).toLocaleDateString('pt-BR')}`,
+      '',
+      'Finalidade do Documento:',
+      'Este documento técnico sintético não contém quaisquer dados clínicos,',
+      'diagnósticos ou informações sensíveis de pacientes.',
+      'Sua emissão tem por objetivo exclusivo a validação da cadeia de confiança,',
+      'conformidade com a MP 2.200-2/2001 e verificação criptográfica do padrão PAdES.',
+    ];
+
+    let y = 700;
+    for (const line of lines) {
+      if (line.startsWith('Finalidade') || line.startsWith('Data') || line.startsWith('Titular')) {
+        page.drawText(line, { x: 50, y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+      } else {
+        page.drawText(line, { x: 50, y, size: 10, font, color: rgb(0.2, 0.2, 0.2) });
+      }
+      y -= 20;
+    }
+
+    const unsignedPdfBytes = await pdfDoc.save();
+
+    // 2. Prepare PAdES placeholder & compute hash
+    const prepared = await padesService.preparePdfForSignature(
+      Buffer.from(unsignedPdfBytes),
+      {
+        signerName: sessionRecord.certificate_subject.split(':')[0] || 'Médico Titular',
+        reason: 'Validação técnica de assinatura digital ICP-Brasil PAdES',
+        location: 'São Paulo, Brasil',
+      }
+    );
+
+    // 3. Request remote CMS signature from Bird ID
+    const signResult = await provider.signHash({
+      accessToken,
+      certificateAlias: sessionRecord.certificate_alias,
+      hashHex: prepared.digestHex,
+      documentAlias: 'Documento Teste ICP-Brasil',
+    });
+
+    // 4. Embed detached CMS signature into reserved ByteRange
+    const signedPdfBuffer = padesService.embedSignature(
+      prepared,
+      signResult.cmsSignatureBase64
+    );
+
+    // 5. Verify cryptographically
+    const verification = await padesService.verifyPadesSignature(signedPdfBuffer);
+    if (!verification.isValid) {
+      throw new Error(
+        `Falha na validação criptográfica do PDF assinado: ${
+          verification.error || 'Assinatura inválida'
+        }`
+      );
+    }
+
+    // 6. Upload to Storage
+    const storagePath = `${params.clinicId}/signatures/test_${testId}_signed.pdf`;
+    await admin.storage
+      .from('clinical-files')
+      .upload(storagePath, signedPdfBuffer, {
+        contentType: 'application/pdf',
+        upsert: true,
+      });
+
+    return {
+      success: true,
+      verification,
+      signedPdfBase64: signedPdfBuffer.toString('base64'),
+      storagePath,
+      certInfo: {
+        subject: sessionRecord.certificate_subject,
+        issuer: sessionRecord.certificate_issuer,
+        cpf: formatCpf(sessionRecord.cpf),
+        validFrom: sessionRecord.certificate_valid_from,
+        validTo: sessionRecord.certificate_valid_to,
+      },
+    };
+  }
 }
 
 export const documentSigningService = new DocumentSigningService();

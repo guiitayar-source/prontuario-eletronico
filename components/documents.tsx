@@ -84,6 +84,39 @@ export function useDocuments(patient: Patient, enabled = true) {
     }
   }
 
+  async function signTestDocument() {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await apiFetch('/api/digital-signature/test-sign', {
+        method: 'POST',
+      });
+      const data = (await res.json()) as {
+        success?: boolean;
+        error?: string;
+        storagePath?: string;
+        verification?: { isValid: boolean; signerName: string; signerCpf: string; algorithm: string };
+      };
+      if (!res.ok) throw new Error(data.error || 'Falha ao testar assinatura');
+
+      setSignatureNotice({
+        type: 'success',
+        message: `✓ Documento sintético assinado com sucesso! Titular: ${data.verification?.signerName} (${data.verification?.signerCpf}).`,
+      });
+
+      if (data.storagePath) {
+        window.open(
+          `/api/digital-signature/test-sign?path=${encodeURIComponent(data.storagePath)}`,
+          '_blank'
+        );
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function load() {
     const r = await apiFetch(
       '/api/documents?patientId=' + encodeURIComponent(patient.id),
@@ -295,6 +328,7 @@ export function useDocuments(patient: Patient, enabled = true) {
     signingDocId,
     connectBirdId,
     disconnectBirdId,
+    signTestDocument,
     sign,
     load,
     open,
@@ -966,14 +1000,26 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
             </span>
           </div>
           {docs.signatureSession ? (
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => void docs.disconnectBirdId()}
-              style={{ fontSize: '12px' }}
-            >
-              Desconectar
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void docs.signTestDocument()}
+                disabled={docs.busy}
+                style={{ padding: '3px 10px', fontSize: '12px', height: '28px' }}
+                title="Gera e assina um documento sintético sem dados de pacientes para validação técnica PAdES"
+              >
+                Testar Assinatura Real (Doc Teste)
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => void docs.disconnectBirdId()}
+                style={{ fontSize: '12px' }}
+              >
+                Desconectar
+              </button>
+            </div>
           ) : (
             <button
               type="button"

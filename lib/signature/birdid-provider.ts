@@ -1,3 +1,4 @@
+import { HttpError } from '@/lib/supabase/server';
 import { cleanCpf, parseX509Certificate } from './crypto-utils.ts';
 import type {
   CertificateInfo,
@@ -32,6 +33,11 @@ interface BirdIdSignatureResponse {
   signature?: string;
   signature_format?: string;
   transaction_id?: string;
+  signatures?: Array<{
+    id?: string;
+    raw_signature?: string;
+    signature?: string;
+  }>;
 }
 
 export class BirdIdProvider implements DigitalSignatureProvider {
@@ -45,14 +51,21 @@ export class BirdIdProvider implements DigitalSignatureProvider {
       process.env.BIRDID_BASE_URL ||
       'https://api.birdid.com.br/v0'
     ).replace(/\/+$/, '');
-    this.clientId = config?.clientId || process.env.BIRDID_CLIENT_ID || '';
-    this.clientSecret =
-      config?.clientSecret || process.env.BIRDID_CLIENT_SECRET || '';
+    this.clientId = (config?.clientId || process.env.BIRDID_CLIENT_ID || '').trim();
+    this.clientSecret = (
+      config?.clientSecret || process.env.BIRDID_CLIENT_SECRET || ''
+    ).trim();
 
-    if (!this.clientId || !this.clientSecret) {
-      // Allowed in development or mock mode, but warn
-      console.warn(
-        '[BirdIdProvider] BIRDID_CLIENT_ID ou BIRDID_CLIENT_SECRET não configurados. A API Bird ID real falhará se invocada.'
+    if (!this.clientId) {
+      throw new HttpError(
+        500,
+        'Integração Bird ID não configurada. BIRDID_CLIENT_ID ausente.'
+      );
+    }
+    if (!this.clientSecret) {
+      throw new HttpError(
+        500,
+        'Integração Bird ID não configurada. BIRDID_CLIENT_SECRET ausente.'
       );
     }
   }
@@ -65,8 +78,16 @@ export class BirdIdProvider implements DigitalSignatureProvider {
     lifetimeSeconds?: number;
   }): string {
     if (!this.clientId) {
-      throw new Error(
-        'BIRDID_CLIENT_ID não está configurado. Configure suas credenciais da Valid (BIRDID_CLIENT_ID e BIRDID_CLIENT_SECRET) no .env.local (ou defina BIRDID_USE_MOCK=true para ambiente de testes).'
+      throw new HttpError(
+        500,
+        'Integração Bird ID não configurada. BIRDID_CLIENT_ID ausente.'
+      );
+    }
+
+    if (!params.redirectUri) {
+      throw new HttpError(
+        500,
+        'Integração Bird ID não configurada. BIRDID_REDIRECT_URI ausente.'
       );
     }
 
@@ -81,7 +102,7 @@ export class BirdIdProvider implements DigitalSignatureProvider {
 
     if (params.loginHint) {
       const cpf = cleanCpf(params.loginHint);
-      if (cpf) {
+      if (cpf && cpf.length === 11) {
         url.searchParams.set('login_hint', cpf);
       }
     }
@@ -108,21 +129,23 @@ export class BirdIdProvider implements DigitalSignatureProvider {
       `${this.clientId}:${this.clientSecret}`
     ).toString('base64');
 
-    const formBody = new URLSearchParams({
+    const tokenPayload = {
       grant_type: 'authorization_code',
       code: params.code,
       redirect_uri: params.redirectUri,
       code_verifier: params.codeVerifier,
-    });
+      client_id: this.clientId,
+      client_secret: this.clientSecret,
+    };
 
     const response = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
         Authorization: `Basic ${basicAuth}`,
         Accept: 'application/json',
       },
-      body: formBody.toString(),
+      body: JSON.stringify(tokenPayload),
       signal: AbortSignal.timeout(15000),
     });
 
@@ -134,7 +157,8 @@ export class BirdIdProvider implements DigitalSignatureProvider {
       } catch {
         // Ignored
       }
-      throw new Error(
+      throw new HttpError(
+        response.status,
         `Falha ao trocar código de autorização Bird ID (${response.status}): ${
           errorJson.error_description || errorJson.error || errorText
         }`
@@ -142,6 +166,10 @@ export class BirdIdProvider implements DigitalSignatureProvider {
     }
 
     const data = (await response.json()) as BirdIdTokenResponse;
+    if (!data.access_token) {
+      throw new HttpError(500, 'Bird ID não retornou access_token válido.');
+    }
+
     return {
       accessToken: data.access_token,
       expiresIn: Number(data.expires_in) || 3600,
@@ -164,14 +192,16 @@ export class BirdIdProvider implements DigitalSignatureProvider {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(
+      throw new HttpError(
+        response.status,
         `Falha ao buscar certificados na Bird ID (${response.status}): ${errorText}`
       );
     }
 
     const data = (await response.json()) as BirdIdDiscoveryResponse;
     if (data.status && data.status !== 'S') {
-      throw new Error(
+      throw new HttpError(
+        422,
         `Bird ID retornou status de erro ao buscar certificados: ${
           data.error_description || data.error || JSON.stringify(data)
         }`
@@ -181,7 +211,10 @@ export class BirdIdProvider implements DigitalSignatureProvider {
     const rawList: Array<{ alias?: string; certificate?: string }> =
       data.certificates || [];
     if (!Array.isArray(rawList) || rawList.length === 0) {
-      throw new Error('Nenhum certificado ICP-Brasil encontrado na conta Bird ID.');
+      throw new HttpError(
+        422,
+        'Nenhum certificado ICP-Brasil encontrado na conta Bird ID.'
+      );
     }
 
     return rawList.map((item) => {
@@ -198,14 +231,21 @@ export class BirdIdProvider implements DigitalSignatureProvider {
   }): Promise<SignatureResult> {
     const signatureUrl = `${this.baseUrl}/oauth/signature`;
 
+    // Conforme documentação oficial Bird ID / Vault ID (POST /v0/oauth/signature):
+    // hashes: Array com { id, alias, hash, hash_algorithm, signature_format }
     // SHA-256 OID: 2.16.840.1.101.3.4.2.1
     const bodyPayload = {
       certificate_alias: params.certificateAlias,
-      hash: params.hashHex,
-      hash_algorithm: '2.16.840.1.101.3.4.2.1',
-      signature_format: 'CMS',
+      hashes: [
+        {
+          id: '1',
+          alias: params.documentAlias || 'Documento Prontuário',
+          hash: params.hashHex,
+          hash_algorithm: '2.16.840.1.101.3.4.2.1',
+          signature_format: 'CMS',
+        },
+      ],
       include_chain: true,
-      document_alias: params.documentAlias,
     };
 
     const response = await fetch(signatureUrl, {
@@ -216,7 +256,7 @@ export class BirdIdProvider implements DigitalSignatureProvider {
         Accept: 'application/json',
       },
       body: JSON.stringify(bodyPayload),
-      signal: AbortSignal.timeout(30000), // Signing might require push confirmation or HSM processing
+      signal: AbortSignal.timeout(60000), // Operação de assinatura HSM / push
     });
 
     if (!response.ok) {
@@ -227,7 +267,8 @@ export class BirdIdProvider implements DigitalSignatureProvider {
       } catch {
         // Ignored
       }
-      throw new Error(
+      throw new HttpError(
+        response.status,
         `Erro na assinatura remota Bird ID (${response.status}): ${
           errorJson.error_description || errorJson.error || errorText
         }`
@@ -236,21 +277,30 @@ export class BirdIdProvider implements DigitalSignatureProvider {
 
     const data = (await response.json()) as BirdIdSignatureResponse;
     if (data.status && data.status !== 'S') {
-      throw new Error(
+      throw new HttpError(
+        422,
         `Bird ID retornou erro na assinatura: ${
           data.error_description || data.error || JSON.stringify(data)
         }`
       );
     }
 
-    if (!data.signature) {
-      throw new Error('Bird ID não retornou o conteúdo da assinatura CMS.');
+    const signatureContent =
+      data.signatures?.[0]?.raw_signature ||
+      data.signatures?.[0]?.signature ||
+      data.signature;
+
+    if (!signatureContent) {
+      throw new HttpError(
+        500,
+        'Bird ID não retornou o conteúdo da assinatura CMS.'
+      );
     }
 
     return {
-      cmsSignatureBase64: data.signature,
+      cmsSignatureBase64: signatureContent,
       algorithm: 'SHA256withRSA',
-      providerTransactionId: data.transaction_id || undefined,
+      providerTransactionId: data.transaction_id || data.signatures?.[0]?.id || undefined,
     };
   }
 
@@ -267,7 +317,7 @@ export class BirdIdProvider implements DigitalSignatureProvider {
         signal: AbortSignal.timeout(5000),
       });
     } catch {
-      // Best-effort revocation
+      // Revogação best-effort
     }
   }
 }
