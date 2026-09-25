@@ -15,14 +15,23 @@ export function getSignatureProvider(): DigitalSignatureProvider {
     return customProvider;
   }
 
-  const useMock =
-    process.env.BIRDID_USE_MOCK === 'true' ||
-    process.env.NODE_ENV === 'test' ||
-    (!process.env.BIRDID_CLIENT_ID && process.env.NODE_ENV !== 'production');
-
-  if (useMock) {
+  if (process.env.BIRDID_USE_MOCK === 'true' || process.env.NODE_ENV === 'test') {
     return new MockBirdIdProvider();
   }
 
-  return new BirdIdProvider();
+  if (process.env.BIRDID_USE_MOCK === 'false') {
+    return new BirdIdProvider();
+  }
+
+  const hasCredentials = Boolean(
+    process.env.BIRDID_CLIENT_ID?.trim() &&
+    process.env.BIRDID_CLIENT_SECRET?.trim()
+  );
+
+  if (hasCredentials) {
+    return new BirdIdProvider();
+  }
+
+  // Fallback para MockBirdIdProvider se credenciais da Valid não estiverem configuradas
+  return new MockBirdIdProvider();
 }

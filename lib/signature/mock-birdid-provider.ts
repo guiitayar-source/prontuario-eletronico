@@ -1,6 +1,6 @@
 import * as pkijs from 'pkijs';
 import * as asn1js from 'asn1js';
-import { parseX509Certificate } from './crypto-utils.ts';
+import { cleanCpf, parseX509Certificate } from './crypto-utils.ts';
 import type {
   CertificateInfo,
   DigitalSignatureProvider,
@@ -15,7 +15,7 @@ export interface MockProviderOptions {
 }
 
 export class MockBirdIdProvider implements DigitalSignatureProvider {
-  private readonly mockCpf: string;
+  private mockCpf: string;
   private readonly doctorName: string;
   private readonly shouldFailSign: boolean;
   private readonly shouldFailTokenExchange: boolean;
@@ -119,7 +119,9 @@ export class MockBirdIdProvider implements DigitalSignatureProvider {
     lifetimeSeconds?: number;
   }): string {
     const url = new URL(params.redirectUri);
-    url.searchParams.set('code', `mock_code_${Date.now()}`);
+    const hintCpf = params.loginHint ? cleanCpf(params.loginHint) : null;
+    const cpfToUse = hintCpf && hintCpf.length === 11 ? hintCpf : this.mockCpf;
+    url.searchParams.set('code', `mock_code_${cpfToUse}_${Date.now()}`);
     url.searchParams.set('state', params.state);
     return url.toString();
   }
@@ -137,6 +139,15 @@ export class MockBirdIdProvider implements DigitalSignatureProvider {
     if (this.shouldFailTokenExchange) {
       throw new Error('Falha simulada na troca de código por token (Mock)');
     }
+
+    const match = params.code.match(/^mock_code_(\d{11})_/);
+    if (match && match[1] !== this.mockCpf) {
+      this.mockCpf = match[1];
+      this.cert = null;
+      this.certPem = null;
+      this.keyPair = null;
+    }
+
     return {
       accessToken: `mock_access_token_${Buffer.from(params.codeVerifier).toString('hex').slice(0, 16)}`,
       expiresIn: 3600,

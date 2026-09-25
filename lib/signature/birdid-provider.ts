@@ -64,6 +64,12 @@ export class BirdIdProvider implements DigitalSignatureProvider {
     loginHint?: string;
     lifetimeSeconds?: number;
   }): string {
+    if (!this.clientId) {
+      throw new Error(
+        'BIRDID_CLIENT_ID não está configurado. Configure suas credenciais da Valid (BIRDID_CLIENT_ID e BIRDID_CLIENT_SECRET) no .env.local (ou defina BIRDID_USE_MOCK=true para ambiente de testes).'
+      );
+    }
+
     const url = new URL(`${this.baseUrl}/oauth/authorize`);
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('client_id', this.clientId);
