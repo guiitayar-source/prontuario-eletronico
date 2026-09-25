@@ -488,7 +488,7 @@ export class DocumentSigningService {
       }
 
       // 10. Upload signed PDF to Storage
-      const storagePath = `signatures/${params.clinicId}/${params.documentId}_v${doc.version}_signed.pdf`;
+      const storagePath = `${params.clinicId}/signatures/${params.documentId}_v${doc.version}_signed.pdf`;
       const uploadRes = await admin.storage
         .from('clinical-files')
         .upload(storagePath, signedPdfBuffer, {

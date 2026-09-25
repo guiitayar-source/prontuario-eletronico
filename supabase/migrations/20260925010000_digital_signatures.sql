@@ -44,7 +44,7 @@ create table if not exists public.signature_sessions (
   clinic_id uuid not null references public.clinics(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   provider text not null default 'birdid',
-  encrypted_access_token text not null,
+  access_token_encrypted text not null,
   token_type text not null default 'Bearer',
   scope text not null default 'signature_session',
   cpf text not null,
@@ -53,27 +53,35 @@ create table if not exists public.signature_sessions (
   certificate_issuer text not null,
   certificate_valid_from timestamptz not null,
   certificate_valid_to timestamptz not null,
-  certificate_raw text not null,
+  certificate_raw text,
   expires_at timestamptz not null,
   revoked boolean not null default false,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (clinic_id, user_id, provider)
+  updated_at timestamptz not null default now()
 );
 
 create index if not exists signature_sessions_user_idx
   on public.signature_sessions(clinic_id, user_id);
 
+create unique index if not exists signature_sessions_active_uidx
+  on public.signature_sessions(clinic_id, user_id, provider)
+  where (revoked = false);
+
 -- 3. Tabela para controle temporário de State + PKCE
 create table if not exists public.signature_oauth_states (
-  state text primary key,
+  id uuid primary key default gen_random_uuid(),
   clinic_id uuid not null references public.clinics(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
-  code_verifier text not null,
+  provider text not null default 'birdid',
+  state_hash text not null unique,
+  code_verifier_encrypted text not null,
   redirect_uri text not null,
   expires_at timestamptz not null,
   created_at timestamptz not null default now()
 );
+
+create index if not exists signature_oauth_states_state_hash_idx
+  on public.signature_oauth_states(state_hash);
 
 create index if not exists signature_oauth_states_expiry_idx
   on public.signature_oauth_states(expires_at);
@@ -92,9 +100,9 @@ create table if not exists public.digital_signatures (
   certificate_serial text not null,
   certificate_fingerprint text not null,
   cpf_from_certificate text not null,
-  signature_algorithm text not null default 'RSA-SHA256',
+  signature_algorithm text not null default 'SHA256withRSA',
   digest_algorithm text not null default 'SHA-256',
-  signature_format text not null default 'PAdES / CMS-detached',
+  signature_format text not null default 'PAdES-B-B',
   signed_at timestamptz not null default now(),
   document_hash text not null,
   unsigned_pdf_hash text not null,
@@ -115,6 +123,7 @@ alter table public.signature_oauth_states enable row level security;
 alter table public.digital_signatures enable row level security;
 
 -- Apenas médicos/proprietários da clínica podem acessar suas sessões
+drop policy if exists signature_sessions_owner on public.signature_sessions;
 create policy signature_sessions_owner on public.signature_sessions
   for all to authenticated
   using (
@@ -126,6 +135,7 @@ create policy signature_sessions_owner on public.signature_sessions
     public.has_clinic_role(clinic_id, array['owner', 'doctor']::public.clinic_role[])
   );
 
+drop policy if exists signature_oauth_states_owner on public.signature_oauth_states;
 create policy signature_oauth_states_owner on public.signature_oauth_states
   for all to authenticated
   using (
@@ -137,12 +147,14 @@ create policy signature_oauth_states_owner on public.signature_oauth_states
     public.has_clinic_role(clinic_id, array['owner', 'doctor']::public.clinic_role[])
   );
 
+drop policy if exists digital_signatures_read on public.digital_signatures;
 create policy digital_signatures_read on public.digital_signatures
   for select to authenticated
   using (
     public.has_clinic_role(clinic_id, array['owner', 'doctor']::public.clinic_role[])
   );
 
+drop policy if exists digital_signatures_insert on public.digital_signatures;
 create policy digital_signatures_insert on public.digital_signatures
   for insert to authenticated
   with check (
@@ -153,3 +165,6 @@ create policy digital_signatures_insert on public.digital_signatures
 grant select, insert, update, delete on public.signature_sessions to authenticated;
 grant select, insert, update, delete on public.signature_oauth_states to authenticated;
 grant select, insert on public.digital_signatures to authenticated;
+
+-- Força recarga do cache do PostgREST
+notify pgrst, 'reload schema';
