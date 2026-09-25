@@ -6,6 +6,7 @@ import {
   boundedBody,
   writeGuard,
 } from './server.ts';
+import { adminClient } from './admin.ts';
 import { documentKinds, type ClinicalDocument } from '../document-fields.ts';
 import { documentPdf } from '../document-pdf.ts';
 export const documents = handle(async (request, { db, clinic, role, user }) => {
@@ -33,9 +34,21 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
 
       // If document is signed and storage path exists, serve official signed PDF
       if (doc.status === 'SIGNED' && doc.signed_pdf_path) {
+        let fileData = null;
         const bucket = db.storage.from('clinical-files');
-        const { data: fileData, error: fileErr } = await bucket.download(doc.signed_pdf_path);
-        if (!fileErr && fileData) {
+        const { data, error } = await bucket.download(doc.signed_pdf_path);
+        if (!error && data) {
+          fileData = data;
+        } else {
+          const { data: adminData } = await adminClient()
+            .storage.from('clinical-files')
+            .download(doc.signed_pdf_path);
+          if (adminData) {
+            fileData = adminData;
+          }
+        }
+
+        if (fileData) {
           const arrayBuf = await fileData.arrayBuffer();
           return new Response(new Uint8Array(arrayBuf), {
             headers: {

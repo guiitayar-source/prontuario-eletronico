@@ -25,6 +25,26 @@ export default function Home() {
     }
   }, [error]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const signatureStatus = params.get('signature_status');
+      const signatureError = params.get('signature_error');
+
+      if (signatureError) {
+        setError(signatureError);
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (signatureStatus === 'connected') {
+        const returnPatientId = sessionStorage.getItem('birdid_return_patient_id');
+        if (returnPatientId) {
+          sessionStorage.removeItem('birdid_return_patient_id');
+          void open(returnPatientId);
+        }
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }, []);
+
   async function open(id: string, appointment?: string) {
     try {
       setPatient(await fetchPatient(id));

@@ -99,7 +99,16 @@ export default function ClinicalRecord({
   const medical = ['owner', 'doctor'].includes(useAccess().role);
   const docs = useDocuments(patient, medical);
   const clinicalContext = useClinicalContext(patient.id, medical);
-  const [tab, setTab] = useState(medical ? 'consulta' : 'cadastro'),
+  const [tab, setTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedTab = sessionStorage.getItem('birdid_return_tab');
+      if (savedTab) {
+        sessionStorage.removeItem('birdid_return_tab');
+        return savedTab;
+      }
+    }
+    return medical ? 'consulta' : 'cadastro';
+  }),
     [rows, setRows] = useState<RecordEntry[]>([]),
     [current, setCurrent] = useState<RecordEntry | null>(null),
     [text, setText] = useState(''),

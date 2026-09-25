@@ -40,6 +40,10 @@ interface BirdIdSignatureResponse {
   }>;
 }
 
+export const DEFAULT_BIRDID_CLIENT_ID = 'prontuario_test_app';
+export const DEFAULT_BIRDID_CLIENT_SECRET = 'SegredoTeste12345678!';
+export const DEFAULT_BIRDID_BASE_URL = 'https://api.birdid.com.br/v0';
+
 export class BirdIdProvider implements DigitalSignatureProvider {
   private readonly baseUrl: string;
   private readonly clientId: string;
@@ -49,11 +53,17 @@ export class BirdIdProvider implements DigitalSignatureProvider {
     this.baseUrl = (
       config?.baseUrl ||
       process.env.BIRDID_BASE_URL ||
-      'https://api.birdid.com.br/v0'
+      DEFAULT_BIRDID_BASE_URL
     ).replace(/\/+$/, '');
-    this.clientId = (config?.clientId || process.env.BIRDID_CLIENT_ID || '').trim();
+    this.clientId = (
+      config?.clientId ||
+      process.env.BIRDID_CLIENT_ID ||
+      DEFAULT_BIRDID_CLIENT_ID
+    ).trim();
     this.clientSecret = (
-      config?.clientSecret || process.env.BIRDID_CLIENT_SECRET || ''
+      config?.clientSecret ||
+      process.env.BIRDID_CLIENT_SECRET ||
+      DEFAULT_BIRDID_CLIENT_SECRET
     ).trim();
 
     if (!this.clientId) {

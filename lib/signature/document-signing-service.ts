@@ -177,13 +177,24 @@ export class DocumentSigningService {
           `O CPF do certificado digital (${formatCpf(certCpf)}) não coincide com o CPF cadastrado para o médico (${formatCpf(registeredCpf)}). Por segurança, a sessão foi cancelada.`
         );
       }
-    } else {
+    } else if (profile) {
       // First time setting CPF on profile: lock it to the verified certificate's CPF
       await admin
         .from('document_profiles')
         .update({ cpf: certCpf })
         .eq('clinic_id', params.clinicId)
         .eq('user_id', params.userId);
+    } else {
+      // Create initial profile locked to verified certificate
+      await admin
+        .from('document_profiles')
+        .insert({
+          clinic_id: params.clinicId,
+          user_id: params.userId,
+          physician_name: cert.commonName || '',
+          physician_registration: '',
+          cpf: certCpf,
+        });
     }
 
     // 4. Store encrypted session

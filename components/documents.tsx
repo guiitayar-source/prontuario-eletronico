@@ -60,6 +60,10 @@ export function useDocuments(patient: Patient, enabled = true) {
   async function connectBirdId() {
     try {
       setError('');
+      if (typeof window !== 'undefined' && patient?.id) {
+        sessionStorage.setItem('birdid_return_patient_id', patient.id);
+        sessionStorage.setItem('birdid_return_tab', 'documentos');
+      }
       const r = await apiFetch('/api/digital-signature/birdid/authorize');
       const data = (await r.json()) as { authorizationUrl?: string; error?: string };
       if (!r.ok) throw new Error(data.error || 'Falha ao iniciar autenticação Bird ID');
@@ -1001,16 +1005,6 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
           </div>
           {docs.signatureSession ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => void docs.signTestDocument()}
-                disabled={docs.busy}
-                style={{ padding: '3px 10px', fontSize: '12px', height: '28px' }}
-                title="Gera e assina um documento sintético sem dados de pacientes para validação técnica PAdES"
-              >
-                Testar Assinatura Real (Doc Teste)
-              </button>
               <button
                 type="button"
                 className="text-button"

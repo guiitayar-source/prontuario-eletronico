@@ -1,5 +1,10 @@
 import { HttpError } from '@/lib/supabase/server';
-import { BirdIdProvider } from './birdid-provider.ts';
+import {
+  BirdIdProvider,
+  DEFAULT_BIRDID_BASE_URL,
+  DEFAULT_BIRDID_CLIENT_ID,
+  DEFAULT_BIRDID_CLIENT_SECRET,
+} from './birdid-provider.ts';
 import { MockBirdIdProvider } from './mock-birdid-provider.ts';
 import type { DigitalSignatureProvider } from './types.ts';
 
@@ -25,19 +30,25 @@ export function getSignatureProvider(): DigitalSignatureProvider {
   }
 
   if (providerType === 'birdid') {
-    const missing: string[] = [];
-    if (!process.env.BIRDID_CLIENT_ID?.trim()) missing.push('BIRDID_CLIENT_ID');
-    if (!process.env.BIRDID_CLIENT_SECRET?.trim()) missing.push('BIRDID_CLIENT_SECRET');
-    if (!process.env.BIRDID_REDIRECT_URI?.trim()) missing.push('BIRDID_REDIRECT_URI');
+    const clientId =
+      process.env.BIRDID_CLIENT_ID?.trim() || DEFAULT_BIRDID_CLIENT_ID;
+    const clientSecret =
+      process.env.BIRDID_CLIENT_SECRET?.trim() || DEFAULT_BIRDID_CLIENT_SECRET;
+    const baseUrl =
+      process.env.BIRDID_BASE_URL?.trim() || DEFAULT_BIRDID_BASE_URL;
 
-    if (missing.length > 0) {
+    if (!clientId || !clientSecret) {
       throw new HttpError(
         500,
-        `Integração Bird ID não configurada. ${missing.join(', ')} ausente(s).`
+        'Integração Bird ID não configurada. BIRDID_CLIENT_ID ou BIRDID_CLIENT_SECRET ausente.'
       );
     }
 
-    return new BirdIdProvider();
+    return new BirdIdProvider({
+      clientId,
+      clientSecret,
+      baseUrl,
+    });
   }
 
   throw new HttpError(
