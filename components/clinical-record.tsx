@@ -160,7 +160,13 @@ export default function ClinicalRecord({
     setCurrent(r);
     blocked.current = false;
     setError('');
-    setStatus(r.status === 'SIGNED' ? 'Assinada digitalmente' : 'Salvo');
+    setStatus(
+      r.status === 'SIGNED' || r.signed_at
+        ? 'Assinada digitalmente'
+        : r.finalized_at
+          ? 'Finalizada sem assinatura'
+          : 'Salvo',
+    );
     setAddendum('');
   }
   async function load() {
@@ -198,11 +204,20 @@ export default function ClinicalRecord({
           if (active) {
             setRows(result.consultations);
             setStatus('Escolha uma consulta ou inicie uma nova.');
+            const returnEvoId =
+              typeof window !== 'undefined'
+                ? sessionStorage.getItem('birdid_return_evolution_id')
+                : null;
+            if (returnEvoId) {
+              sessionStorage.removeItem('birdid_return_evolution_id');
+            }
             const match = result.consultations.find(
               (r: RecordEntry & { appointment_id?: string }) =>
-                appointmentId
-                  ? r.appointment_id === appointmentId
-                  : !r.finalized_at && r.status !== 'SIGNED',
+                returnEvoId
+                  ? r.id === returnEvoId
+                  : appointmentId
+                    ? r.appointment_id === appointmentId
+                    : !r.finalized_at && r.status !== 'SIGNED',
             );
             if (match) choose(match);
           }
@@ -262,7 +277,8 @@ export default function ClinicalRecord({
     setSigning(true);
     setStatus('Assinando evolução com certificado Bird ID…');
     try {
-      if (dirty) {
+      // Salva rascunho apenas se a consulta ainda não estiver finalizada
+      if (dirty && !current.finalized_at) {
         await persist(false);
       }
       const r = await apiFetch('/api/digital-signature/sign-evolution', {
@@ -295,12 +311,13 @@ export default function ClinicalRecord({
   async function handleConnectAndSign() {
     if (!current) return;
     try {
-      if (dirty) {
+      if (dirty && !current.finalized_at) {
         await persist(false);
       }
       if (typeof window !== 'undefined' && patient?.id) {
         sessionStorage.setItem('birdid_return_patient_id', patient.id);
         sessionStorage.setItem('birdid_return_tab', 'consulta');
+        sessionStorage.setItem('birdid_return_evolution_id', current.id);
       }
       const r = await apiFetch('/api/digital-signature/birdid/authorize');
       const data = (await r.json()) as {
@@ -398,6 +415,7 @@ export default function ClinicalRecord({
     current?.status === 'SIGNED' ||
     !!current?.signed_at ||
     !!current?.current_signature_id;
+  const isFinalizedUnsigned = !!current?.finalized_at && !isSigned;
   const finalized = !!current?.finalized_at || isSigned;
   const ready = !!current;
   const visitDate = new Date(
@@ -598,7 +616,7 @@ export default function ClinicalRecord({
                               {r.status === 'SIGNED' || r.signed_at
                                 ? '✓ Assinada digitalmente'
                                 : r.finalized_at
-                                  ? 'Consulta finalizada'
+                                  ? 'Finalizada (não assinada)'
                                   : 'Em atendimento'}
                             </strong>
                             <span>
@@ -634,7 +652,13 @@ export default function ClinicalRecord({
                         Nova consulta
                       </button>
                       <span className="draft-chip">
-                        {isSigned ? '✓ Assinada (ICP-Brasil)' : finalized ? 'Finalizada' : 'Rascunho'}
+                        {isSigned
+                          ? '✓ Assinada (ICP-Brasil)'
+                          : isFinalizedUnsigned
+                            ? 'Finalizada (não assinada)'
+                            : finalized
+                              ? 'Finalizada'
+                              : 'Rascunho'}
                       </span>
                     </div>
                     <div className="editor-toolbar">
@@ -724,6 +748,48 @@ export default function ClinicalRecord({
                           </button>
                         </div>
                       </div>
+                    ) : isFinalizedUnsigned ? (
+                      <div className="unsigned-finalized-banner">
+                        <div className="unsigned-finalized-header">
+                          <div className="unsigned-badge-icon">
+                            <KeyRound size={20} />
+                          </div>
+                          <div className="unsigned-badge-text">
+                            <strong>Consulta finalizada sem assinatura digital</strong>
+                            <p>
+                              Finalizada em {current?.finalized_at && date(current.finalized_at)}.
+                              Você pode assinar este registro eletrônico agora com seu certificado digital ICP-Brasil.
+                            </p>
+                          </div>
+                          {signatureSession ? (
+                            <button
+                              type="button"
+                              className="primary signature-btn compact-btn"
+                              disabled={busy || signing}
+                              onClick={() => void handleSignEvolution()}
+                            >
+                              {signing ? (
+                                <>
+                                  <Loader2 size={14} className="spin" /> Assinando…
+                                </>
+                              ) : (
+                                <>
+                                  <ShieldCheck size={15} /> Assinar agora (ICP-Brasil)
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="primary signature-connect-btn compact-btn"
+                              disabled={busy || signing}
+                              onClick={() => void handleConnectAndSign()}
+                            >
+                              <KeyRound size={15} /> Conectar Bird ID para assinar
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     ) : finalized ? (
                       <div className="finalized-info">
                         <LockKeyhole size={15} /> Finalizada em{' '}
@@ -778,6 +844,44 @@ export default function ClinicalRecord({
                             Registrar adendo
                           </button>
                         </>
+                      ) : isFinalizedUnsigned ? (
+                        <div className="editor-action-buttons">
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => setModal('reiniciar')}
+                          >
+                            Registrar adendo
+                          </button>
+
+                          {signatureSession ? (
+                            <button
+                              type="button"
+                              className="primary signature-btn"
+                              disabled={busy || signing}
+                              onClick={() => void handleSignEvolution()}
+                            >
+                              {signing ? (
+                                <>
+                                  <Loader2 size={16} className="spin" /> Assinando ICP-Brasil…
+                                </>
+                              ) : (
+                                <>
+                                  <ShieldCheck size={17} /> Assinar evolução (ICP-Brasil)
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="primary signature-connect-btn"
+                              disabled={busy || signing}
+                              onClick={() => void handleConnectAndSign()}
+                            >
+                              <KeyRound size={17} /> Conectar Bird ID para assinar
+                            </button>
+                          )}
+                        </div>
                       ) : finalized ? (
                         <button
                           type="button"

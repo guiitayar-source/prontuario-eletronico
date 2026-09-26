@@ -97,10 +97,19 @@ export class EvolutionSigningService {
     }
 
     if (evoRecord.author_id !== params.userId) {
-      throw new HttpError(
-        403,
-        'Apenas o médico autor da evolução pode assiná-la digitalmente.'
-      );
+      const { data: member } = await admin
+        .from('clinic_members')
+        .select('role')
+        .eq('clinic_id', params.clinicId)
+        .eq('user_id', params.userId)
+        .maybeSingle();
+
+      if (!member || (member.role !== 'owner' && evoRecord.author_id !== params.userId)) {
+        throw new HttpError(
+          403,
+          'Apenas o médico autor da evolução ou o responsável pela clínica pode assinar este registro.'
+        );
+      }
     }
 
     const normalizedText = normalizeClinicalText(evoRecord.text || '');
@@ -271,24 +280,26 @@ export class EvolutionSigningService {
         );
       }
 
-      // 10. Se houver agendamento vinculado, marcar como concluído
+      // 10. Se houver agendamento vinculado, marcar como concluído se ainda não estiver
       if (evoRecord.appointment_id) {
         const { data: appt } = await admin
           .from('appointments')
-          .select('version')
+          .select('version, status')
           .eq('clinic_id', params.clinicId)
           .eq('id', evoRecord.appointment_id)
           .maybeSingle();
 
-        await admin
-          .from('appointments')
-          .update({
-            status: 'completed',
-            version: (appt?.version ?? 0) + 1,
-            updated_at: nowIso,
-          })
-          .eq('clinic_id', params.clinicId)
-          .eq('id', evoRecord.appointment_id);
+        if (appt && appt.status !== 'completed') {
+          await admin
+            .from('appointments')
+            .update({
+              status: 'completed',
+              version: (appt.version ?? 0) + 1,
+              updated_at: nowIso,
+            })
+            .eq('clinic_id', params.clinicId)
+            .eq('id', evoRecord.appointment_id);
+        }
       }
 
       // 11. Auditoria de sucesso
@@ -320,10 +331,12 @@ export class EvolutionSigningService {
         verification,
       };
     } catch (err) {
-      // Reverter status para SIGNATURE_FAILED caso estivesse em SIGNING
+      // Reverter status para o anterior (FINALIZED ou SIGNATURE_FAILED) caso estivesse em SIGNING
       await admin
         .from('consultations')
-        .update({ status: 'SIGNATURE_FAILED' })
+        .update({
+          status: evoRecord.finalized_at ? 'FINALIZED' : 'SIGNATURE_FAILED',
+        })
         .eq('id', evoRecord.id)
         .eq('status', 'SIGNING');
 
