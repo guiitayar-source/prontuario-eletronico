@@ -31,6 +31,8 @@ export interface PreparePdfOptions {
   doctorCrm?: string;
   signatureLength?: number;
   drawVisualBox?: boolean;
+  boxX?: number;
+  boxY?: number;
 }
 
 export class PadesService {
@@ -56,9 +58,14 @@ export class PadesService {
 
         const boxWidth = 320;
         const boxHeight = 65;
-        const margin = 36;
-        const boxX = lastPage.getWidth() - boxWidth - margin;
-        const boxY = margin;
+        const rightMargin = 51.1;
+        const boxX =
+          options.boxX !== undefined
+            ? options.boxX
+            : lastPage.getWidth() - boxWidth - rightMargin;
+        // Posição vertical ajustada para y = 72 para ficar confortavelmente acima
+        // do rodapé com o endereço da clínica (y: 40 e 28) e abaixo das caixas da 2ª via
+        const boxY = options.boxY !== undefined ? options.boxY : 72;
 
         // Background box
         lastPage.drawRectangle({
@@ -98,7 +105,11 @@ export class PadesService {
         });
 
         if (options.doctorCrm) {
-          lastPage.drawText(`Registro: CRM ${options.doctorCrm}`, {
+          const crmClean = options.doctorCrm.trim();
+          const crmLabel = crmClean.toUpperCase().startsWith('CRM')
+            ? crmClean
+            : `CRM ${crmClean}`;
+          lastPage.drawText(`Registro: ${crmLabel}`, {
             x: boxX + 8,
             y: boxY + boxHeight - 39,
             size: 7.5,
