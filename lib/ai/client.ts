@@ -50,7 +50,7 @@ export async function requestOpenAiText({
         instructions,
         input: prompt,
         max_output_tokens: maxOutputTokens,
-        ...(model.includes('gpt-5.6') ? { reasoning: { effort: 'low' } } : {}),
+        ...(model === 'gpt-6-luna' ? { reasoning: { effort: 'medium' } } : {}),
       }),
       signal: AbortSignal.timeout(90_000),
     });
@@ -259,6 +259,7 @@ export async function requestOpenAiFile({
           },
         },
         max_output_tokens: maxOutputTokens,
+        ...(model === 'gpt-6-luna' ? { reasoning: { effort: 'medium' } } : {}),
       }),
       signal: AbortSignal.timeout(90_000),
     });

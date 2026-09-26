@@ -17,6 +17,8 @@ assert.match(status.API_URL, /^http:\/\/127\.0\.0\.1:/);
 process.env.NEXT_PUBLIC_SUPABASE_URL = status.API_URL;
 process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = status.PUBLISHABLE_KEY;
 process.env.OPENAI_API_KEY = 'test-key';
+delete process.env.OPENAI_DOCUMENT_MODEL;
+delete process.env.OPENAI_LUNA_MODEL;
 process.env.GEMINI_API_KEY = 'test-key';
 
 const clientOptions = {
@@ -120,7 +122,10 @@ try {
   assert.equal(response.status, 200);
   let payload = await response.json();
   assert.equal(payload.templates.length, 0);
-  assert.ok(payload.models.some((item) => item.id === 'openai-luna'));
+  assert.equal(
+    payload.models.find((item) => item.id === 'openai-luna')?.model,
+    'gpt-6-luna',
+  );
 
   const templateId = crypto.randomUUID();
   response = await call(doctor, {
@@ -227,7 +232,8 @@ try {
   });
   payload = await response.json();
   assert.equal(response.status, 200, payload.error);
-  assert.deepEqual(openAiRequest.reasoning, { effort: 'low' });
+  assert.equal(openAiRequest.model, 'gpt-6-luna');
+  assert.deepEqual(openAiRequest.reasoning, { effort: 'medium' });
 
   response = await call(doctor, {
     action: 'generate',
