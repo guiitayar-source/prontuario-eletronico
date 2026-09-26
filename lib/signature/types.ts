@@ -125,3 +125,51 @@ export interface PadesVerificationResult {
   signedAt?: Date;
   error?: string;
 }
+
+export interface EvolutionSignatureRecord {
+  id: string;
+  clinic_id: string;
+  evolution_id: string;
+  evolution_version: number;
+  signer_user_id: string;
+  doctor_id: string;
+  canonical_schema_version: number;
+  canonical_data: Record<string, unknown>;
+  digest_algorithm: string;
+  document_hash: string;
+  signature_format: string;
+  signature_value: string;
+  certificate_subject: string;
+  certificate_issuer: string;
+  certificate_serial: string;
+  certificate_fingerprint: string;
+  certificate_not_before: string;
+  certificate_not_after: string;
+  provider: string;
+  provider_signature_id?: string | null;
+  signed_at: string;
+  verification_status: VerificationStatus;
+  verified_at: string;
+  created_at: string;
+}
+
+export interface EvolutionVerificationResult {
+  isValid: boolean;
+  evolutionId: string;
+  signatureId?: string;
+  signerName: string;
+  signerCpf: string | null;
+  certificateSubject: string;
+  certificateIssuer: string;
+  certificateSerial: string;
+  certificateFingerprint: string;
+  validFrom: Date;
+  validTo: Date;
+  documentHash: string;
+  recalculatedHash: string;
+  hashMatches: boolean;
+  dataMatchesRecord: boolean;
+  signedAt: Date;
+  canonicalData?: Record<string, unknown>;
+  error?: string;
+}

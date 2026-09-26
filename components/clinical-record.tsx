@@ -34,7 +34,14 @@ import {
   ArrowUpRight,
   Stethoscope,
   LockKeyhole,
+  ShieldCheck,
+  FileCheck,
+  KeyRound,
+  Loader2,
 } from 'lucide-react';
+import { EvolutionSignatureDetailsModal } from './evolution-signature-details-modal';
+import type { SignatureSessionData } from '@/lib/signature/types';
+
 type RecordEntry = {
   id: string;
   text: string;
@@ -43,6 +50,23 @@ type RecordEntry = {
   finalized_at: string | null;
   author_id: string;
   finalized_by: string | null;
+  status?: string;
+  signed_at?: string | null;
+  signed_by?: string | null;
+  current_signature_id?: string | null;
+  current_signature?: {
+    id: string;
+    signer_user_id: string;
+    certificate_subject: string;
+    certificate_issuer: string;
+    certificate_serial: string;
+    certificate_fingerprint: string;
+    signed_at: string;
+    verification_status: string;
+    document_hash: string;
+    provider: string;
+    canonical_data?: Record<string, unknown>;
+  } | null;
   consultation_addenda?: {
     id: string;
     text: string;
@@ -118,7 +142,9 @@ export default function ClinicalRecord({
     [finalizing, setFinalizing] = useState(false),
     [panel, setPanel] = useState(true),
     [addendum, setAddendum] = useState(''),
-    [dirtyRegistration, setDirtyRegistration] = useState(false);
+    [dirtyRegistration, setDirtyRegistration] = useState(false),
+    [signatureSession, setSignatureSession] = useState<SignatureSessionData | null>(null),
+    [signing, setSigning] = useState(false);
   const saved = useRef(''),
     latest = useRef(''),
     flight = useRef(false),
@@ -134,7 +160,7 @@ export default function ClinicalRecord({
     setCurrent(r);
     blocked.current = false;
     setError('');
-    setStatus('Salvo');
+    setStatus(r.status === 'SIGNED' ? 'Assinada digitalmente' : 'Salvo');
     setAddendum('');
   }
   async function load() {
@@ -142,6 +168,28 @@ export default function ClinicalRecord({
     setRows(result.consultations);
     return result.consultations as RecordEntry[];
   }
+
+  async function checkSignatureSession() {
+    try {
+      const r = await apiFetch('/api/digital-signature/session');
+      if (r.ok) {
+        const data = (await r.json()) as {
+          active: boolean;
+          session: SignatureSessionData | null;
+        };
+        setSignatureSession(data.active ? data.session : null);
+      }
+    } catch {
+      // Ignore background check failure
+    }
+  }
+
+  useEffect(() => {
+    if (medical) {
+      void checkSignatureSession();
+    }
+  }, [medical]);
+
   useEffect(() => {
     let active = true;
     if (medical)
@@ -154,7 +202,7 @@ export default function ClinicalRecord({
               (r: RecordEntry & { appointment_id?: string }) =>
                 appointmentId
                   ? r.appointment_id === appointmentId
-                  : !r.finalized_at,
+                  : !r.finalized_at && r.status !== 'SIGNED',
             );
             if (match) choose(match);
           }
@@ -166,8 +214,16 @@ export default function ClinicalRecord({
       active = false;
     };
   }, [patient.id, medical, appointmentId]);
+
   async function persist(finalize = false) {
-    if (!current || flight.current || blocked.current || current.finalized_at)
+    if (
+      !current ||
+      flight.current ||
+      blocked.current ||
+      current.finalized_at ||
+      current.status === 'SIGNED' ||
+      current.signed_at
+    )
       return;
     flight.current = true;
     setFinalizing(finalize);
@@ -199,12 +255,83 @@ export default function ClinicalRecord({
       setBusy(false);
     }
   }
+
+  async function handleSignEvolution() {
+    if (!current || busy || signing) return;
+    setError('');
+    setSigning(true);
+    setStatus('Assinando evolução com certificado Bird ID…');
+    try {
+      if (dirty) {
+        await persist(false);
+      }
+      const r = await apiFetch('/api/digital-signature/sign-evolution', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Signature-Action': '1',
+        },
+        body: JSON.stringify({ evolutionId: current.id }),
+      });
+      const data = (await r.json()) as {
+        error?: string;
+        success?: boolean;
+      };
+      if (!r.ok) {
+        throw new Error(data.error || 'Falha ao assinar evolução digitalmente.');
+      }
+      const list = await load();
+      const updated = list.find((item) => item.id === current.id);
+      if (updated) choose(updated);
+      setStatus('Evolução assinada digitalmente com sucesso!');
+    } catch (e) {
+      setError((e as Error).message);
+      setStatus('Erro na assinatura digital');
+    } finally {
+      setSigning(false);
+    }
+  }
+
+  async function handleConnectAndSign() {
+    if (!current) return;
+    try {
+      if (dirty) {
+        await persist(false);
+      }
+      if (typeof window !== 'undefined' && patient?.id) {
+        sessionStorage.setItem('birdid_return_patient_id', patient.id);
+        sessionStorage.setItem('birdid_return_tab', 'consulta');
+      }
+      const r = await apiFetch('/api/digital-signature/birdid/authorize');
+      const data = (await r.json()) as {
+        authorizationUrl?: string;
+        error?: string;
+      };
+      if (!r.ok)
+        throw new Error(data.error || 'Falha ao iniciar autorização Bird ID');
+      if (data.authorizationUrl) {
+        window.location.href = data.authorizationUrl;
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   useEffect(() => {
-    if (!dirty || busy || !current || current.finalized_at || blocked.current)
+    if (
+      !dirty ||
+      busy ||
+      signing ||
+      !current ||
+      current.finalized_at ||
+      current.status === 'SIGNED' ||
+      current.signed_at ||
+      blocked.current
+    )
       return;
     const timer = setTimeout(() => void persist(), 800);
     return () => clearTimeout(timer);
-  }, [text, current, busy]);
+  }, [text, current, busy, signing]);
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (hasUnsaved || busy || dirtyRegistration) {
@@ -267,7 +394,11 @@ export default function ClinicalRecord({
   }
   const [view, setView] = useState('consulta');
   const displayName = patient.social_name || patient.name;
-  const finalized = !!current?.finalized_at;
+  const isSigned =
+    current?.status === 'SIGNED' ||
+    !!current?.signed_at ||
+    !!current?.current_signature_id;
+  const finalized = !!current?.finalized_at || isSigned;
   const ready = !!current;
   const visitDate = new Date(
     current?.created_at || Date.now(),
@@ -464,9 +595,11 @@ export default function ClinicalRecord({
                               {date(r.created_at)}
                             </span>
                             <strong>
-                              {r.finalized_at
-                                ? 'Consulta finalizada'
-                                : 'Em atendimento'}
+                              {r.status === 'SIGNED' || r.signed_at
+                                ? '✓ Assinada digitalmente'
+                                : r.finalized_at
+                                  ? 'Consulta finalizada'
+                                  : 'Em atendimento'}
                             </strong>
                             <span>
                               {r.text.slice(0, 150) || 'Rascunho vazio'}
@@ -501,7 +634,7 @@ export default function ClinicalRecord({
                         Nova consulta
                       </button>
                       <span className="draft-chip">
-                        {finalized ? 'Finalizada' : 'Rascunho'}
+                        {isSigned ? '✓ Assinada (ICP-Brasil)' : finalized ? 'Finalizada' : 'Rascunho'}
                       </span>
                     </div>
                     <div className="editor-toolbar">
@@ -559,7 +692,7 @@ export default function ClinicalRecord({
                         setStatus('Alterações pendentes');
                       }}
                       disabled={!ready}
-                      readOnly={finalized || finalizing}
+                      readOnly={finalized || finalizing || isSigned || signing}
                       maxLength={100000}
                       placeholder={
                         current
@@ -568,13 +701,36 @@ export default function ClinicalRecord({
                       }
                       spellCheck
                     />
-                    {finalized && (
+                    {isSigned ? (
+                      <div className="signed-evolution-banner">
+                        <div className="signed-badge-header">
+                          <ShieldCheck size={20} className="signed-badge-icon" />
+                          <div>
+                            <strong>Evolução assinada digitalmente (ICP-Brasil)</strong>
+                            <p>
+                              Assinada em {date(current.signed_at || current.created_at)}
+                              {current.current_signature?.certificate_subject
+                                ? ` por ${current.current_signature.certificate_subject.match(/CN=([^,\n/]+)/i)?.[1] || current.current_signature.certificate_subject}`
+                                : ''}
+                              . Registro eletrônico nativo imutável.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className="secondary compact-btn"
+                            onClick={() => setModal('assinatura-detalhes')}
+                          >
+                            <FileCheck size={15} /> Ver detalhes da assinatura
+                          </button>
+                        </div>
+                      </div>
+                    ) : finalized ? (
                       <div className="finalized-info">
                         <LockKeyhole size={15} /> Finalizada em{' '}
                         {current?.finalized_at && date(current.finalized_at)}.
                         Correções por adendos. Sem assinatura digital.
                       </div>
-                    )}
+                    ) : null}
                     {current?.consultation_addenda?.map((a) => (
                       <article className="consultation-addendum" key={a.id}>
                         <strong>Adendo · {date(a.created_at)}</strong>
@@ -605,23 +761,81 @@ export default function ClinicalRecord({
                       >
                         <FileText size={16} /> Novo documento
                       </button>
-                      {finalized ? (
+                      {isSigned ? (
+                        <>
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => setModal('assinatura-detalhes')}
+                          >
+                            <FileCheck size={16} /> Detalhes da assinatura
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => setModal('reiniciar')}
+                          >
+                            Registrar adendo
+                          </button>
+                        </>
+                      ) : finalized ? (
                         <button
+                          type="button"
                           className="secondary"
                           onClick={() => setModal('reiniciar')}
                         >
                           Registrar adendo
                         </button>
                       ) : (
-                        <button
-                          className="primary"
-                          disabled={
-                            !ready || busy || !text.trim() || blocked.current
-                          }
-                          onClick={() => setModal('finalizar')}
-                        >
-                          Finalizar consulta <Check size={17} />
-                        </button>
+                        <div className="editor-action-buttons">
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={!ready || busy || signing || !dirty}
+                            onClick={() => void persist(false)}
+                          >
+                            Salvar rascunho
+                          </button>
+
+                          {signatureSession ? (
+                            <button
+                              type="button"
+                              className="primary signature-btn"
+                              disabled={!ready || busy || signing || !text.trim()}
+                              onClick={() => void handleSignEvolution()}
+                            >
+                              {signing ? (
+                                <>
+                                  <Loader2 size={16} className="spin" /> Assinando ICP-Brasil…
+                                </>
+                              ) : (
+                                <>
+                                  <ShieldCheck size={17} /> Finalizar e assinar
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="primary signature-connect-btn"
+                              disabled={!ready || busy || signing || !text.trim()}
+                              onClick={() => void handleConnectAndSign()}
+                            >
+                              <KeyRound size={17} /> Conectar Bird ID para assinar
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}
+                            disabled={!ready || busy || signing || !text.trim()}
+                            onClick={() => setModal('finalizar')}
+                            title="Finalizar consulta sem aplicar assinatura digital ICP-Brasil"
+                          >
+                            Finalizar sem assinar
+                          </button>
+                        </div>
                       )}
                     </footer>
                   </section>
@@ -667,7 +881,13 @@ export default function ClinicalRecord({
           )}
         </main>
       </div>
-      {modal && (
+      {modal === 'assinatura-detalhes' && current && (
+        <EvolutionSignatureDetailsModal
+          evolutionId={current.id}
+          onClose={closeModal}
+        />
+      )}
+      {modal && modal !== 'assinatura-detalhes' && (
         <div
           className="modal-backdrop"
           onClick={(e) => {

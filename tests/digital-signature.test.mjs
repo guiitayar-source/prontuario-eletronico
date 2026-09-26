@@ -17,6 +17,12 @@ import {
 } from '../lib/signature/crypto-utils.ts';
 import { MockBirdIdProvider } from '../lib/signature/mock-birdid-provider.ts';
 import { PadesService } from '../lib/signature/pades-service.ts';
+import {
+  buildCanonicalEvolutionV1,
+  computeEvolutionHash,
+  normalizeClinicalText,
+  serializeCanonicalData,
+} from '../lib/signature/canonical-evolution.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -261,6 +267,136 @@ describe('ICP-Brasil Digital Signature Suite', () => {
       } finally {
         await unlink(testPdfPath).catch(() => {});
       }
+    });
+  });
+
+  describe('5. Canonical Clinical Evolution Serialization & Hashing', () => {
+    it('should normalize clinical text with Unicode NFC and LF line endings', () => {
+      const rawText = '  Paciente refere cefaleia intensa.\r\nSintomas há 3 dias.\r\nPrescrito analgésico.  ';
+      const normalized = normalizeClinicalText(rawText);
+      assert.ok(!normalized.includes('\r'), 'Must not contain CR');
+      assert.equal(normalized.startsWith(' '), false);
+      assert.equal(normalized.endsWith(' '), false);
+      assert.equal(
+        normalized,
+        'Paciente refere cefaleia intensa.\nSintomas há 3 dias.\nPrescrito analgésico.'
+      );
+    });
+
+    it('should produce identical deterministic JSON regardless of object key order', () => {
+      const obj1 = {
+        schema_version: 1,
+        evolution_id: '11111111-1111-1111-1111-111111111111',
+        clinic_id: '22222222-2222-2222-2222-222222222222',
+        patient_id: '33333333-3333-3333-3333-333333333333',
+        appointment_id: null,
+        doctor_id: '44444444-4444-4444-4444-444444444444',
+        created_at: '2026-09-25T20:00:00.000Z',
+        clinical_text: 'Paciente comparece para retorno.',
+        version: 1,
+      };
+
+      // Shuffled keys
+      const obj2 = {
+        version: 1,
+        created_at: '2026-09-25T20:00:00.000Z',
+        appointment_id: null,
+        schema_version: 1,
+        clinical_text: 'Paciente comparece para retorno.',
+        doctor_id: '44444444-4444-4444-4444-444444444444',
+        patient_id: '33333333-3333-3333-3333-333333333333',
+        evolution_id: '11111111-1111-1111-1111-111111111111',
+        clinic_id: '22222222-2222-2222-2222-222222222222',
+      };
+
+      const json1 = serializeCanonicalData(obj1);
+      const json2 = serializeCanonicalData(obj2);
+
+      assert.equal(json1, json2, 'Canonical serialization must be strictly identical');
+
+      const { hashHex: hash1 } = computeEvolutionHash(obj1);
+      const { hashHex: hash2 } = computeEvolutionHash(obj2);
+      assert.equal(hash1, hash2, 'Hashes must be identical');
+      assert.equal(hash1.length, 64, 'SHA-256 hash must be 64 hex characters');
+    });
+
+    it('should detect any tampering of text or metadata (immutability check)', () => {
+      const canonical = buildCanonicalEvolutionV1({
+        evolutionId: 'a1b2c3d4-0000-0000-0000-000000000001',
+        clinicId: 'a1b2c3d4-0000-0000-0000-000000000002',
+        patientId: 'a1b2c3d4-0000-0000-0000-000000000003',
+        doctorId: 'a1b2c3d4-0000-0000-0000-000000000004',
+        createdAt: '2026-09-25T22:00:00.000Z',
+        clinicalText: 'Evolução clínica sem queixas.',
+        version: 1,
+      });
+
+      const { hashHex: originalHash } = computeEvolutionHash(canonical);
+
+      // 1. Modifying text by 1 character
+      const tamperedText = {
+        ...canonical,
+        clinical_text: 'Evolução clínica sem queixas!', // exclamation point
+      };
+      const { hashHex: tamperedTextHash } = computeEvolutionHash(tamperedText);
+      assert.notEqual(
+        originalHash,
+        tamperedTextHash,
+        'Changing 1 character in text must alter hash'
+      );
+
+      // 2. Modifying patientId
+      const tamperedPatient = {
+        ...canonical,
+        patient_id: 'a1b2c3d4-0000-0000-0000-000000000099',
+      };
+      const { hashHex: tamperedPatientHash } = computeEvolutionHash(tamperedPatient);
+      assert.notEqual(
+        originalHash,
+        tamperedPatientHash,
+        'Changing patient ID must alter hash'
+      );
+    });
+
+    it('should sign evolution hash with CMS detached signature without PDF', async () => {
+      const canonical = buildCanonicalEvolutionV1({
+        evolutionId: 'evo-12345',
+        clinicId: 'clinic-123',
+        patientId: 'patient-456',
+        doctorId: 'doctor-789',
+        createdAt: new Date().toISOString(),
+        clinicalText: 'Paciente em bom estado geral. Pressão arterial 120x80 mmHg.',
+        version: 1,
+      });
+
+      const { hashHex } = computeEvolutionHash(canonical);
+      assert.equal(hashHex.length, 64);
+
+      // Sign the hash directly with provider
+      const mockProvider = new MockBirdIdProvider({
+        mockCpf: '34929144892',
+        doctorName: 'GUILHERME TAYAR DE CAMARGO',
+      });
+
+      const signResult = await mockProvider.signHash({
+        accessToken: 'mock-token',
+        certificateAlias: 'e-CPF',
+        hashHex,
+        documentAlias: 'Evolução Clínica #evo-123',
+      });
+
+      assert.ok(signResult.cmsSignatureBase64, 'Must produce CMS detached signature');
+      assert.ok(
+        !signResult.cmsSignatureBase64.includes('PDF'),
+        'Signature must be native CMS and never touch PDF'
+      );
+
+      // Clean base64 and verify DER length
+      const cleanB64 = signResult.cmsSignatureBase64
+        .replace(/-----[^-]+-----/g, '')
+        .replace(/\s+/g, '');
+      const der = Buffer.from(cleanB64, 'base64');
+      assert.ok(der.length > 500, 'CMS SignedData must contain certificate chain and signature');
     });
   });
 });

@@ -19,7 +19,9 @@ export const consultations = handle(async (request, { db, clinic, role }) => {
     const rows = check(
       await db
         .from('consultations')
-        .select('*,consultation_addenda(*)')
+        .select(
+          '*,consultation_addenda(*),current_signature:evolution_signatures!current_signature_id(*)'
+        )
         .eq('clinic_id', clinic)
         .eq('patient_id', patient)
         .order('created_at', { ascending: false }),
