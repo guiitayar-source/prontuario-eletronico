@@ -38,9 +38,12 @@ import {
   FileCheck,
   KeyRound,
   Loader2,
+  Timer,
 } from 'lucide-react';
 import { EvolutionSignatureDetailsModal } from './evolution-signature-details-modal';
 import type { SignatureSessionData } from '@/lib/signature/types';
+import { useConsultationTimer } from '@/hooks/use-consultation-timer';
+import { ConsultationTimer } from './consultation-timer';
 
 type RecordEntry = {
   id: string;
@@ -421,6 +424,12 @@ export default function ClinicalRecord({
   const visitDate = new Date(
     current?.created_at || Date.now(),
   ).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const timer = useConsultationTimer({
+    consultationId: current?.id,
+    isFinalized: finalized,
+    createdAt: current?.created_at,
+    finalizedAt: current?.finalized_at,
+  });
   const save = status;
   async function finish() {
     await persist(true);
@@ -484,15 +493,7 @@ export default function ClinicalRecord({
                     </div>
                   </div>
                 </div>
-                <div className="encounter-badge">
-                  <span className="dot" />
-                  {finalized
-                    ? 'Finalizada'
-                    : current
-                      ? 'Em atendimento'
-                      : 'Nova consulta'}
-                  <small>{visitDate}</small>
-                </div>
+                <ConsultationTimer timer={timer} visitDate={visitDate} />
               </section>
               <div className="patient-tabs">
                 <button
@@ -662,9 +663,54 @@ export default function ClinicalRecord({
                       </span>
                     </div>
                     <div className="editor-toolbar">
-                      <span>
-                        <FileText size={16} /> Texto livre
-                      </span>
+                      <div className="editor-toolbar-left">
+                        <span>
+                          <FileText size={16} /> Texto livre
+                        </span>
+                        {ready && (
+                          <span
+                            className={`editor-timer-pill ${
+                              finalized
+                                ? 'finalized'
+                                : timer.isPaused
+                                  ? 'paused'
+                                  : 'running'
+                            }`}
+                            title="Tempo decorrido do atendimento"
+                          >
+                            <Timer
+                              size={13}
+                              className={timer.isRunning ? 'ticking' : ''}
+                            />
+                            <span className="editor-timer-digits">
+                              {timer.formattedDigits}
+                            </span>
+                            {!finalized && (
+                              <span className="editor-timer-sub">
+                                {timer.isPaused ? 'Pausado' : 'Em atendimento'}
+                              </span>
+                            )}
+                          </span>
+                        )}
+                        {ready && !finalized && (
+                          <button
+                            type="button"
+                            className="editor-insert-timer-btn"
+                            title="Inserir tempo de atendimento no texto da evolução"
+                            onClick={() => {
+                              const tag = `[Tempo de atendimento: ${timer.formattedDigits}]`;
+                              const next = text.trim()
+                                ? `${text}\n\n${tag}`
+                                : tag;
+                              latest.current = next;
+                              setText(next);
+                              setStatus('Alterações pendentes');
+                            }}
+                          >
+                            + Inserir tempo
+                          </button>
+                        )}
+                      </div>
                       <button onClick={() => setModal('anamnesator')}>
                         <Mic size={16} /> Anamnesator <ArrowUpRight size={14} />
                       </button>
@@ -1077,6 +1123,13 @@ export default function ClinicalRecord({
                   O texto ficará bloqueado para edição. Correções posteriores
                   serão registradas como adendos.
                 </p>
+                <div className="info-box" style={{ marginBottom: 12 }}>
+                  Tempo de atendimento registrado:{' '}
+                  <strong>{timer.formattedDigits}</strong>
+                  {timer.humanDuration && timer.humanDuration !== '0 s'
+                    ? ` (${timer.humanDuration})`
+                    : ''}
+                </div>
                 <div className="info-box">
                   Esta ação não aplica assinatura digital nem cria um prontuário
                   válido para uso clínico.

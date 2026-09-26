@@ -944,6 +944,284 @@ h1 {
   font-size: 12px;
   color: #7b857e;
 }
+/* Consultation Timer / Cronômetro do Atendimento */
+.consultation-timer-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  background: #ffffff;
+  border: 1px solid var(--theme-border, #dce4dd);
+  border-radius: 9px;
+  padding: 8px 14px;
+  box-shadow: 0 2px 6px rgba(36, 71, 52, 0.04);
+  transition: all 0.2s ease;
+  min-width: 175px;
+}
+
+.consultation-timer-card:hover {
+  border-color: #c5d4c7;
+  box-shadow: 0 3px 10px rgba(36, 71, 52, 0.08);
+}
+
+.consultation-timer-card.paused {
+  background: #fffdf8;
+  border-color: #edd9b9;
+}
+
+.consultation-timer-card.finalized {
+  background: #fafbfa;
+  border-color: #e2e8e3;
+}
+
+.timer-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+
+.timer-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  font-size: 11px;
+}
+
+.timer-status-badge.running {
+  color: var(--theme-primary, #305d47);
+}
+
+.timer-status-badge.paused {
+  color: #ad701f;
+}
+
+.timer-status-badge.finalized {
+  color: #5d6f62;
+}
+
+.timer-status-badge.ready {
+  color: #728277;
+}
+
+.timer-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #279b63;
+  box-shadow: 0 0 0 0 rgba(39, 155, 99, 0.6);
+  animation: timer-pulse 2s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+@keyframes timer-pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(39, 155, 99, 0.6);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 6px rgba(39, 155, 99, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(39, 155, 99, 0);
+  }
+}
+
+.timer-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.timer-dot.paused {
+  background: #d49339;
+}
+
+.timer-dot.finalized {
+  background: #7a887e;
+}
+
+.timer-dot.ready {
+  background: #9aa89f;
+}
+
+.timer-date {
+  color: #7b857e;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.timer-clock-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+
+.timer-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--theme-primary, #2d5541);
+}
+
+.timer-digits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.timer-icon {
+  color: var(--theme-primary, #466c59);
+  flex-shrink: 0;
+}
+
+.timer-icon.ticking {
+  color: #279b63;
+}
+
+.timer-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.timer-ctrl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid #d4ded4;
+  background: #f8faf8;
+  color: #3b5043;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.timer-ctrl-btn:hover {
+  background: #edf3ee;
+  border-color: #bacbba;
+  color: #243a2c;
+}
+
+.timer-ctrl-btn.play {
+  background: #eef7f0;
+  border-color: #badfc4;
+  color: #205c36;
+}
+
+.timer-ctrl-btn.play:hover {
+  background: #dfefe2;
+}
+
+.timer-ctrl-btn.reset {
+  color: #647568;
+}
+
+.timer-ctrl-btn.reset:hover {
+  color: #2f4534;
+}
+
+.timer-final-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #647368;
+}
+
+.timer-human-duration {
+  font-size: 11px;
+  color: #7b887e;
+  font-weight: 400;
+}
+
+/* Toolbar timer pill */
+.editor-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.editor-timer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 12px;
+  background: #f0f4f1;
+  color: #2e533f;
+  border: 1px solid #d8e2da;
+  transition: all 0.2s ease;
+}
+
+.editor-timer-pill.running {
+  background: #eaf4ed;
+  color: #1f5e39;
+  border-color: #cde4d3;
+}
+
+.editor-timer-pill.paused {
+  background: #fef8ec;
+  color: #8c5717;
+  border-color: #fae4be;
+}
+
+.editor-timer-pill.finalized {
+  background: #f2f4f2;
+  color: #5c6a60;
+  border-color: #dde2de;
+}
+
+.editor-timer-digits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+}
+
+.editor-timer-sub {
+  font-size: 10px;
+  color: inherit;
+  opacity: 0.85;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.editor-insert-timer-btn {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  font-size: 11.5px;
+  color: var(--theme-primary, #3b634e);
+  cursor: pointer;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: background-color 0.15s ease;
+}
+
+.editor-insert-timer-btn:hover {
+  text-decoration: underline;
+  background: rgba(59, 99, 78, 0.08);
+}
+
 .patient-tabs {
   display: flex;
   gap: 27px;
@@ -1687,6 +1965,14 @@ h1 {
   }
   .encounter-badge {
     display: none;
+  }
+  .patient-head {
+    flex-wrap: wrap;
+  }
+  .consultation-timer-card {
+    min-width: 0;
+    width: 100%;
+    align-items: flex-start;
   }
   .patient-tabs {
     gap: 16px;
