@@ -1,13 +1,9 @@
-import crypto from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import * as pkijs from 'pkijs';
-import * as asn1js from 'asn1js';
 import { adminClient } from '@/lib/supabase/admin';
 import { HttpError } from '@/lib/supabase/server';
 import {
   decryptToken,
   cleanCpf,
-  parseX509Certificate,
   timingSafeEqualStr,
 } from './crypto-utils.ts';
 import { getSignatureProvider } from './provider-factory.ts';
@@ -16,21 +12,11 @@ import {
   computeEvolutionHash,
   normalizeClinicalText,
 } from './canonical-evolution.ts';
+import { verifyEvolutionCms } from './evolution-cms.ts';
 import type {
   EvolutionSignatureRecord,
   EvolutionVerificationResult,
 } from './types.ts';
-
-// Garante motor WebCrypto para pkijs
-try {
-  const cryptoEngine = new pkijs.CryptoEngine({
-    name: 'NodeJS',
-    crypto: globalThis.crypto,
-  });
-  pkijs.setEngine('NodeJS', cryptoEngine);
-} catch {
-  // Motor já configurado
-}
 
 export class EvolutionSigningService {
   /**
@@ -173,52 +159,31 @@ export class EvolutionSigningService {
         documentAlias: `Evolução Clínica #${evoRecord.id.slice(0, 8)}`,
       });
 
-      // 7. Extrair dados detalhados do certificado contido na assinatura CMS
-      let certSubject = session.certificate_subject;
-      let certIssuer = session.certificate_issuer;
-      let certSerial = '';
-      let certFingerprint = '';
-      let certNotBefore = session.certificate_valid_from;
-      let certNotAfter = session.certificate_valid_to;
-
-      try {
-        const cleanB64 = signResult.cmsSignatureBase64
-          .replace(/-----[^-]+-----/g, '')
-          .replace(/\s+/g, '');
-        const sigDer = Buffer.from(cleanB64, 'base64');
-        const sigAsn1 = asn1js.fromBER(
-          sigDer.buffer.slice(
-            sigDer.byteOffset,
-            sigDer.byteOffset + sigDer.byteLength
-          )
+      // 7. Verificar a assinatura devolvida antes de gravar e bloquear a evolução
+      const check = await verifyEvolutionCms(
+        signResult.cmsSignatureBase64,
+        canonicalJson,
+        hashHex
+      );
+      if (!check.signatureValid || !check.certificate) {
+        throw new HttpError(
+          502,
+          `A assinatura devolvida pelo provedor não pôde ser verificada: ${check.error || 'certificado ausente'}. A evolução não foi bloqueada.`
         );
-        if (sigAsn1.result) {
-          const contentInfo = new pkijs.ContentInfo({ schema: sigAsn1.result });
-          const signedData = new pkijs.SignedData({
-            schema: contentInfo.content,
-          });
-          const cert = signedData.certificates?.[0];
-          if (cert instanceof pkijs.Certificate) {
-            const certDer = Buffer.from(cert.toSchema().toBER());
-            const parsed = parseX509Certificate(certDer);
-            certSubject = parsed.subject;
-            certIssuer = parsed.issuer;
-            certSerial = parsed.serialNumber;
-            certFingerprint = parsed.fingerprint256;
-            certNotBefore = parsed.validFrom.toISOString();
-            certNotAfter = parsed.validTo.toISOString();
-          }
-        }
-      } catch (certParseErr) {
-        console.warn('Aviso na extração de certificado do CMS:', certParseErr);
       }
-
-      // Se o serial/fingerprint não estiverem no CMS, gerar fallback determinístico
-      if (!certFingerprint) {
-        certFingerprint = crypto
-          .createHash('sha256')
-          .update(certSubject + certIssuer)
-          .digest('hex');
+      const cert = check.certificate;
+      const certSubject = cert.subject;
+      const certIssuer = cert.issuer;
+      const certSerial = cert.serialNumber;
+      const certFingerprint = cert.fingerprint256;
+      const certNotBefore = cert.validFrom.toISOString();
+      const certNotAfter = cert.validTo.toISOString();
+      const now = Date.now();
+      if (now < cert.validFrom.getTime() || now > cert.validTo.getTime()) {
+        throw new HttpError(
+          422,
+          'O certificado digital está fora do período de validade. A evolução não foi bloqueada.'
+        );
       }
 
       // 8. Inserir registro em evolution_signatures
@@ -361,8 +326,10 @@ export class EvolutionSigningService {
    * 1. Recalcula o hash SHA-256 a partir da representação canônica dos dados.
    * 2. Compara o hash calculado com o document_hash registrado.
    * 3. Valida se o texto e campos atuais no banco coincidem integralmente com os dados assinados.
-   * 4. Valida a estrutura ASN.1 CMS (PKCS#7) e o messageDigest autenticado.
-   * 5. Confirma o período de validade do certificado ICP-Brasil.
+   * 4. Verifica criptograficamente a assinatura CMS (messageDigest e assinatura
+   *    sobre os atributos assinados) com a chave do certificado embutido.
+   * 5. Confirma que o certificado é o registrado e estava válido na data da assinatura.
+   * Não valida a cadeia até a raiz ICP-Brasil.
    */
   async verifyEvolutionSignature(params: {
     db: SupabaseClient;
@@ -457,72 +424,37 @@ export class EvolutionSigningService {
       evo.clinic_id === canonicalData.clinic_id &&
       evo.author_id === canonicalData.doctor_id;
 
-    // 5. Validar a assinatura CMS via ASN.1 / pkijs
-    let cmsValid = false;
-    let signerCpf: string | null = null;
-    let signerName = '';
+    // 5. Verificar criptograficamente a assinatura CMS sobre os dados canônicos
+    const { canonicalJson } = computeEvolutionHash(canonicalData);
+    const cms = await verifyEvolutionCms(
+      sig.signature_value,
+      canonicalJson,
+      sig.document_hash
+    );
+    const signatureValid = cms.signatureValid;
     const cnMatch = sig.certificate_subject.match(/CN=([^,\n/]+)/i);
-    signerName = cnMatch ? cnMatch[1].trim() : sig.certificate_subject;
-
-    try {
-      const cleanB64 = sig.signature_value
-        .replace(/-----[^-]+-----/g, '')
-        .replace(/\s+/g, '');
-      const sigDer = Buffer.from(cleanB64, 'base64');
-      const sigAsn1 = asn1js.fromBER(
-        sigDer.buffer.slice(
-          sigDer.byteOffset,
-          sigDer.byteOffset + sigDer.byteLength
-        )
-      );
-
-      if (sigAsn1.result) {
-        const contentInfo = new pkijs.ContentInfo({ schema: sigAsn1.result });
-        const signedData = new pkijs.SignedData({
-          schema: contentInfo.content,
-        });
-
-        // Extrai o signerInfo
-        const signerInfo = signedData.signerInfos[0];
-        if (signerInfo) {
-          // Verifica se o messageDigest nos signedAttrs confere com o document_hash
-          const msgDigestAttr = signerInfo.signedAttrs?.attributes.find(
-            (a) => a.type === '1.2.840.113549.1.9.4'
-          );
-          if (msgDigestAttr?.values?.[0] instanceof asn1js.OctetString) {
-            const hex = Buffer.from(
-              msgDigestAttr.values[0].valueBlock.valueHexView
-            ).toString('hex');
-            if (hex.toLowerCase() === sig.document_hash.toLowerCase()) {
-              cmsValid = true;
-            }
-          }
-        }
-
-        // Extrai certificado e CPF
-        const cert = signedData.certificates?.[0];
-        if (cert instanceof pkijs.Certificate) {
-          const certDer = Buffer.from(cert.toSchema().toBER());
-          const parsed = parseX509Certificate(certDer);
-          signerCpf = parsed.cpf;
-          signerName = parsed.commonName;
-        }
-      }
-    } catch (cmsErr) {
-      console.warn('Aviso validação CMS:', cmsErr);
-    }
-
+    const signerName =
+      cms.certificate?.commonName ||
+      (cnMatch ? cnMatch[1].trim() : sig.certificate_subject);
+    let signerCpf = cms.certificate?.cpf || null;
     if (!signerCpf) {
-      // Fallback: extrair CPF do subject
       const cpfMatch = sig.certificate_subject.match(
         /(?:[:\s-]|^)(\d{11})(?:[:\s-]|$)/
       );
       if (cpfMatch) signerCpf = cpfMatch[1];
     }
 
-    // Se cmsValid não foi ativado (por exemplo, ausência de signedAttrs explícitos),
-    // a integridade criptográfica é garantida pela correspondência do document_hash
-    const isValid = hashMatches && dataMatchesRecord;
+    // 6. O certificado precisa ser o registrado e estar válido na data da assinatura
+    const signedAtMs = new Date(sig.signed_at).getTime();
+    const certificateValid =
+      !!cms.certificate &&
+      cms.certificate.fingerprint256.toLowerCase() ===
+        String(sig.certificate_fingerprint).toLowerCase() &&
+      signedAtMs >= cms.certificate.validFrom.getTime() &&
+      signedAtMs <= cms.certificate.validTo.getTime();
+
+    const isValid =
+      hashMatches && dataMatchesRecord && signatureValid && certificateValid;
 
     // Log de auditoria para conferência de integridade
     await admin.from('audit_events').insert({
@@ -536,6 +468,8 @@ export class EvolutionSigningService {
         is_valid: isValid,
         hash_matches: hashMatches,
         data_matches_record: dataMatchesRecord,
+        signature_valid: signatureValid,
+        certificate_valid: certificateValid,
       },
     });
 
@@ -555,13 +489,20 @@ export class EvolutionSigningService {
       recalculatedHash,
       hashMatches,
       dataMatchesRecord,
+      signatureValid,
+      certificateValid,
       signedAt: new Date(sig.signed_at),
       canonicalData,
-      error: !isValid
-        ? !hashMatches
+      error: isValid
+        ? undefined
+        : !hashMatches
           ? 'O hash recalculado não coincide com a assinatura.'
-          : 'O conteúdo da evolução foi adulterado após a assinatura.'
-        : undefined,
+          : !dataMatchesRecord
+            ? 'O conteúdo da evolução foi adulterado após a assinatura.'
+            : !signatureValid
+              ? cms.error ||
+                'A assinatura criptográfica não confere com o certificado.'
+              : 'O certificado da assinatura não é o registrado ou estava fora da validade na data da assinatura.',
     };
   }
 }

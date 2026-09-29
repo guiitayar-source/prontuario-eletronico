@@ -141,9 +141,11 @@ export function EvolutionSignatureDetailsModal({
                 <div>
                   <strong>Assinatura Válida e Íntegra</strong>
                   <p>
-                    O resumo criptográfico (SHA-256) dos dados atuais confere
-                    integralmente com a assinatura CMS registrada. O registro não
-                    sofreu nenhuma alteração posterior.
+                    A assinatura CMS foi verificada com a chave do certificado
+                    do signatário, que estava válido na data da assinatura, e o
+                    resumo SHA-256 dos dados atuais confere com o que foi
+                    assinado. A cadeia até a raiz ICP-Brasil não é conferida
+                    aqui.
                   </p>
                 </div>
               </div>

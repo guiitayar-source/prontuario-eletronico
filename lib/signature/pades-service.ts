@@ -338,51 +338,27 @@ export class PadesService {
       const certDer = Buffer.from(signerCert.toSchema().toBER());
       const certInfo = parseX509Certificate(certDer);
 
-      // Verify CMS signature with pkijs
-      const verifyParams: {
-        signer: number;
-        data: ArrayBuffer;
-        trustedCerts?: pkijs.Certificate[];
-      } = {
-        signer: 0,
-        data: extracted.signedData.buffer.slice(
-          extracted.signedData.byteOffset,
-          extracted.signedData.byteOffset + extracted.signedData.byteLength
-        ),
-      };
-
-      if (trustedCerts && trustedCerts.length > 0) {
-        verifyParams.trustedCerts = trustedCerts;
-      } else {
-        // Self-contained verification against embedded signer cert
-        verifyParams.trustedCerts = [signerCert];
-      }
-
+      // Verifica a assinatura CMS: messageDigest dos bytes assinados e assinatura
+      // sobre os atributos assinados, com a chave do certificado do signatário.
+      // Não há alternativa que dispense essa conferência criptográfica.
       let isValid = false;
+      let verifyError = '';
       try {
-        isValid = Boolean(await signedData.verify(verifyParams));
+        const result = await signedData.verify({
+          signer: 0,
+          data: extracted.signedData.buffer.slice(
+            extracted.signedData.byteOffset,
+            extracted.signedData.byteOffset + extracted.signedData.byteLength
+          ),
+          checkChain: Boolean(trustedCerts?.length),
+          trustedCerts: trustedCerts?.length ? trustedCerts : undefined,
+          extendedMode: true,
+        });
+        isValid = Boolean(result.signatureVerified);
+        if (!isValid) verifyError = result.message || 'Assinatura inválida';
       } catch (err) {
-        console.warn('Aviso verificação pkijs:', err);
-      }
-
-      // Se a verificação pkijs falhar por ausência das cadeias raiz da AC no trust store local,
-      // confirma a integridade checando se o messageDigest autenticado coincide com o digest do documento
-      if (!isValid) {
-        try {
-          const msgDigestAttr = signerInfo?.signedAttrs?.attributes.find(
-            (a) => a.type === '1.2.840.113549.1.9.4'
-          );
-          if (msgDigestAttr?.values?.[0] instanceof asn1js.OctetString) {
-            const hex = Buffer.from(
-              msgDigestAttr.values[0].valueBlock.valueHexView
-            ).toString('hex');
-            if (hex.toLowerCase() === calculatedDigestHex.toLowerCase()) {
-              isValid = true;
-            }
-          }
-        } catch {
-          // Ignored
-        }
+        verifyError =
+          (err as { message?: string })?.message || 'Assinatura inválida';
       }
 
       return {
@@ -399,6 +375,7 @@ export class PadesService {
         messageDigestHex: calculatedDigestHex,
         calculatedDigestHex,
         signedAt: new Date(),
+        error: isValid ? undefined : verifyError,
       };
     } catch (err) {
       return {

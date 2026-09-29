@@ -132,17 +132,39 @@ async function verifyPdf(pdfBuffer) {
   const x509 = new crypto.X509Certificate(certDer);
   const cpf = extractCpfFromCertificate(x509, certDer);
 
-  const isValid = await signedData.verify({
-    signer: 0,
-    data: extracted.signedData.buffer.slice(
-      extracted.signedData.byteOffset,
-      extracted.signedData.byteOffset + extracted.signedData.byteLength
-    ),
-    trustedCerts: [signerCert],
-  });
+  const digestAttr = signerInfo?.signedAttrs?.attributes.find(
+    (a) => a.type === '1.2.840.113549.1.9.4'
+  );
+  const signedDigestHex =
+    digestAttr?.values?.[0] instanceof asn1js.OctetString
+      ? Buffer.from(digestAttr.values[0].valueBlock.valueHexView).toString('hex')
+      : '';
+  let verifyDetail = '';
+  let isValid = false;
+  try {
+    const r = await signedData.verify({
+      signer: 0,
+      data: extracted.signedData.buffer.slice(
+        extracted.signedData.byteOffset,
+        extracted.signedData.byteOffset + extracted.signedData.byteLength
+      ),
+      checkChain: false,
+      extendedMode: true,
+    });
+    isValid = Boolean(r.signatureVerified);
+    verifyDetail = `signatureVerified=${r.signatureVerified} code=${r.code ?? ''} ${r.message ?? ''}`;
+  } catch (e) {
+    verifyDetail = `exceção: ${e?.message || e} code=${e?.code ?? ''}`;
+  }
 
   return {
-    isValid: Boolean(isValid),
+    isValid,
+    verifyDetail,
+    signedDigestHex,
+    sidType: signerInfo?.sid?.constructor?.name || typeof signerInfo?.sid,
+    digestAlgorithm: signerInfo?.digestAlgorithm?.algorithmId,
+    signatureAlgorithm: signerInfo?.signatureAlgorithm?.algorithmId,
+    certCount: certificates.length,
     signerName: x509.subject.match(/CN=([^,\n/]+)/i)?.[1]?.trim() || x509.subject,
     signerCpf: cpf,
     subject: x509.subject,
@@ -196,6 +218,13 @@ async function main() {
     console.log(`Válido de:       ${result.validFrom.toLocaleString('pt-BR')}`);
     console.log(`Válido até:      ${result.validTo.toLocaleString('pt-BR')}`);
     console.log(`Fingerprint 256: ${result.fingerprint256}`);
+
+    console.log(`\n--- DIAGNÓSTICO CMS ---`);
+    console.log(`Verificação pkijs: ${result.verifyDetail}`);
+    console.log(`Resumo assinado:   ${result.signedDigestHex || '(sem messageDigest)'}`);
+    console.log(`Resumo calculado:  ${result.calculatedDigestHex}`);
+    console.log(`Identificação:     ${result.sidType} · ${result.certCount} certificado(s)`);
+    console.log(`Algoritmos:        digest ${result.digestAlgorithm} · assinatura ${result.signatureAlgorithm}`);
 
     console.log(`\n--- DETALHES TÉCNICOS PAdES ---`);
     console.log(`ByteRange:       [${result.byteRange.join(', ')}]`);

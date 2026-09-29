@@ -23,6 +23,7 @@ import {
   normalizeClinicalText,
   serializeCanonicalData,
 } from '../lib/signature/canonical-evolution.ts';
+import { verifyEvolutionCms } from '../lib/signature/evolution-cms.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -181,6 +182,27 @@ describe('ICP-Brasil Digital Signature Suite', () => {
 
       const tamperedVerification = await padesService.verifyPadesSignature(tamperedPdf);
       assert.equal(tamperedVerification.isValid, false, 'Tampered document must fail verification');
+    });
+
+    it('rejeita PDF com resumo correto mas valor de assinatura corrompido', async () => {
+      const pdfDoc = await PDFDocument.create();
+      pdfDoc.addPage([595.28, 841.89]).drawText('RECEITA DE TESTE');
+      const prepared = await padesService.preparePdfForSignature(await pdfDoc.save(), {
+        signerName: 'DR. TESTE',
+      });
+      const signResult = await new MockBirdIdProvider().signHash({
+        accessToken: 'mock-token',
+        certificateAlias: 'e-CPF',
+        hashHex: prepared.digestHex,
+        documentAlias: 'Receita #1',
+      });
+      // O valor RSA fica no fim da estrutura CMS; o messageDigest assinado continua correto.
+      const cms = Buffer.from(signResult.cmsSignatureBase64, 'base64');
+      cms[cms.length - 10] ^= 0xff;
+      const signedPdf = padesService.embedSignature(prepared, cms.toString('base64'));
+      const r = await padesService.verifyPadesSignature(signedPdf);
+      assert.equal(r.isValid, false, 'Resumo correto não basta: a assinatura precisa conferir');
+      assert.ok(r.error);
     });
   });
 
@@ -397,6 +419,84 @@ describe('ICP-Brasil Digital Signature Suite', () => {
         .replace(/\s+/g, '');
       const der = Buffer.from(cleanB64, 'base64');
       assert.ok(der.length > 500, 'CMS SignedData must contain certificate chain and signature');
+    });
+  });
+
+  describe('6. Verificação criptográfica da assinatura CMS de evoluções', () => {
+    const canonical = buildCanonicalEvolutionV1({
+      evolutionId: 'evo-cms-1',
+      clinicId: 'clinic-1',
+      patientId: 'patient-1',
+      doctorId: 'doctor-1',
+      createdAt: '2026-09-29T12:00:00.000Z',
+      clinicalText: 'Evolução fictícia para teste de verificação.',
+      version: 1,
+    });
+    const { canonicalJson, hashHex } = computeEvolutionHash(canonical);
+    const provider = new MockBirdIdProvider({ mockCpf: '34929144892' });
+    const signed = provider.signHash({
+      accessToken: 'mock-token',
+      certificateAlias: 'e-CPF',
+      hashHex,
+      documentAlias: 'Evolução de teste',
+    });
+
+    it('aceita assinatura íntegra do certificado embutido', async () => {
+      const r = await verifyEvolutionCms((await signed).cmsSignatureBase64, canonicalJson, hashHex);
+      assert.equal(r.error, undefined);
+      assert.equal(r.digestMatches, true);
+      assert.equal(r.signatureValid, true);
+      assert.equal(r.certificate?.cpf, '34929144892');
+    });
+
+    it('rejeita dados canônicos adulterados', async () => {
+      const t = computeEvolutionHash({ ...canonical, clinical_text: 'Texto adulterado.' });
+      const r = await verifyEvolutionCms((await signed).cmsSignatureBase64, t.canonicalJson, t.hashHex);
+      assert.equal(r.signatureValid, false);
+      assert.equal(r.digestMatches, false);
+    });
+
+    it('rejeita CMS cujo valor de assinatura foi corrompido', async () => {
+      const der = Buffer.from((await signed).cmsSignatureBase64, 'base64');
+      der[der.length - 10] ^= 0xff;
+      const r = await verifyEvolutionCms(der.toString('base64'), canonicalJson, hashHex);
+      assert.equal(r.signatureValid, false);
+    });
+
+    it('rejeita CMS assinado por outra chave com o mesmo resumo', async () => {
+      // Outra instância gera outro par de chaves; troca-se só o certificado embutido.
+      const other = await new MockBirdIdProvider({ mockCpf: '11144477735' }).signHash({
+        accessToken: 'x',
+        certificateAlias: 'e-CPF',
+        hashHex,
+        documentAlias: 'Outro',
+      });
+      assert.equal((await verifyEvolutionCms(other.cmsSignatureBase64, canonicalJson, hashHex)).signatureValid, true);
+      const { default: asn1js } = await import('asn1js').then((m) => ({ default: m }));
+      const { default: pkijs } = await import('pkijs').then((m) => ({ default: m }));
+      const parse = (b64) => {
+        const der = Buffer.from(b64, 'base64');
+        const asn = asn1js.fromBER(der.buffer.slice(der.byteOffset, der.byteOffset + der.byteLength));
+        return new pkijs.SignedData({ schema: new pkijs.ContentInfo({ schema: asn.result }).content });
+      };
+      const forged = parse((await signed).cmsSignatureBase64);
+      const foreign = parse(other.cmsSignatureBase64);
+      forged.certificates = foreign.certificates;
+      forged.signerInfos[0].sid = foreign.signerInfos[0].sid;
+      const forgedB64 = Buffer.from(
+        new pkijs.ContentInfo({ contentType: '1.2.840.113549.1.7.2', content: forged.toSchema(true) })
+          .toSchema()
+          .toBER(),
+      ).toString('base64');
+      const r = await verifyEvolutionCms(forgedB64, canonicalJson, hashHex);
+      assert.equal(r.digestMatches, true, 'o resumo continua igual');
+      assert.equal(r.signatureValid, false, 'mas a assinatura não pertence ao certificado');
+    });
+
+    it('rejeita conteúdo que não é CMS', async () => {
+      const r = await verifyEvolutionCms('bm90LWNtcw==', canonicalJson, hashHex);
+      assert.equal(r.signatureValid, false);
+      assert.ok(r.error);
     });
   });
 });

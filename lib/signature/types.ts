@@ -169,6 +169,8 @@ export interface EvolutionVerificationResult {
   recalculatedHash: string;
   hashMatches: boolean;
   dataMatchesRecord: boolean;
+  signatureValid?: boolean;
+  certificateValid?: boolean;
   signedAt: Date;
   canonicalData?: Record<string, unknown>;
   error?: string;
