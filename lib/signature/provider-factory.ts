@@ -2,8 +2,6 @@ import { HttpError } from '@/lib/supabase/server';
 import {
   BirdIdProvider,
   DEFAULT_BIRDID_BASE_URL,
-  DEFAULT_BIRDID_CLIENT_ID,
-  DEFAULT_BIRDID_CLIENT_SECRET,
 } from './birdid-provider.ts';
 import { MockBirdIdProvider } from './mock-birdid-provider.ts';
 import type { DigitalSignatureProvider } from './types.ts';
@@ -31,9 +29,9 @@ export function getSignatureProvider(): DigitalSignatureProvider {
 
   if (providerType === 'birdid') {
     const clientId =
-      process.env.BIRDID_CLIENT_ID?.trim() || DEFAULT_BIRDID_CLIENT_ID;
+      process.env.BIRDID_CLIENT_ID?.trim();
     const clientSecret =
-      process.env.BIRDID_CLIENT_SECRET?.trim() || DEFAULT_BIRDID_CLIENT_SECRET;
+      process.env.BIRDID_CLIENT_SECRET?.trim();
     const baseUrl =
       process.env.BIRDID_BASE_URL?.trim() || DEFAULT_BIRDID_BASE_URL;
 

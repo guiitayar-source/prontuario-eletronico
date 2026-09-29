@@ -171,6 +171,10 @@ export interface EvolutionVerificationResult {
   dataMatchesRecord: boolean;
   signatureValid?: boolean;
   certificateValid?: boolean;
+  // Cadeia até uma raiz ICP-Brasil fixada, na data da assinatura. Não consulta revogação.
+  chainValid?: boolean;
+  chainPath?: string[];
+  chainError?: string;
   signedAt: Date;
   canonicalData?: Record<string, unknown>;
   error?: string;

@@ -110,7 +110,7 @@ export function EvolutionSignatureDetailsModal({
           <div>
             <h2 id="signature-dialog-title">Assinatura Digital ICP-Brasil</h2>
             <p className="signature-modal-subtitle">
-              Registro Eletrônico Nativo de Prontuário • Assinado com Certificado em Nuvem Bird ID
+              Evolução clínica • Assinada com certificado em nuvem (Bird ID)
             </p>
           </div>
         </div>
@@ -133,19 +133,36 @@ export function EvolutionSignatureDetailsModal({
           </div>
         ) : verification ? (
           <div className="signature-audit-content">
-            {verification.isValid ? (
+            {verification.isValid && verification.chainValid ? (
               <div className="signature-status-banner valid">
                 <div className="status-badge-icon">
                   <Check size={18} />
                 </div>
                 <div>
-                  <strong>Assinatura Válida e Íntegra</strong>
+                  <strong>Assinatura válida</strong>
                   <p>
-                    A assinatura CMS foi verificada com a chave do certificado
-                    do signatário, que estava válido na data da assinatura, e o
-                    resumo SHA-256 dos dados atuais confere com o que foi
-                    assinado. A cadeia até a raiz ICP-Brasil não é conferida
-                    aqui.
+                    A assinatura confere com a chave do certificado, o
+                    certificado pertence à cadeia ICP-Brasil e estava válido na
+                    data registrada, e os dados atuais são os mesmos que foram
+                    assinados. A revogação do certificado não é consultada aqui.
+                  </p>
+                </div>
+              </div>
+            ) : verification.isValid ? (
+              <div className="signature-status-banner warning">
+                <div className="status-badge-icon">
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <strong>Assinatura íntegra, cadeia ICP-Brasil não confirmada</strong>
+                  <p>
+                    A assinatura confere e os dados não foram alterados, mas não
+                    foi possível ligar o certificado a uma raiz ICP-Brasil
+                    reconhecida pelo sistema
+                    {verification.chainError
+                      ? ` (${verification.chainError})`
+                      : ''}
+                    .
                   </p>
                 </div>
               </div>
@@ -155,7 +172,7 @@ export function EvolutionSignatureDetailsModal({
                   <AlertTriangle size={18} />
                 </div>
                 <div>
-                  <strong>Falha na Verificação de Integridade</strong>
+                  <strong>Falha na verificação</strong>
                   <p>
                     {verification.error ||
                       'O conteúdo da evolução ou metadados divergem do registro assinado.'}
@@ -182,9 +199,10 @@ export function EvolutionSignatureDetailsModal({
                   </span>
                 </div>
                 <div className="detail-row">
-                  <span className="detail-label">Data e Hora da Assinatura:</span>
+                  <span className="detail-label">Data e hora registradas:</span>
                   <span className="detail-value">
-                    {formatDate(verification.signedAt)} (Horário de Brasília)
+                    {formatDate(verification.signedAt)} (Horário de Brasília,
+                    informado pelo servidor; sem carimbo do tempo)
                   </span>
                 </div>
                 <div className="detail-row">
@@ -203,6 +221,14 @@ export function EvolutionSignatureDetailsModal({
                   <span className="detail-label">Autoridade Certificadora:</span>
                   <span className="detail-value">
                     {verification.certificateIssuer}
+                  </span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">Cadeia ICP-Brasil:</span>
+                  <span className="detail-value">
+                    {verification.chainValid
+                      ? (verification.chainPath || []).join(' → ')
+                      : `Não confirmada${verification.chainError ? `: ${verification.chainError}` : ''}`}
                   </span>
                 </div>
                 <div className="detail-row">
@@ -233,13 +259,13 @@ export function EvolutionSignatureDetailsModal({
                 <div className="detail-row">
                   <span className="detail-label">Padrão da Assinatura:</span>
                   <span className="detail-value">
-                    CMS / PKCS#7 Detached (Conforme DOC-ICP-01 e RFC 5652)
+                    CMS / PKCS#7 destacada (RFC 5652)
                   </span>
                 </div>
                 <div className="detail-row">
                   <span className="detail-label">Provedor Remoto:</span>
                   <span className="detail-value">
-                    Bird ID Cloud HSM (Soluti Certificadora)
+                    Bird ID (Soluti)
                   </span>
                 </div>
                 <div className="detail-row">
@@ -303,12 +329,11 @@ export function EvolutionSignatureDetailsModal({
 
             <div className="legal-immutability-note">
               <p>
-                <strong>Garantia de Imutabilidade Jurídica:</strong> Esta
-                evolução clínica é um registro nativo protegido por restrições
-                em nível de banco de dados (triggers de imutabilidade). Conforme a
-                MP 2.200-2/2001 e Resoluções CFM, nenhuma alteração ou exclusão é
-                permitida. Informações complementares devem ser registradas via
-                adendos.
+                <strong>Registro protegido:</strong> o sistema não permite
+                alterar nem excluir uma evolução assinada; complementos são
+                registrados como adendos. Se o texto ou os dados assinados forem
+                alterados por qualquer outro meio, esta verificação deixa de
+                confirmar a assinatura.
               </p>
             </div>
           </div>

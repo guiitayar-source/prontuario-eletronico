@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import * as pkijs from 'pkijs';
 import * as asn1js from 'asn1js';
 import utilsPkg from '@signpdf/utils';
+import { validateIcpChain } from '../lib/signature/icp-chain.ts';
 
 const { extractSignature } = utilsPkg;
 
@@ -157,8 +158,19 @@ async function verifyPdf(pdfBuffer) {
     verifyDetail = `exceção: ${e?.message || e} code=${e?.code ?? ''}`;
   }
 
+  const signingTime = signerInfo?.signedAttrs?.attributes
+    .find((a) => a.type === '1.2.840.113549.1.9.5')
+    ?.values?.[0]?.toDate?.();
+  const chain = await validateIcpChain(
+    signerCert,
+    signingTime || new Date(),
+    certificates.filter((c) => c instanceof pkijs.Certificate)
+  );
+
   return {
     isValid,
+    chain,
+    signingTime,
     verifyDetail,
     signedDigestHex,
     sidType: signerInfo?.sid?.constructor?.name || typeof signerInfo?.sid,
@@ -221,6 +233,12 @@ async function main() {
 
     console.log(`\n--- DIAGNÓSTICO CMS ---`);
     console.log(`Verificação pkijs: ${result.verifyDetail}`);
+    console.log(
+      `Cadeia ICP-Brasil: ${result.chain.valid ? 'CONFIRMADA' : 'NÃO CONFIRMADA'}` +
+        ` (na data ${(result.signingTime || new Date()).toLocaleString('pt-BR')})` +
+        (result.chain.path.length ? `\n                   ${result.chain.path.join(' → ')}` : '') +
+        (result.chain.error ? `\n                   ${result.chain.error}` : '')
+    );
     console.log(`Resumo assinado:   ${result.signedDigestHex || '(sem messageDigest)'}`);
     console.log(`Resumo calculado:  ${result.calculatedDigestHex}`);
     console.log(`Identificação:     ${result.sidType} · ${result.certCount} certificado(s)`);

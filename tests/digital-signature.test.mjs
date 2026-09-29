@@ -24,6 +24,10 @@ import {
   serializeCanonicalData,
 } from '../lib/signature/canonical-evolution.ts';
 import { verifyEvolutionCms } from '../lib/signature/evolution-cms.ts';
+import { validateIcpChain } from '../lib/signature/icp-chain.ts';
+import { ICP_BRASIL_INTERMEDIATES } from '../lib/signature/icp-brasil-certs.ts';
+import * as pkijsLib from 'pkijs';
+import * as asn1jsLib from 'asn1js';
 
 const execFileAsync = promisify(execFile);
 
@@ -497,6 +501,76 @@ describe('ICP-Brasil Digital Signature Suite', () => {
       const r = await verifyEvolutionCms('bm90LWNtcw==', canonicalJson, hashHex);
       assert.equal(r.signatureValid, false);
       assert.ok(r.error);
+    });
+  });
+
+  describe('7. Cadeia ICP-Brasil', () => {
+    const certs = ICP_BRASIL_INTERMEDIATES.map((b64) => {
+      const der = Buffer.from(b64, 'base64');
+      return new pkijsLib.Certificate({
+        schema: asn1jsLib.fromBER(der.buffer.slice(der.byteOffset, der.byteOffset + der.byteLength)).result,
+      });
+    });
+    const byName = (cn) =>
+      certs.find((c) =>
+        c.subject.typesAndValues.some((t) => t.type === '2.5.4.3' && t.value.valueBlock.value === cn),
+      );
+
+    it('fecha a cadeia da AC SOLUTI Múltipla v5 até a Raiz Brasileira v5', async () => {
+      const r = await validateIcpChain(byName('AC SOLUTI Multipla v5'), new Date('2026-09-29T12:00:00Z'));
+      assert.equal(r.valid, true, r.error);
+      assert.deepEqual(r.path.slice(-1), ['Autoridade Certificadora Raiz Brasileira v5']);
+    });
+
+    it('rejeita a cadeia numa data fora da validade', async () => {
+      const r = await validateIcpChain(byName('AC SOLUTI Multipla v5'), new Date('2040-01-01T00:00:00Z'));
+      assert.equal(r.valid, false);
+    });
+
+    it('rejeita certificado de raiz não fixada', async () => {
+      const r = await validateIcpChain(byName('AC SOLUTI SSL EV G4'), new Date('2026-09-29T12:00:00Z'));
+      assert.equal(r.valid, false);
+    });
+
+    it('rejeita certificado autoemitido com nomes da ICP-Brasil', async () => {
+      const provider = new MockBirdIdProvider({ mockCpf: '34929144892' });
+      const { cmsSignatureBase64 } = await provider.signHash({
+        accessToken: 'x',
+        certificateAlias: 'e-CPF',
+        hashHex: 'a'.repeat(64),
+        documentAlias: 'x',
+      });
+      const der = Buffer.from(cmsSignatureBase64, 'base64');
+      const sd = new pkijsLib.SignedData({
+        schema: new pkijsLib.ContentInfo({
+          schema: asn1jsLib.fromBER(der.buffer.slice(der.byteOffset, der.byteOffset + der.byteLength)).result,
+        }).content,
+      });
+      const r = await validateIcpChain(sd.certificates[0], new Date());
+      assert.equal(r.valid, false);
+      assert.ok(r.error);
+    });
+
+    it('rejeita certificado que se diz emitido pela AC SOLUTI mas foi assinado por outra chave', async () => {
+      const issuer = byName('AC SOLUTI Multipla v5');
+      const keys = await crypto.webcrypto.subtle.generateKey(
+        { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
+        true,
+        ['sign', 'verify'],
+      );
+      const forged = new pkijsLib.Certificate();
+      forged.version = 2;
+      forged.serialNumber = new asn1jsLib.Integer({ value: 424242 });
+      forged.issuer = issuer.subject;
+      forged.subject.typesAndValues.push(
+        new pkijsLib.AttributeTypeAndValue({ type: '2.5.4.3', value: new asn1jsLib.Utf8String({ value: 'FALSO:34929144892' }) }),
+      );
+      forged.notBefore.value = new Date('2025-01-01T00:00:00Z');
+      forged.notAfter.value = new Date('2028-01-01T00:00:00Z');
+      await forged.subjectPublicKeyInfo.importKey(keys.publicKey);
+      await forged.sign(keys.privateKey, 'SHA-256');
+      const r = await validateIcpChain(forged, new Date('2026-09-29T12:00:00Z'));
+      assert.equal(r.valid, false, 'nome do emissor não basta: a assinatura da AC precisa conferir');
     });
   });
 });

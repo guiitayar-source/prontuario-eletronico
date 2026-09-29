@@ -429,7 +429,8 @@ export class EvolutionSigningService {
     const cms = await verifyEvolutionCms(
       sig.signature_value,
       canonicalJson,
-      sig.document_hash
+      sig.document_hash,
+      new Date(sig.signed_at)
     );
     const signatureValid = cms.signatureValid;
     const cnMatch = sig.certificate_subject.match(/CN=([^,\n/]+)/i);
@@ -470,6 +471,7 @@ export class EvolutionSigningService {
         data_matches_record: dataMatchesRecord,
         signature_valid: signatureValid,
         certificate_valid: certificateValid,
+        chain_valid: cms.chain?.valid ?? false,
       },
     });
 
@@ -491,6 +493,9 @@ export class EvolutionSigningService {
       dataMatchesRecord,
       signatureValid,
       certificateValid,
+      chainValid: cms.chain?.valid ?? false,
+      chainPath: cms.chain?.path ?? [],
+      chainError: cms.chain?.valid ? undefined : cms.chain?.error,
       signedAt: new Date(sig.signed_at),
       canonicalData,
       error: isValid

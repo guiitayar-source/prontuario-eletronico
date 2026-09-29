@@ -54,7 +54,14 @@ Sistema web moderno para clínicas e consultórios com foco em prontuário eletr
 - **Importador LGPD JSON & FHIR R4**: Carga em lote de prontuários com pré-visualização, identificação de duplicados, vínculo explícito e possibilidade de reversão de lote com auditoria.
 - **Exportação FHIR R4**: Exportação padronizada dos dados do paciente e exames ativos conforme os padrões internacionais de saúde.
 
-### 8. Segurança, Governança & Multi-tenant
+### 8. Assinatura Digital ICP-Brasil (Bird ID)
+- **Documentos** (receitas, atestados, relatórios): PDF com assinatura PAdES, validável no validador do ITI.
+- **Evoluções clínicas**: assinatura CMS sobre uma representação canônica da evolução, guardada no banco; evolução assinada fica travada para edição e exclusão.
+- Sessão Bird ID de 4 horas com OAuth PKCE, token cifrado e conferência do CPF do certificado.
+- Verificação interna: integridade dos dados, assinatura criptográfica, certificado registrado e cadeia até a raiz ICP-Brasil fixada. Não consulta revogação nem usa carimbo do tempo.
+- Detalhes em [ARQUITETURA_ASSINATURAS.md](./ARQUITETURA_ASSINATURAS.md).
+
+### 9. Segurança, Governança & Multi-tenant
 - Isolamento estrito por clínica (`clinic_id`) com Row Level Security (RLS) no PostgreSQL.
 - Controle de acesso baseado em papéis (RBAC): médicos e proprietários têm acesso integral a evoluções e laudos; secretárias acessam cadastro, agenda e recepção de anexos.
 - Trilha de auditoria para operações sensíveis e proteção de MFA verificada inclusive a nível de banco de dados.
@@ -127,6 +134,12 @@ npm run test:exams
 # Teste de emissão do receituário médico em PDF (2 vias A4)
 node tests/prescription-pdf.test.mjs
 
+# Assinaturas digitais (PAdES, evoluções e cadeia ICP-Brasil)
+npm run test:signature
+
+# Verificar um PDF assinado (assinatura, cadeia e diagnóstico)
+npm run verify-signature -- caminho/do/documento.pdf
+
 # Build de produção do Next.js (validação completa de páginas e rotas dinâmicas)
 npm run build
 ```
@@ -136,5 +149,6 @@ npm run build
 ## 📚 Documentação Complementar
 
 - [EXAMES.md](./EXAMES.md): Detalhes técnicos, modelos de IA suportados, validações clínicas e catálogo de exames.
+- [ARQUITETURA_ASSINATURAS.md](./ARQUITETURA_ASSINATURAS.md): Como as assinaturas ICP-Brasil funcionam, o que é verificado, limites e como fazer manutenção (novas raízes, schema canônico, provedores).
 - [OPERACAO_SEGURA.md](./OPERACAO_SEGURA.md): Protocolos de MFA, backup criptografado, controles de acesso e diretrizes de auditoria.
 - [SUPABASE_MIGRATION.md](./SUPABASE_MIGRATION.md): Histórico da migração para o Supabase e pendências do legado.

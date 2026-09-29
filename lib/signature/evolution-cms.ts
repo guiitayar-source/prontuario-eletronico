@@ -2,6 +2,7 @@ import * as pkijs from 'pkijs';
 import * as asn1js from 'asn1js';
 import { parseX509Certificate } from './crypto-utils.ts';
 import type { CertificateInfo } from './types.ts';
+import { validateIcpChain, type IcpChainCheck } from './icp-chain.ts';
 
 // Garante motor WebCrypto para pkijs
 try {
@@ -20,6 +21,8 @@ export type EvolutionCmsCheck = {
   // O messageDigest assinado é o SHA-256 dos dados canônicos informados.
   digestMatches: boolean;
   certificate: CertificateInfo | null;
+  // Cadeia até a raiz ICP-Brasil na data informada (só quando `at` é passado).
+  chain?: IcpChainCheck;
   error?: string;
 };
 
@@ -27,14 +30,15 @@ const toArrayBuffer = (b: Buffer) =>
   b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
 
 /**
- * Verifica criptograficamente uma assinatura CMS destacada de evolução clínica.
- * Não valida a cadeia até a raiz ICP-Brasil: confirma que o certificado embutido
- * assinou exatamente estes dados canônicos.
+ * Verifica criptograficamente uma assinatura CMS destacada de evolução clínica:
+ * confirma que o certificado embutido assinou exatamente estes dados canônicos.
+ * Com `at`, também valida a cadeia do certificado até a raiz ICP-Brasil nessa data.
  */
 export async function verifyEvolutionCms(
   cmsBase64: string,
   canonicalJson: string,
   expectedHashHex: string,
+  at?: Date,
 ): Promise<EvolutionCmsCheck> {
   const fail = (error: string, certificate: CertificateInfo | null = null) => ({
     signatureValid: false,
@@ -102,7 +106,10 @@ export async function verifyEvolutionCms(
         ),
         digestMatches,
       };
-    return { signatureValid: true, digestMatches, certificate };
+    const chain = at
+      ? await validateIcpChain(signerCert, at, certificates)
+      : undefined;
+    return { signatureValid: true, digestMatches, certificate, chain };
   } catch (e) {
     const message =
       (e as { message?: string })?.message ||
