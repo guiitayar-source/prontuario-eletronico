@@ -6,7 +6,6 @@ import {
   formatHumanDuration,
   getStoredTimer,
   saveStoredTimer,
-  type StoredTimerState,
 } from '@/lib/timer-utils';
 
 export interface ConsultationTimerOptions {

@@ -7,7 +7,6 @@ import {
   Stethoscope,
   ShieldCheck,
   Palette,
-  Upload,
 } from 'lucide-react';
 
 export type NavigationItem =
@@ -15,7 +14,6 @@ export type NavigationItem =
   | 'patients'
   | 'consultation'
   | 'team'
-  | 'imports'
   | 'settings';
 
 export type NavigationRailProps = {
@@ -24,7 +22,6 @@ export type NavigationRailProps = {
   onPatients?: () => void;
   onConsultation?: () => void;
   onTeam?: () => void;
-  onImports?: () => void;
   onSettings?: () => void;
   disabled?: boolean;
   roleLabelOverride?: string;
@@ -42,7 +39,6 @@ export function NavigationRail({
   onPatients,
   onConsultation,
   onTeam,
-  onImports,
   onSettings,
   disabled = false,
   roleLabelOverride,
@@ -103,13 +99,6 @@ export function NavigationRail({
           >
             <ShieldCheck size={21} />
             <span>Equipe</span>
-          </button>
-        )}
-
-        {active === 'imports' && (
-          <button className="nav-item active" aria-current="page">
-            <Upload size={21} />
-            <span>Importar</span>
           </button>
         )}
 

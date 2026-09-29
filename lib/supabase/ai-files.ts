@@ -109,13 +109,6 @@ const ALLOWED_MIMES = new Set([
   'image/webp',
 ]);
 
-type OpenAIResponse = {
-  status?: string;
-  error?: { message?: string } | null;
-  incomplete_details?: { reason?: string } | null;
-  output?: unknown;
-};
-
 type AiProviderId = 'openai' | 'gemini' | 'demo';
 type AiAction = 'extract-exams' | 'transcribe-document';
 type AiExamModelId = 'gemini-flash' | 'openai-luna' | 'openai-mini' | 'demo';

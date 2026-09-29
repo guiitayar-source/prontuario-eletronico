@@ -3,30 +3,20 @@ import { useAccess } from '../auth';
 import { apiFetch as fetch } from '@/lib/supabase/http';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Search,
   Plus,
-  UserRound,
-  ChevronRight,
-  Activity,
-  Users,
-  ArrowLeft,
   Check,
-  CalendarDays,
-  Stethoscope,
-  ShieldCheck,
-  Palette,
 } from 'lucide-react';
 import {
   fieldGroups,
   emptyPatient,
-  initials,
-  age,
   type Patient,
   type PatientInput,
 } from '@/lib/patient-fields';
 import { TopBar } from '@/components/topbar';
 import { NavigationRail } from '../navigation-rail';
 import { PatientSearch } from './search';
+import { ImportPanel } from '../imports';
+import { FhirExportPanel } from '../fhir-export';
 export { PatientSearch };
 export async function fetchPatient(id: string) {
   const r = await fetch(`/api/patients?id=${encodeURIComponent(id)}`, {
@@ -274,25 +264,28 @@ export function PatientDetails({
 }
 export default function Registry({
   onOpen,
+  onOpenId,
   onAgenda,
   onConsultation,
   onTeam,
-  onImports,
   onSettings,
 }: {
   onOpen: (p: Patient) => void;
+  onOpenId: (id: string) => void;
   onAgenda: () => void;
   onConsultation: () => void;
   onTeam: () => void;
-  onImports: () => void;
   onSettings?: () => void;
 }) {
-  const [create, setCreate] = useState(false);
+  const [create, setCreate] = useState(false),
+    [tab, setTab] = useState<'list' | 'transfer'>('list'),
+    [transferBusy, setTransferBusy] = useState(false);
   const medical = ['owner', 'doctor'].includes(useAccess().role);
   return (
     <div className="app-shell">
       <NavigationRail
         active="patients"
+        disabled={transferBusy}
         onAgenda={onAgenda}
         onConsultation={onConsultation}
         onTeam={onTeam}
@@ -309,18 +302,46 @@ export default function Registry({
                 <div>
                   <div className="eyebrow">CONSULTÓRIO</div>
                   <h1>Pacientes</h1>
-                  <p>Encontre um paciente ou comece um novo cadastro.</p>
+                  <p>
+                    {tab === 'list'
+                      ? 'Encontre um paciente ou comece um novo cadastro.'
+                      : 'Traga prontuários de outro sistema ou exporte o prontuário de um paciente.'}
+                  </p>
                 </div>
-                {medical && (
-                  <button className="secondary" onClick={onImports}>
-                    Importar prontuários
+                {tab === 'list' && (
+                  <button className="primary" onClick={() => setCreate(true)}>
+                    <Plus size={18} /> Novo paciente
                   </button>
                 )}
-                <button className="primary" onClick={() => setCreate(true)}>
-                  <Plus size={18} /> Novo paciente
-                </button>
               </div>
-              <PatientSearch onOpen={onOpen} />
+              {medical && (
+                <div className="patient-tabs">
+                  <button
+                    className={tab === 'list' ? 'selected' : ''}
+                    disabled={transferBusy}
+                    onClick={() => setTab('list')}
+                  >
+                    Cadastros
+                  </button>
+                  <button
+                    className={tab === 'transfer' ? 'selected' : ''}
+                    onClick={() => setTab('transfer')}
+                  >
+                    Importar e exportar
+                  </button>
+                </div>
+              )}
+              {tab === 'transfer' && medical ? (
+                <div className="imports-page">
+                  <FhirExportPanel />
+                  <ImportPanel
+                    onOpenPatient={onOpenId}
+                    onBusy={setTransferBusy}
+                  />
+                </div>
+              ) : (
+                <PatientSearch onOpen={onOpen} />
+              )}
             </>
           )}
         </main>

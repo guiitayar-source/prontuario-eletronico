@@ -1,10 +1,5 @@
 'use client';
 import {
-  Activity,
-  CalendarDays,
-  Users,
-  Stethoscope,
-  ShieldCheck,
   Palette,
   Check,
   Sparkles,
@@ -14,6 +9,8 @@ import { useTheme, THEMES, type ThemeName } from '@/lib/theme';
 import { TopBar } from './topbar';
 import { NavigationRail } from './navigation-rail';
 import type { Patient } from '@/lib/patient-fields';
+import { useAccess } from './auth';
+import { ProfessionalProfileCard } from './professional-profile';
 
 export default function Settings({
   onPatients,
@@ -27,6 +24,7 @@ export default function Settings({
   onOpenPatient?: (p: Patient) => void;
 }) {
   const { theme, setTheme, gradient, setGradient } = useTheme();
+  const medical = ['owner', 'doctor'].includes(useAccess().role);
 
   return (
     <div className="app-shell">
@@ -44,19 +42,21 @@ export default function Settings({
           <div className="breadcrumb">
             <button onClick={onPatients}>Consultório</button>
             <span>›</span>
-            <span>Configurações visuais</span>
+            <span>Ajustes</span>
           </div>
 
           <section className="listing">
             <div className="listing-heading">
-              <div className="eyebrow">PREFERÊNCIAS DO CONSULTÓRIO</div>
-              <h1>Aparência e Cores</h1>
+              <div className="eyebrow">PREFERÊNCIAS</div>
+              <h1>Ajustes</h1>
               <p>
-                Personalize a paleta visual do prontuário e o acabamento dos painéis de acordo com a identidade do seu espaço de atendimento.
+                Seus dados profissionais e a aparência do prontuário.
               </p>
             </div>
 
             <div className="settings-content">
+              {medical && <ProfessionalProfileCard />}
+
               {/* Card 1: Seleção de Paleta */}
               <section className="settings-card">
                 <div className="settings-card-header">

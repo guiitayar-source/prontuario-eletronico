@@ -24,6 +24,16 @@ export const imports = handle(async (request, { db, clinic, role }) => {
         Number.parseInt(url.searchParams.get('page') || '0') || 0,
       ),
     );
+    if (patientId && url.searchParams.get('count') === '1') {
+      const q = await db
+        .from('import_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('clinic_id', clinic)
+        .eq('patient_id', patientId)
+        .is('withdrawn_at', null);
+      check(q);
+      return json({ total: q.count || 0 });
+    }
     if (patientId) {
       const q = await db
         .from('import_records')

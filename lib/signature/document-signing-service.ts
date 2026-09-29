@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { adminClient } from '@/lib/supabase/admin';
 import { HttpError } from '@/lib/supabase/server';
 import { documentPdf } from '@/lib/document-pdf';
+import { withPdfData } from '@/lib/supabase/document-pdf-data';
 import type { ClinicalDocument } from '@/lib/document-fields';
 import {
   cleanCpf,
@@ -423,29 +424,8 @@ export class DocumentSigningService {
       .eq('id', params.documentId);
 
     try {
-      // 4. If prescription, load patient address if needed
-      if (doc.kind === 'Receita') {
-        const { data: patientData } = await admin
-          .from('patients')
-          .select('street,address_number,complement,neighborhood,city,state')
-          .eq('clinic_id', params.clinicId)
-          .eq('id', doc.patient_id)
-          .maybeSingle();
-
-        if (patientData) {
-          const parts = [
-            patientData.street,
-            patientData.address_number
-              ? `nº ${patientData.address_number}`
-              : '',
-            patientData.complement,
-            patientData.neighborhood,
-          ].filter(Boolean);
-          doc.patient_address = parts.join(', ');
-          doc.patient_city = patientData.city || '';
-          doc.patient_state = patientData.state || '';
-        }
-      }
+      // 4. Endereço do paciente (receitas) e timbre do autor
+      await withPdfData(admin, params.clinicId, doc);
 
       // 5. Generate unsigned official PDF
       const unsignedPdfBytes = await documentPdf(doc, { isDraft: false });

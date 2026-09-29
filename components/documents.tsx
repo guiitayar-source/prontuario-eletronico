@@ -5,15 +5,12 @@ import {
   documentKinds,
   documentTemplate,
   type ClinicalDocument,
+  type DocumentProfile,
+  type PrescriptionTemplate,
 } from '@/lib/document-fields';
 import type { Patient } from '@/lib/patient-fields';
 import { Sparkles, Trash2, Download, ShieldCheck, Key, Lock, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { SignatureSessionData } from '@/lib/signature/types';
-type Profile = {
-  physician_name: string;
-  physician_registration: string;
-  cpf?: string | null;
-};
 type AiModel = {
   id: string;
   label: string;
@@ -29,11 +26,15 @@ type InstructionTemplate = {
 };
 export function useDocuments(patient: Patient, enabled = true) {
   const [rows, setRows] = useState<ClinicalDocument[]>([]),
-    [profile, setProfile] = useState<Profile>({
+    [profile, setProfile] = useState<DocumentProfile>({
       physician_name: '',
       physician_registration: '',
+      letterhead_title: '',
+      letterhead_address: '',
+      letterhead_phone: '',
       cpf: null,
     }),
+    [templates, setTemplates] = useState<PrescriptionTemplate[]>([]),
     [draft, setDraft] = useState<ClinicalDocument | null>(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
@@ -127,12 +128,46 @@ export function useDocuments(patient: Patient, enabled = true) {
     );
     const data = (await r.json()) as {
       documents: ClinicalDocument[];
-      profile: Profile | null;
+      profile: DocumentProfile | null;
+      templates: PrescriptionTemplate[];
       error?: string;
     };
     if (!r.ok) throw new Error(data.error);
     setRows(data.documents);
+    setTemplates(data.templates || []);
     if (data.profile) setProfile(data.profile);
+  }
+  async function templateAction(
+    action: 'save-template' | 'delete-template',
+    body: Partial<PrescriptionTemplate>,
+  ) {
+    const r = await apiFetch('/api/documents?action=' + action, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Document-Action': '1',
+      },
+      body: JSON.stringify(body),
+    });
+    const data = (await r.json()) as {
+      template?: PrescriptionTemplate;
+      error?: string;
+    };
+    if (!r.ok) throw new Error(data.error);
+    return data.template;
+  }
+  async function saveTemplate(t: PrescriptionTemplate) {
+    const saved = (await templateAction('save-template', t))!;
+    setTemplates((current) =>
+      [...current.filter((item) => item.id !== saved.id), saved].sort((a, b) =>
+        a.name.localeCompare(b.name, 'pt-BR'),
+      ),
+    );
+    return saved;
+  }
+  async function deleteTemplate(id: string) {
+    await templateAction('delete-template', { id });
+    setTemplates((current) => current.filter((item) => item.id !== id));
   }
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -176,10 +211,14 @@ export function useDocuments(patient: Patient, enabled = true) {
     consultationId?: string,
     duplicate = false,
     initialText = '',
+    kind = documentKinds[0],
   ) {
     clearPreview();
     setError('');
-    const next = d
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+    }).format(new Date());
+    const next: ClinicalDocument = d
       ? {
           ...d,
           ...(duplicate
@@ -188,6 +227,12 @@ export function useDocuments(patient: Patient, enabled = true) {
                 version: 0,
                 author_id: undefined,
                 updated_at: undefined,
+                status: undefined,
+                signed_pdf_path: null,
+                document_date: today,
+                consultation_id: consultationId || null,
+                physician_name: profile.physician_name,
+                physician_registration: profile.physician_registration,
               }
             : {}),
         }
@@ -195,12 +240,11 @@ export function useDocuments(patient: Patient, enabled = true) {
           id: crypto.randomUUID(),
           patient_id: patient.id,
           consultation_id: consultationId || null,
-          kind: documentKinds[0],
+          kind,
           patient_name: patient.social_name || patient.name,
-          ...profile,
-          document_date: new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'America/Sao_Paulo',
-          }).format(new Date()),
+          physician_name: profile.physician_name,
+          physician_registration: profile.physician_registration,
+          document_date: today,
           text: initialText,
           version: 0,
         };
@@ -318,6 +362,9 @@ export function useDocuments(patient: Patient, enabled = true) {
 
   return {
     rows,
+    templates,
+    saveTemplate,
+    deleteTemplate,
     draft,
     setDraft: (d: ClinicalDocument) => {
       clearPreview();
@@ -915,10 +962,17 @@ function DocumentAiBox({
   );
 }
 
-export function DocumentEditor({ docs }: { docs: DocumentsController }) {
+export function DocumentEditor({
+  docs,
+  prescription = false,
+}: {
+  docs: DocumentsController;
+  prescription?: boolean;
+}) {
   const d = docs.draft;
   if (!d) return null;
   const isSigned = d.status === 'SIGNED';
+  const noun = prescription ? 'receita' : 'documento';
 
   function update(fields: Partial<ClinicalDocument>) {
     if (isSigned) return;
@@ -929,10 +983,14 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
     <>
       <h2 id="dialog-title">
         {isSigned
-          ? 'Documento assinado digitalmente'
+          ? prescription
+            ? 'Receita assinada digitalmente'
+            : 'Documento assinado digitalmente'
           : d.version
-            ? 'Editar documento'
-            : 'Novo documento'}
+            ? `Editar ${noun}`
+            : prescription
+              ? 'Nova receita'
+              : 'Novo documento'}
       </h2>
 
       {docs.signatureNotice && (
@@ -1033,24 +1091,28 @@ export function DocumentEditor({ docs }: { docs: DocumentsController }) {
         </div>
       )}
       <fieldset disabled={docs.busy || isSigned} style={{ border: 0, padding: 0 }}>
-        <label htmlFor="doctype">Tipo de documento</label>
-        <select
-          id="doctype"
-          value={d.kind}
-          disabled={isSigned}
-          onChange={(e) => {
-            const nextKind = e.target.value;
-            if (!d.text.trim()) {
-              update({ kind: nextKind, text: documentTemplate(nextKind) });
-            } else {
-              update({ kind: nextKind });
-            }
-          }}
-        >
-          {documentKinds.map((k) => (
-            <option key={k}>{k}</option>
-          ))}
-        </select>
+        {!prescription && (
+          <>
+            <label htmlFor="doctype">Tipo de documento</label>
+            <select
+              id="doctype"
+              value={d.kind}
+              disabled={isSigned}
+              onChange={(e) => {
+                const nextKind = e.target.value;
+                if (!d.text.trim()) {
+                  update({ kind: nextKind, text: documentTemplate(nextKind) });
+                } else {
+                  update({ kind: nextKind });
+                }
+              }}
+            >
+              {documentKinds.map((k) => (
+                <option key={k}>{k}</option>
+              ))}
+            </select>
+          </>
+        )}
         <label>
           Paciente
           <input value={d.patient_name} readOnly />

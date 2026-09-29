@@ -11,14 +11,12 @@ async function prescriptionPdf(
   font: PDFFont,
   bold: PDFFont,
 ) {
-  const clinicName = 'CONSULTÓRIO DE PSIQUIATRIA';
-  const clinicAddress =
-    'Rua Júlio Marcondes Guimarães, nº 115 · Pq Campolim · Sala 506';
-  const clinicPhone = 'Tel.: (15) 3233-6216';
+  const clinicName = clean(d.letterhead_title || '');
+  const clinicAddress = clean(d.letterhead_address || '');
+  const clinicPhone = clean(d.letterhead_phone || '');
 
-  const physicianName = d.physician_name || 'Dr. Guilherme Tayar de Camargo';
-  const physicianReg =
-    d.physician_registration || 'Psiquiatra  ·  CRM 164119  ·  RQE 72731';
+  const physicianName = d.physician_name;
+  const physicianReg = d.physician_registration;
 
   const dateFormatted = d.document_date
     ? d.document_date.split('-').reverse().join('/')
@@ -591,6 +589,9 @@ export async function documentPdf(
     d.patient_address || '',
     d.patient_city || '',
     d.patient_state || '',
+    d.letterhead_title || '',
+    d.letterhead_address || '',
+    d.letterhead_phone || '',
   ].map(clean);
   const supported = new Set(font.getCharacterSet());
   for (const s of content)

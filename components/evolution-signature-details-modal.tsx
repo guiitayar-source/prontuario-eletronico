@@ -11,7 +11,6 @@ import {
   RefreshCw,
   FileText,
   Lock,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';

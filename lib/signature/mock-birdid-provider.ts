@@ -26,7 +26,7 @@ export class MockBirdIdProvider implements DigitalSignatureProvider {
 
   constructor(options?: MockProviderOptions) {
     this.mockCpf = options?.mockCpf || '12345678901';
-    this.doctorName = options?.doctorName || 'DR. GUILHERME TAYAR';
+    this.doctorName = options?.doctorName || 'MÉDICO DE TESTE';
     this.shouldFailSign = Boolean(options?.shouldFailSign);
     this.shouldFailTokenExchange = Boolean(options?.shouldFailTokenExchange);
 

@@ -33,6 +33,8 @@ Sistema web moderno para clínicas e consultórios com foco em prontuário eletr
 ### 4. Documentos & Prescrições Médicas
 - Emissão de atestados, declarações, pedidos de exames e receituários.
 - **Receituário em 2 Vias (Farmácia / Paciente)**: Geração instantânea de PDF em folha A4 com endereço do consultório, modelos pré-definidos e fontes vetoriais incorporadas.
+- **Nova receita**: botão próprio, ao lado de "Novo documento", que abre o editor com os modelos de receita do profissional e as receitas anteriores do paciente (usar, acrescentar ou repetir com a data de hoje).
+- **Dados profissionais por usuário**: nome, registro, título do timbre, endereço e telefone ficam em Ajustes e valem para cada profissional da equipe.
 - Histórico de versões e rascunhos.
 
 ### 5. Anexos & Captura Multimodal via Celular
@@ -48,6 +50,7 @@ Sistema web moderno para clínicas e consultórios com foco em prontuário eletr
 - **Correções Auditáveis**: Retificação de resultados com motivo obrigatório, preservando o valor anterior para fins periciais e legais.
 
 ### 7. Interoperabilidade, Importação & Exportação
+- Tudo em um só lugar: **Pacientes → Importar e exportar**. A consulta mostra a aba "Histórico importado" apenas quando o paciente tem registros importados.
 - **Importador LGPD JSON & FHIR R4**: Carga em lote de prontuários com pré-visualização, identificação de duplicados, vínculo explícito e possibilidade de reversão de lote com auditoria.
 - **Exportação FHIR R4**: Exportação padronizada dos dados do paciente e exames ativos conforme os padrões internacionais de saúde.
 
@@ -72,7 +75,7 @@ O projeto passou por uma ampla auditoria e refatoração arquitetural com foco e
 - **Criação de `lib/file-utils.ts`**: Centralização de constantes e detecção pura de tipos de arquivo (`MAX_FILE`, `fileType`).
 - **Expansão de `lib/patient-fields.ts`**: Funções puras de validação cadastral e de CPF (`validCpf`, `validate`).
 - **Desacoplamento Completo**: Módulos ativos do Supabase (`lib/supabase/patients.ts`, `lib/imports/normalize.ts`, `lib/supabase/capture.ts`, `lib/supabase/ai-files.ts`) agora usam módulos desacoplados em vez de importar arquivos legados de Cloudflare D1.
-- **Compatibilidade Preservada**: Os módulos legados (`lib/patients.ts`, `lib/capture.ts`) reexportam os novos utilitários para manter compatibilidade retroativa.
+- **Legado Removido**: Os módulos Cloudflare D1/R2 (`lib/patients.ts`, `lib/capture.ts`, `lib/appointments.ts`, `lib/storage.ts`), o schema Drizzle, a configuração Vite/vinext e seus testes foram excluídos junto com as dependências sem uso.
 
 #### 3. Unificação dos Clientes de IA
 - **Criação de `lib/ai/client.ts`**:
@@ -82,7 +85,7 @@ O projeto passou por uma ampla auditoria e refatoração arquitetural com foco e
 
 #### 4. Navegação Lateral Centralizada (`NavigationRail`)
 - **Criação de `components/navigation-rail.tsx`**:
-  - Ponto único de verdade para rotas e menus (Agenda, Pacientes, Importar, Equipe, Configurações, atalho Celular e Logout).
+  - Ponto único de verdade para rotas e menus (Agenda, Pacientes, Consulta, Equipe e Ajustes).
 - Substituição de blocos duplicados de navegação nas 6 telas da aplicação (`agenda.tsx`, `clinical-record.tsx`, `registry.tsx`, `imports.tsx`, `team.tsx`, `settings.tsx`).
 
 #### 5. Modularização do Módulo de Exames (`components/exams.tsx`)

@@ -22,8 +22,25 @@ export type ClinicalDocument = {
   patient_address?: string;
   patient_city?: string;
   patient_state?: string;
+  letterhead_title?: string;
+  letterhead_address?: string;
+  letterhead_phone?: string;
   status?: 'DRAFT' | 'FINALIZED' | 'SIGNING' | 'SIGNED' | 'SIGNATURE_FAILED' | 'SUPERSEDED';
   signed_pdf_path?: string | null;
+};
+export type DocumentProfile = {
+  physician_name: string;
+  physician_registration: string;
+  letterhead_title: string;
+  letterhead_address: string;
+  letterhead_phone: string;
+  cpf?: string | null;
+};
+export type PrescriptionTemplate = {
+  id: string;
+  name: string;
+  text: string;
+  updated_at?: string;
 };
 export function documentTemplate(kind: string) {
   return (

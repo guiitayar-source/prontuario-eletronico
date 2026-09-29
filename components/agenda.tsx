@@ -3,7 +3,6 @@ import { apiFetch as fetch } from '@/lib/supabase/http';
 
 import { useEffect, useMemo, useState, useRef } from 'react';
 import {
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Clock3,

@@ -2,13 +2,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAccess } from './auth';
 import { ImportedHistory } from './imports';
-import { FHIRExport } from './fhir-export';
 import {
   useClinicalContext,
   ClinicalContextSummary,
   ClinicalContextEditor,
 } from './clinical-context';
 import { useDocuments, DocumentHistory, DocumentEditor } from './documents';
+import { PrescriptionWorkspace } from './prescriptions';
+import { documentTemplate } from '@/lib/document-fields';
 import { apiFetch } from '@/lib/supabase/http';
 import { PatientDetails, PatientSearch } from './patients/registry';
 import Attachments from './capture/desktop';
@@ -17,22 +18,16 @@ import { DEMO_ID, initials, age, type Patient } from '@/lib/patient-fields';
 import { TopBar } from './topbar';
 import { NavigationRail } from './navigation-rail';
 import {
-  Activity,
-  CalendarDays,
-  Users,
-  Search,
-  ChevronLeft,
   ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
-  Palette,
   Clock3,
   Check,
   FileText,
+  Pill,
   Mic,
   X,
   ArrowUpRight,
-  Stethoscope,
   LockKeyhole,
   ShieldCheck,
   FileCheck,
@@ -407,9 +402,30 @@ export default function ClinicalRecord({
     }
   }
 
+  const [hasImported, setHasImported] = useState(false);
+  useEffect(() => {
+    if (!medical) return;
+    let active = true;
+    void apiFetch(
+      `/api/imports?patientId=${encodeURIComponent(patient.id)}&count=1`,
+    )
+      .then(async (r) => {
+        const d = (await r.json()) as { total?: number };
+        if (active && r.ok) setHasImported((d.total || 0) > 0);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [patient.id, medical]);
+
   const [modal, setModal] = useState('');
+  function openPrescription() {
+    docs.open(undefined, current?.id, false, documentTemplate('Receita'), 'Receita');
+    setModal('receita');
+  }
   function closeModal() {
-    if (modal === 'documento' && !docs.close()) return;
+    if ((modal === 'documento' || modal === 'receita') && !docs.close()) return;
     setModal('');
   }
   const [view, setView] = useState('consulta');
@@ -439,7 +455,8 @@ export default function ClinicalRecord({
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        if (modal === 'documento' && !docs.close()) return;
+        if ((modal === 'documento' || modal === 'receita') && !docs.close())
+          return;
         setModal('busca');
       }
       if (e.key === 'Escape') closeModal();
@@ -521,7 +538,7 @@ export default function ClinicalRecord({
                 >
                   Cadastro
                 </button>
-                {medical && (
+                {medical && hasImported && (
                   <button
                     className={tab === 'importados' ? 'selected' : ''}
                     onClick={() => setTab('importados')}
@@ -530,13 +547,6 @@ export default function ClinicalRecord({
                   </button>
                 )}
                 <div className="tabs-spacer" />
-                {medical && (
-                  <FHIRExport
-                    key={patient.id}
-                    patientId={patient.id}
-                    patientName={displayName}
-                  />
-                )}
                 {tab === 'consulta' && (
                   <button
                     onClick={() => setPanel(!panel)}
@@ -563,8 +573,9 @@ export default function ClinicalRecord({
                   docs.open(undefined, current?.id, false, initialText);
                   setModal('documento');
                 }}
+                newPrescription={medical ? openPrescription : undefined}
               />
-              {medical && tab === 'importados' && (
+              {medical && hasImported && tab === 'importados' && (
                 <ImportedHistory key={patient.id} patientId={patient.id} />
               )}
               {medical && tab === 'documentos' && (
@@ -572,7 +583,7 @@ export default function ClinicalRecord({
                   docs={docs}
                   onOpen={(d, duplicate) => {
                     docs.open(d, undefined, duplicate);
-                    setModal('documento');
+                    setModal(d.kind === 'Receita' ? 'receita' : 'documento');
                   }}
                 />
               )}
@@ -873,6 +884,9 @@ export default function ClinicalRecord({
                       >
                         <FileText size={16} /> Novo documento
                       </button>
+                      <button className="secondary" onClick={openPrescription}>
+                        <Pill size={16} /> Nova receita
+                      </button>
                       {isSigned ? (
                         <>
                           <button
@@ -1052,6 +1066,8 @@ export default function ClinicalRecord({
                   ? 'modal anamnesator-modal'
                 : modal === 'documento'
                   ? 'modal document-modal'
+                : modal === 'receita'
+                  ? 'modal document-modal prescription-modal'
                   : 'modal'
             }
             role="dialog"
@@ -1161,6 +1177,8 @@ export default function ClinicalRecord({
                   Registrar adendo
                 </button>
               </>
+            ) : modal === 'receita' ? (
+              <PrescriptionWorkspace docs={docs} consultationId={current?.id} />
             ) : (
               <DocumentEditor docs={docs} />
             )}

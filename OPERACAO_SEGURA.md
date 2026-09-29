@@ -84,7 +84,7 @@ Os [backups do Supabase não incluem os bytes do Storage](https://supabase.com/d
 
 ## Exportação FHIR R4
 
-No prontuário: **Exportar FHIR → Baixar JSON**. O Bundle é `collection` e usa referências internas estáveis por clínica. Exporta somente o paciente selecionado e dados salvos.
+Em **Pacientes → Importar e exportar**: escolha o paciente e clique em **Baixar JSON**. O Bundle é `collection` e usa referências internas estáveis por clínica. Exporta somente o paciente selecionado e dados salvos.
 
 | Recurso | Origem e significado |
 |---|---|

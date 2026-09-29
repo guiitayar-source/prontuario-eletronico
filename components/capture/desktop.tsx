@@ -10,6 +10,7 @@ import {
   X,
   Link,
   FileText,
+  Pill,
   Download,
   Upload,
   Trash2,
@@ -32,12 +33,14 @@ type Props = {
   tab: string;
   setTab: (tab: string) => void;
   newDocument: (initialText?: string) => void;
+  newPrescription?: () => void;
   canCreateDocument?: boolean;
 };
 export default function Attachments({
   tab,
   setTab,
   newDocument,
+  newPrescription,
   canCreateDocument = true,
   patient,
 }: Props) {
@@ -653,6 +656,11 @@ export default function Attachments({
           {tab === 'documentos' && canCreateDocument && (
             <button className="secondary" onClick={() => newDocument()}>
               <FileText size={16} /> Novo documento
+            </button>
+          )}
+          {tab === 'documentos' && canCreateDocument && newPrescription && (
+            <button className="secondary" onClick={newPrescription}>
+              <Pill size={16} /> Nova receita
             </button>
           )}
           <button className="primary" disabled={busy} onClick={connect}>

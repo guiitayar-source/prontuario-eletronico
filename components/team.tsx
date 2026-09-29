@@ -1,8 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
 import {
-  Activity,
-  CalendarDays,
   ShieldCheck,
   Stethoscope,
   Users,
@@ -14,7 +12,6 @@ import {
   Check,
   AlertCircle,
   CheckCircle2,
-  Palette,
   Send,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/supabase/http';

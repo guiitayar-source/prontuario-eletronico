@@ -3,7 +3,6 @@ import {
   isAiProviderConfigured,
   requestOpenAiText,
   requestGeminiText,
-  type AiUsage,
 } from '../ai/client.ts';
 import {
   boundedBody,
@@ -21,12 +20,6 @@ type ModelChoice = {
   label: string;
   model: string;
 };
-type Usage = {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-};
-
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

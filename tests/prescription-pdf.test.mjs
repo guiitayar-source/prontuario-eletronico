@@ -27,10 +27,13 @@ const docReceita = {
   consultation_id: null,
   kind: 'Receita',
   text: defaultTpl,
-  physician_name: 'Dr. Guilherme Tayar de Camargo',
-  physician_registration: 'CRM 164119 · RQE 72731',
+  physician_name: 'Dra. Ana Teste',
+  physician_registration: 'CRM 000000 · RQE 00000',
   document_date: '2026-09-20',
   version: 0,
+  letterhead_title: 'CONSULTÓRIO DE TESTE',
+  letterhead_address: 'Rua Fictícia, nº 1 · Sala 2',
+  letterhead_phone: 'Tel.: (00) 0000-0000',
 };
 
 const pdfBytes = await documentPdf(docReceita);
@@ -54,8 +57,8 @@ const docReceitaCustom = {
   consultation_id: null,
   kind: 'Receita',
   text: 'Via de administração: Uso oral\n\n1) Sertralina 50mg - 60 comprimidos\nTomar 1 comp pela manhã.\n\nOrientações gerais:\nRetorno em 30 dias.',
-  physician_name: 'Dr. Guilherme Tayar de Camargo',
-  physician_registration: 'CRM 164119 · RQE 72731',
+  physician_name: 'Dra. Ana Teste',
+  physician_registration: 'CRM 000000 · RQE 00000',
   document_date: '2026-09-20',
   version: 0,
 };
@@ -77,8 +80,8 @@ const docAtestado = {
   consultation_id: null,
   kind: 'Atestado',
   text: 'Atesto para os devidos fins que a paciente necessita de repouso.',
-  physician_name: 'Dr. Guilherme Tayar de Camargo',
-  physician_registration: 'CRM 164119 · RQE 72731',
+  physician_name: 'Dra. Ana Teste',
+  physician_registration: 'CRM 000000 · RQE 00000',
   document_date: '2026-09-20',
   version: 0,
 };

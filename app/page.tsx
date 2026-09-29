@@ -4,7 +4,6 @@ import Registry, { fetchPatient } from '@/components/patients/registry';
 import Consultation from '@/components/consultation';
 import Agenda from '@/components/agenda';
 import Team from '@/components/team';
-import Imports from '@/components/imports';
 import Settings from '@/components/settings';
 import { PatientSearchModal } from '@/components/patient-search-modal';
 import type { Patient } from '@/lib/patient-fields';
@@ -15,7 +14,7 @@ export default function Home() {
     [error, setError] = useState(''),
     [searchOpen, setSearchOpen] = useState(false),
     [section, setSection] = useState<
-      'patients' | 'agenda' | 'team' | 'imports' | 'settings'
+      'patients' | 'agenda' | 'team' | 'settings'
     >('patients');
 
   useEffect(() => {
@@ -139,27 +138,6 @@ export default function Home() {
           }}
           onOpenPatient={selectPatient}
         />
-      ) : section === 'imports' ? (
-        <Imports
-          onPatients={() => {
-            setError('');
-            setSection('patients');
-          }}
-          onAgenda={() => {
-            setError('');
-            setSection('agenda');
-          }}
-          onTeam={() => {
-            setError('');
-            setSection('team');
-          }}
-          onOpenPatient={open}
-          onSelectPatient={selectPatient}
-          onSettings={() => {
-            setError('');
-            setSection('settings');
-          }}
-        />
       ) : section === 'agenda' ? (
         <Agenda
           onPatients={() => {
@@ -195,11 +173,8 @@ export default function Home() {
         />
       ) : (
         <Registry
-          onImports={() => {
-            setError('');
-            setSection('imports');
-          }}
           onOpen={selectPatient}
+          onOpenId={open}
           onAgenda={() => {
             setError('');
             setSection('agenda');
