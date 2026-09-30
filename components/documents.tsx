@@ -200,6 +200,8 @@ export function useDocuments(patient: Patient, enabled = true) {
     return () => {
       if (previewRef.current) URL.revokeObjectURL(previewRef.current);
     };
+    // Recarrega ao trocar de paciente ou habilitar; load não é estável entre renderizações.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patient.id, enabled]);
   function clearPreview() {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);

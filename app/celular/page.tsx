@@ -73,8 +73,9 @@ export default function MobileCapture() {
       setError((e as Error).message);
     }
     setLoaded(true);
+    const created = urls.current;
     return () => {
-      urls.current.forEach((url) => URL.revokeObjectURL(url));
+      created.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
   useEffect(() => {
@@ -104,6 +105,8 @@ export default function MobileCapture() {
       active = false;
       clearTimeout(timer);
     };
+    // Só reconecta quando o pareamento muda; expires_at não reinicia a consulta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pair?.id, pair?.token, retry]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -216,6 +219,7 @@ export default function MobileCapture() {
         const cleanBase =
           (page.name || '')
             .trim()
+            // eslint-disable-next-line no-control-regex -- remove caracteres de controle do nome
             .replace(/[\x00-\x1f\x7f/\\]/g, '_')
             .slice(0, 120) || `pagina_${i + 1}`;
         const finalFilename = cleanBase.toLowerCase().endsWith(ext.toLowerCase())
@@ -359,7 +363,7 @@ export default function MobileCapture() {
                     capture="environment"
                     hidden
                     onChange={(e) => {
-                      select(e.target.files);
+                      void select(e.target.files);
                       e.target.value = '';
                     }}
                   />
@@ -370,7 +374,7 @@ export default function MobileCapture() {
                     multiple
                     hidden
                     onChange={(e) => {
-                      select(e.target.files);
+                      void select(e.target.files);
                       e.target.value = '';
                     }}
                   />

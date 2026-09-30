@@ -49,7 +49,6 @@ export function PatientForm({
     function warn(e: BeforeUnloadEvent) {
       if (dirty) {
         e.preventDefault();
-        e.returnValue = '';
       }
     }
     window.addEventListener('beforeunload', warn);
@@ -59,7 +58,7 @@ export function PatientForm({
     onDirty?.(dirty);
     return () => onDirty?.(false);
   }, [dirty, onDirty]);
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.SubmitEvent) {
     e.preventDefault();
     setBusy(true);
     setError('');

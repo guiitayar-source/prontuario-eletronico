@@ -104,7 +104,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         });
       }
 
-      db.auth.getSession().then(({ data, error }) => {
+      void db.auth.getSession().then(({ data, error }) => {
         if (!active) return;
         if (error) setError('Não foi possível recuperar a sessão. Entre novamente.');
         setSession(data.session);
@@ -172,9 +172,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
+    // Depende do usuário, não do objeto de sessão (renovado a cada troca de token).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, isSettingPassword]);
 
-  async function handlePasswordSave(event: React.FormEvent) {
+  async function handlePasswordSave(event: React.SubmitEvent) {
     event.preventDefault();
     if (password.length < 12) {
       setError('A senha deve ter no mínimo 12 caracteres.');
@@ -218,7 +220,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function signIn(event: React.FormEvent) {
+  async function signIn(event: React.SubmitEvent) {
     event.preventDefault();
     setBusy(true);
     setError('');

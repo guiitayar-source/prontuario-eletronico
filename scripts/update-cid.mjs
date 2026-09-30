@@ -79,7 +79,8 @@ try {
     reverse = {};
   const add = (obj, k, v) => {
     if (!k || !v || !known11.has(v)) return;
-    (obj[k] ||= []).includes(v) || obj[k].push(v);
+    const list = (obj[k] ||= []);
+    if (!list.includes(v)) list.push(v);
   };
   for (const r of tsv(join(dm, '10To11MapToMultipleCategories.txt')).slice(1))
     if (r[0] === 'category') add(forward, r[2], r[9]);

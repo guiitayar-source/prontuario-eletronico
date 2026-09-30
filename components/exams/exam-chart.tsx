@@ -97,7 +97,7 @@ export function ExamChart({ results, definition, graph }: ExamChartProps) {
                       p?.reference ? `Ref: ${p.reference}` : null,
                     ].filter(Boolean);
                     const suffix = parts.length ? ` (${parts.join(' · ')})` : '';
-                    return [`${value}${suffix}`, 'Resultado'];
+                    return [`${String(value)}${suffix}`, 'Resultado'];
                   }}
                 />
                 <Line

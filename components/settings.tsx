@@ -74,6 +74,8 @@ export default function Settings({
                         key={t.id}
                         type="button"
                         className={`theme-option-card ${isSelected ? 'selected' : ''}`}
+                        aria-label={`Tema ${t.name}`}
+                        aria-pressed={isSelected}
                         onClick={() => setTheme(t.id as ThemeName)}
                       >
                         <div

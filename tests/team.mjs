@@ -127,7 +127,7 @@ try {
     .eq('clinic_id', clinic)
     .eq('entity_type', 'clinic_member');
   assert.ifError(audits.error);
-  assert.deepEqual(audits.data.map((x) => x.action).sort(), [
+  assert.deepEqual(audits.data.map((x) => x.action).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)), [
     'invite',
     'invite',
     'invite',

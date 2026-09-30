@@ -17,10 +17,10 @@ try{
  const d={id:crypto.randomUUID(),patient_id:'synthetic-doc',consultation_id:null,kind:'Relatório',text:'Evolução, atenção e avaliação clínica.',physician_name:'Médico Fictício',physician_registration:'CRM/XX 0000',document_date:'2026-09-12',version:0};
  assert.equal((await call(secretary,d)).status,403);assert.equal((await call(outsider,d)).status,403);
  assert.equal((await call(doctor,{...d,consultation_id:visit})).status,409);
- let r=await call(doctor,d);assert.equal(r.status,200);let saved=(await r.json()).document;assert.equal(saved.patient_name,'Paciente Sintético');assert.equal(saved.author_id,doctor.id);
+ let r=await call(doctor,d);assert.equal(r.status,200);const saved=(await r.json()).document;assert.equal(saved.patient_name,'Paciente Sintético');assert.equal(saved.author_id,doctor.id);
  assert.equal((await call(doctor,d)).status,200);assert.equal((await secretary.db.from('clinical_documents').select('*')).data.length,0);
  assert.ok((await doctor.db.from('clinical_documents').update({text:'bypass'}).eq('id',d.id)).error);
- const concurrent=await Promise.all([call(doctor,{...d,version:1,text:'Edição A'}),call(doctor,{...d,version:1,text:'Edição B'})]);assert.deepEqual(concurrent.map(x=>x.status).sort(),[200,409]);
+ const concurrent=await Promise.all([call(doctor,{...d,version:1,text:'Edição A'}),call(doctor,{...d,version:1,text:'Edição B'})]);assert.deepEqual(concurrent.map(x=>x.status).sort((a,b)=>a-b),[200,409]);
  const copy={...d,id:crypto.randomUUID()};assert.equal((await call(doctor,copy)).status,200);const list=await (await call(doctor)).json();assert.equal(list.documents.length,2);
  r=await call(doctor,null,`action=pdf&patientId=synthetic-doc&id=${d.id}`);assert.equal(r.status,200);assert.match(r.headers.get('content-type'),/pdf/);assert.equal((await PDFDocument.load(await r.arrayBuffer())).getPageCount(),1);
  assert.equal((await call(secretary,null,`action=pdf&patientId=synthetic-doc&id=${d.id}`)).status,403);

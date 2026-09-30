@@ -19,12 +19,12 @@ if(!member) {
 const c=member.clinic_id;
 const iso=ms=>new Date(ms).toISOString();
 for(const original of bundle.patients) {
- const {owner,...p}=original;
+ const {owner: _owner,...p}=original;
  const existing=check(await db.from('patients').select('id').eq('clinic_id',c).eq('id',p.id).maybeSingle());
  if(!existing) check(await db.from('patients').insert({...p,clinic_id:c,created_at:iso(p.created_at),updated_at:iso(p.updated_at)}));
 }
 for(const original of bundle.appointments) {
- const {owner,...a}=original;
+ const {owner: _owner,...a}=original;
  const existing=check(await db.from('appointments').select('id').eq('clinic_id',c).eq('id',a.id).maybeSingle());
  if(!existing) check(await db.from('appointments').insert({...a,clinic_id:c,starts_at:iso(a.starts_at),ends_at:iso(a.ends_at),created_at:iso(a.created_at),updated_at:iso(a.updated_at)}));
 }

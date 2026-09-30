@@ -18,6 +18,7 @@ export function Modal({
     return () => dialog?.close();
   }, []);
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- clique no fundo fecha; pelo teclado, Esc (onCancel)
     <dialog
       ref={ref}
       className={`modal native-modal${className ? ` ${className}` : ''}`}

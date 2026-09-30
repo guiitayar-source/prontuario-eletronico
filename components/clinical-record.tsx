@@ -361,12 +361,13 @@ export default function ClinicalRecord({
       return;
     const timer = setTimeout(() => void persist(), 800);
     return () => clearTimeout(timer);
+    // Salvamento automático: dirty deriva de text; persist lê o estado mais recente por refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, current, busy, signing]);
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (hasUnsaved || busy || dirtyRegistration) {
         e.preventDefault();
-        e.returnValue = '';
       }
     };
     window.addEventListener('beforeunload', handler);
@@ -443,7 +444,7 @@ export default function ClinicalRecord({
     if ((modal === 'documento' || modal === 'receita') && !docs.close()) return;
     setModal('');
   }
-  const [view, setView] = useState('consulta');
+  const [view] = useState('consulta');
   const displayName = patient.social_name || patient.name;
   const isSigned =
     current?.status === 'SIGNED' ||
@@ -472,6 +473,8 @@ export default function ClinicalRecord({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
+    // closeModal só lê modal e docs, já listados.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modal, docs.dirty, docs.busy]);
   useEffect(() => {
     if (!modal) return;
@@ -1081,12 +1084,14 @@ export default function ClinicalRecord({
         />
       )}
       {modal && modal !== 'assinatura-detalhes' && (
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- clique no fundo fecha; pelo teclado, Esc
         <div
           className="modal-backdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) closeModal();
           }}
         >
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onKeyDown prende o foco dentro do diálogo */}
           <section
             className={
               modal === 'contexto'

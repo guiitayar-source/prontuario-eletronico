@@ -105,7 +105,7 @@ export default function Attachments({
   const refresh = useCallback(async () => {
     const result = await api(`list&patientId=${patient.id}`);
     setFiles(result.attachments);
-  }, []);
+  }, [patient.id]);
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
@@ -884,6 +884,7 @@ export default function Attachments({
       )}
       {(dialog || preview || remove || purgeConfirm) && (
         <div className="modal-backdrop">
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onKeyDown prende o foco dentro do diálogo */}
           <section
             className={`modal ${preview ? 'file-preview-modal' : ''}`}
             role="dialog"

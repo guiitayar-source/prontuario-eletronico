@@ -5,7 +5,7 @@ export function present(row: Record<string, unknown>, clinic: string): Patient {
   return {
     ...Object.fromEntries(fields.map(f => [f, row[f] || ''])), id: row.id,
     version: row.version, created_at: Date.parse(String(row.created_at)), updated_at: Date.parse(String(row.updated_at)),
-    draft_key: `${clinic}:${row.id}`,
+    draft_key: `${clinic}:${String(row.id)}`,
   } as Patient;
 }
 export async function patient(ctx: Context, id: unknown) {

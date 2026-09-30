@@ -21,6 +21,7 @@ export function remoteConnection(apiUrl, databaseUrl, passwordOverride = '') {
     && user === `postgres.${ref}`;
   if (!['postgres:', 'postgresql:'].includes(db.protocol)
     || (!direct && !session) || (db.port && db.port !== '5432')
+    // eslint-disable-next-line no-control-regex -- rejeita senha com caracteres de controle
     || db.pathname !== '/postgres' || !password || /[\x00-\x1f\x7f]/.test(password)
     || /\[YOUR[-_]PASSWORD\]/i.test(password) || db.hash)
     throw invalid();

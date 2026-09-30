@@ -58,6 +58,8 @@ export function EvolutionSignatureDetailsModal({
 
   useEffect(() => {
     void loadDetails();
+    // Recarrega só ao trocar de evolução.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [evolutionId]);
 
   function copyToClipboard(textToCopy: string) {
@@ -83,6 +85,7 @@ export function EvolutionSignatureDetailsModal({
   };
 
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- clique no fundo fecha; pelo teclado, Esc
     <div
       className="modal-backdrop"
       onClick={(e) => {

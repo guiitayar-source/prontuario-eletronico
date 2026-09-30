@@ -136,7 +136,7 @@ try {
     call(owner, 'save', { id, version: 1, text: 'Primeira versão' }),
     call(owner, 'save', { id, version: 1, text: 'Segunda versão' }),
   ]);
-  assert.deepEqual(competing.map((x) => x.status).sort(), [200, 409]);
+  assert.deepEqual(competing.map((x) => x.status).sort((a, b) => a - b), [200, 409]);
   r = await call(owner);
   assert.equal(r.consultations[0].version, 2);
   r = await call(owner, 'finalize', {

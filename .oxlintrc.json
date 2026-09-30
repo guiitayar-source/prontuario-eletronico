@@ -41,7 +41,14 @@
     "react/display-name": "error",
     "react/jsx-no-comment-textnodes": "error",
     "react/no-unescaped-entities": "error",
-    "react/react-compiler": "error",
+    // O projeto não usa o React Compiler; as dicas dele não apontam erros aqui.
+    "react/react-compiler": "off",
+    // Combobox/listbox/status com role ARIA são intencionais (autocompletes, buscas).
+    "jsx-a11y/prefer-tag-over-role": "off",
+    // Foco automático só em campos abertos pelo próprio usuário (modais, buscas).
+    "jsx-a11y/no-autofocus": "off",
+    // <img> só mostra prévias locais de anexos (blob:/data:), que next/image não otimiza.
+    "nextjs/no-img-element": "off",
     "react/require-render-return": "error",
     "react/rules-of-hooks": "error",
     "typescript/ban-ts-comment": "error",
@@ -52,5 +59,12 @@
     "typescript/no-require-imports": "error",
     "typescript/no-unnecessary-type-constraint": "error",
     "typescript/no-unsafe-function-type": "error"
-  }
+  },
+  "overrides": [
+    {
+      // test() do node:test não precisa de await no nível do módulo.
+      "files": ["tests/**"],
+      "rules": { "typescript/no-floating-promises": "off" }
+    }
+  ]
 }

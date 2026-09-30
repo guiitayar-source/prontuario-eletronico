@@ -146,7 +146,7 @@ export const team = handle(async (request, ctx) => {
     } else if (!user.user_metadata?.password_set) {
       await admin.auth.admin.updateUserById(user.id, {
         user_metadata: {
-          ...(user.user_metadata || {}),
+          ...user.user_metadata,
           must_set_password: true,
         },
       });
@@ -210,7 +210,7 @@ export const team = handle(async (request, ctx) => {
 
     await admin.auth.admin.updateUserById(userId, {
       user_metadata: {
-        ...(userRes.data.user.user_metadata || {}),
+        ...userRes.data.user.user_metadata,
         must_set_password: true,
       },
     });

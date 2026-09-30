@@ -101,7 +101,7 @@ function AppointmentForm({
     };
   }, [query, appointment]);
 
-  async function save(event: React.FormEvent) {
+  async function save(event: React.SubmitEvent) {
     event.preventDefault();
     const selected =
       patient || (appointment ? { id: appointment.patient_id } : null);

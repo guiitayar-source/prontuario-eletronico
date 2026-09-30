@@ -3,8 +3,8 @@ import { body, check, handle, HttpError, json, writeGuard } from './server.ts';
 import { patient } from './patients.ts';
 import { adminClient } from './admin.ts';
 
-function normalize(result: Record<string, any>) {
-  if (result.request?.expires_at) result.request.expires_at = Date.parse(result.request.expires_at);
+function normalize(result: { request?: { expires_at?: string | number } }) {
+  if (result.request?.expires_at) result.request.expires_at = Date.parse(String(result.request.expires_at));
   return result;
 }
 export const capture = handle(async (request, ctx) => {
@@ -57,6 +57,7 @@ export const capture = handle(async (request, ctx) => {
   const d = await body(request);
   if (action === 'prepare') {
     if (typeof d.name !== 'string' || typeof d.mime !== 'string' || !Number.isSafeInteger(d.size) || Number(d.size) < 1 || Number(d.size) > MAX_FILE) throw new HttpError(422, 'Selecione um arquivo de até 12 MB.');
+    // eslint-disable-next-line no-control-regex -- remove caracteres de controle do nome do arquivo
     d.name = d.name.replace(/[\x00-\x1f\x7f/\\]/g, '_').slice(0,160) || 'anexo';
     return json(await command(action,d));
   }
