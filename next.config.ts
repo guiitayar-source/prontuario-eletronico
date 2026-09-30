@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
   // `npm run build` runs `tsc --noEmit` first. Avoid Next's duplicate typecheck
   // worker, which loses compiler output under the managed Node runtime.
   typescript: { ignoreBuildErrors: true },
+  // Não gerar AGENTS.md/CLAUDE.md automaticamente: o guia do projeto é mantido à mão.
+  agentRules: false,
 };
 
 export default nextConfig;
