@@ -1,8 +1,3 @@
-.patient-tabs > button.selected {
-  border-bottom: 2px solid var(--theme-primary, var(--accent-border));
-  color: var(--theme-primary, var(--accent));
-  font-weight: 600;
-}
 .patient-tabs > button {
   min-height: 44px;
 }

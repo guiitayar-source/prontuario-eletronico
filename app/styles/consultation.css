@@ -294,6 +294,10 @@
   align-self: end;
   transition: color 0.2s ease, border-color 0.2s ease;
 }
+.patient-tabs > button.selected {
+  border-bottom-color: var(--theme-primary, var(--accent-border));
+  color: var(--theme-primary, var(--accent));
+}
 .patient-tabs button {
   padding-bottom: 14px;
   color: var(--text-muted);
@@ -322,13 +326,6 @@
 }
 .workspace.focused {
   grid-template-columns: 1fr;
-}
-.section-label {
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 1.6px;
-  color: var(--text-subtle);
-  margin: 3px 0 16px;
 }
 .history-card {
   background: var(--surface);
@@ -375,16 +372,6 @@
   font-weight: 650;
   margin: 18px 0 7px;
 }
-.source-label {
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
-  padding-top: 14px;
-  margin-top: 18px;
-}
 .mini-section {
   padding: 22px 2px;
   border-bottom: 1px solid var(--border);
@@ -394,26 +381,6 @@
   color: var(--text-muted);
   line-height: 1.6;
   margin-top: 11px;
-}
-.note-card {
-  display: flex;
-  padding: 20px 3px;
-  gap: 2px;
-  color: var(--text-muted);
-}
-.note-card .dot {
-  margin-top: 6px;
-  background: var(--theme-focus, var(--accent));
-  flex-shrink: 0;
-}
-.note-card p {
-  font-size: 12px;
-  line-height: 1.6;
-}
-.note-card strong {
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--text-muted);
 }
 .editor-card {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));

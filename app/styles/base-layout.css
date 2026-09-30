@@ -1,13 +1,6 @@
 * {
   box-sizing: border-box;
 }
-html,
-body {
-  margin: 0;
-  background-color: var(--theme-bg, var(--surface));
-  color: var(--theme-color, var(--text));
-  transition: background-color 0.25s ease, color 0.25s ease;
-}
 button,
 input,
 textarea,
@@ -296,11 +289,6 @@ h1 {
   display: flex;
   gap: 10px;
 }
-.encounter-badge {
-  font-size: 13px;
-  color: var(--theme-primary, var(--accent));
-  text-align: right;
-}
 .dot {
   width: 7px;
   height: 7px;
@@ -309,9 +297,16 @@ h1 {
   background: var(--theme-primary, var(--accent));
   margin-right: 7px;
 }
-.encounter-badge small {
-  display: block;
-  margin-top: 7px;
-  font-size: 12px;
-  color: var(--text-muted);
+
+/* Ícone girando (carregamento). */
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }

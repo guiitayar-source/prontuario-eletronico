@@ -91,13 +91,6 @@
   user-select: none;
 }
 
-.user-badge-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
 .user-email {
   color: var(--text-subtle);
   font-size: 12.5px;

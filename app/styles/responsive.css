@@ -107,9 +107,6 @@
   .patient-title .eyebrow {
     font-size: 8px;
   }
-  .encounter-badge {
-    display: none;
-  }
   .patient-head {
     flex-wrap: wrap;
   }
@@ -141,12 +138,6 @@
   }
   .history-card p {
     font-size: 14px;
-  }
-  .note-card {
-    display: none;
-  }
-  .section-label {
-    margin-bottom: 10px;
   }
   .editor-card {
     width: 100%;
