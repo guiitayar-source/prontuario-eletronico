@@ -16,9 +16,7 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '@/lib/supabase/http';
 import { useAccess } from './auth';
-import { TopBar } from './topbar';
 import { NavigationRail } from './navigation-rail';
-import type { Patient } from '@/lib/patient-fields';
 
 type Member = {
   user_id: string;
@@ -48,12 +46,10 @@ export default function Team({
   onPatients,
   onAgenda,
   onSettings,
-  onOpenPatient,
 }: {
   onPatients: () => void;
   onAgenda: () => void;
   onSettings?: () => void;
-  onOpenPatient?: (p: Patient) => void;
 }) {
   const { role } = useAccess();
   const [members, setMembers] = useState<Member[]>([]);
@@ -120,7 +116,6 @@ export default function Team({
       />
 
       <div className="main-shell">
-        <TopBar onSelectPatient={onOpenPatient} />
 
         <main>
           <div className="breadcrumb">

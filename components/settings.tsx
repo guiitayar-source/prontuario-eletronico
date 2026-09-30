@@ -6,9 +6,7 @@ import {
   Sliders,
 } from 'lucide-react';
 import { useTheme, THEMES, type ThemeName } from '@/lib/theme';
-import { TopBar } from './topbar';
 import { NavigationRail } from './navigation-rail';
-import type { Patient } from '@/lib/patient-fields';
 import { useAccess } from './auth';
 import { ProfessionalProfileCard } from './professional-profile';
 
@@ -16,12 +14,10 @@ export default function Settings({
   onPatients,
   onAgenda,
   onTeam,
-  onOpenPatient,
 }: {
   onPatients: () => void;
   onAgenda: () => void;
   onTeam: () => void;
-  onOpenPatient?: (p: Patient) => void;
 }) {
   const { theme, setTheme, gradient, setGradient } = useTheme();
   const medical = ['owner', 'doctor'].includes(useAccess().role);
@@ -36,7 +32,6 @@ export default function Settings({
       />
 
       <div className="main-shell">
-        <TopBar onSelectPatient={onOpenPatient} />
 
         <main>
           <div className="breadcrumb">

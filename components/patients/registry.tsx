@@ -12,7 +12,6 @@ import {
   type Patient,
   type PatientInput,
 } from '@/lib/patient-fields';
-import { TopBar } from '@/components/topbar';
 import { NavigationRail } from '../navigation-rail';
 import { PatientSearch } from './search';
 import { ImportPanel } from '../imports';
@@ -292,7 +291,6 @@ export default function Registry({
         onSettings={onSettings}
       />
       <div className="main-shell">
-        <TopBar onSelectPatient={onOpen} />
         <main>
           {create ? (
             <PatientForm onCancel={() => setCreate(false)} onSaved={onOpen} />

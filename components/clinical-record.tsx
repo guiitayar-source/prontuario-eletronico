@@ -18,7 +18,7 @@ import { CollapsibleCard } from './collapsible-card';
 import { ConsultationDiagnoses } from './diagnoses';
 import { upsertDiagnosisBlock } from '@/lib/cid/evolution-block';
 import { DEMO_ID, initials, age, type Patient } from '@/lib/patient-fields';
-import { TopBar } from './topbar';
+import { useSearchGuard } from './topbar';
 import { NavigationRail } from './navigation-rail';
 import {
   ChevronRight,
@@ -107,7 +107,6 @@ export default function ClinicalRecord({
   onHome,
   onAgenda,
   onUpdated,
-  onSelect,
   onOpenId,
   appointmentId,
   onSettings,
@@ -116,7 +115,6 @@ export default function ClinicalRecord({
   onHome: () => void;
   onAgenda: () => void;
   onUpdated: (p: Patient) => void;
-  onSelect: (p: Patient) => void;
   onOpenId: (id: string) => void;
   appointmentId?: string;
   onSettings?: () => void;
@@ -483,6 +481,16 @@ export default function ClinicalRecord({
       window.document.body.style.overflow = oldOverflow;
     };
   }, [modal]);
+  useSearchGuard({
+    beforeSelect: (open) => leave(open),
+    beforeSearch: () => {
+      if (!modal) return true;
+      if ((modal === 'documento' || modal === 'receita') && !docs.close())
+        return false;
+      setModal('');
+      return true;
+    },
+  });
   return (
     <div className="app-shell">
       <NavigationRail
@@ -492,16 +500,6 @@ export default function ClinicalRecord({
         onSettings={onSettings ? () => leave(onSettings) : undefined}
       />
       <div className="main-shell">
-        <TopBar
-          onSelectPatient={(p) => leave(() => onSelect(p))}
-          onBeforeSearch={() => {
-            if (!modal) return true;
-            if ((modal === 'documento' || modal === 'receita') && !docs.close())
-              return false;
-            setModal('');
-            return true;
-          }}
-        />
         <main>
           <div className="breadcrumb">
             <button onClick={() => leave(onAgenda)}>Consultório</button>

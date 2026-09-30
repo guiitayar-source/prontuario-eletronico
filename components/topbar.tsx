@@ -1,5 +1,14 @@
 'use client';
-import { useState, useEffect, useRef, useId } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useId,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { Search } from 'lucide-react';
 import { apiFetch as fetch } from '@/lib/supabase/http';
 import { initials, age, type Patient } from '@/lib/patient-fields';
@@ -11,13 +20,56 @@ export function focusPatientSearch() {
   document.getElementById(INPUT_ID)?.focus();
 }
 
-export function TopBar({
+type SearchGuard = {
+  /** Envolve a abertura do paciente (ex.: confirmar alterações não salvas). */
+  beforeSelect?: (open: () => void) => void;
+  /** Chamado antes de focar a busca via Ctrl K; retornar false cancela. */
+  beforeSearch?: () => boolean;
+};
+const SearchGuardContext = createContext<RefObject<SearchGuard> | null>(null);
+
+/** Permite à tela atual interceptar a busca do cabeçalho global. */
+export function useSearchGuard(guard: SearchGuard) {
+  const ref = useContext(SearchGuardContext);
+  useEffect(() => {
+    if (!ref) return;
+    ref.current = guard;
+    return () => {
+      if (ref.current === guard) ref.current = {};
+    };
+  });
+}
+
+/** Cabeçalho único e fixo do app, com a busca de pacientes, sobre todas as telas. */
+export function AppHeader({
+  onSelectPatient,
+  children,
+}: {
+  onSelectPatient: (p: Patient) => void;
+  children: ReactNode;
+}) {
+  const guard = useRef<SearchGuard>({});
+  return (
+    <SearchGuardContext.Provider value={guard}>
+      <TopBar
+        onSelectPatient={(p) => {
+          const open = () => onSelectPatient(p);
+          if (guard.current.beforeSelect) guard.current.beforeSelect(open);
+          else open();
+        }}
+        onBeforeSearch={() => guard.current.beforeSearch?.() ?? true}
+      />
+      {children}
+    </SearchGuardContext.Provider>
+  );
+}
+
+function TopBar({
   onSelectPatient,
   onBeforeSearch,
 }: {
-  onSelectPatient?: (p: Patient) => void;
-  /** Chamado antes de focar a busca via Ctrl K; retornar false cancela. */
-  onBeforeSearch?: () => boolean;
+  onSelectPatient: (p: Patient) => void;
+  onBeforeSearch: () => boolean;
 }) {
   const [query, setQuery] = useState(''),
     [open, setOpen] = useState(false),
@@ -34,7 +86,7 @@ export function TopBar({
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        if (onBeforeSearch && !onBeforeSearch()) return;
+        if (!onBeforeSearch()) return;
         inputRef.current?.focus();
         inputRef.current?.select();
       }
@@ -88,11 +140,11 @@ export function TopBar({
     setOpen(false);
     setQuery('');
     inputRef.current?.blur();
-    onSelectPatient?.(p);
+    onSelectPatient(p);
   };
 
   return (
-    <header className="topbar">
+    <header className="topbar app-topbar">
       <div className="wordmark">
         meu prontuário<span>CONSULTÓRIO</span>
       </div>
@@ -195,4 +247,3 @@ export function TopBar({
   );
 }
 
-export default TopBar;

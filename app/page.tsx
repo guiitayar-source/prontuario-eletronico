@@ -5,7 +5,7 @@ import Consultation from '@/components/consultation';
 import Agenda from '@/components/agenda';
 import Team from '@/components/team';
 import Settings from '@/components/settings';
-import { focusPatientSearch } from '@/components/topbar';
+import { AppHeader, focusPatientSearch } from '@/components/topbar';
 import type { Patient } from '@/lib/patient-fields';
 
 export default function Home() {
@@ -60,7 +60,7 @@ export default function Home() {
     setError('');
   };
   return (
-    <>
+    <AppHeader onSelectPatient={selectPatient}>
       {error && (
         <div
           role="alert"
@@ -102,7 +102,6 @@ export default function Home() {
             setError('');
           }}
           onUpdated={setPatient}
-          onSelect={selectPatient}
           onOpenId={open}
           onAgenda={() => {
             setPatient(null);
@@ -129,7 +128,6 @@ export default function Home() {
             setError('');
             setSection('team');
           }}
-          onOpenPatient={selectPatient}
         />
       ) : section === 'agenda' ? (
         <Agenda
@@ -138,7 +136,6 @@ export default function Home() {
             setSection('patients');
           }}
           onOpenPatient={open}
-          onSelectPatient={selectPatient}
           onTeam={() => {
             setError('');
             setSection('team');
@@ -162,7 +159,6 @@ export default function Home() {
             setError('');
             setSection('settings');
           }}
-          onOpenPatient={selectPatient}
         />
       ) : (
         <Registry
@@ -183,6 +179,6 @@ export default function Home() {
           onConsultation={focusPatientSearch}
         />
       )}
-    </>
+    </AppHeader>
   );
 }

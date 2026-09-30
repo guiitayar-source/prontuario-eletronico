@@ -134,11 +134,11 @@ html[data-gradient='false'] body {
 /* Painel lateral da consulta: cartões recolhíveis */
 .clinical-sidebar {
   position: sticky;
-  top: 62px;
+  top: 88px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  max-height: calc(100vh - 78px);
+  max-height: calc(100vh - 104px);
   overflow-y: auto;
 }
 .side-card {
@@ -745,6 +745,12 @@ textarea,
 select {
   font: inherit;
 }
+/* A lista nativa usa o fundo do select; o translúcido vira branco no menu. */
+select option,
+select optgroup {
+  background-color: var(--surface-solid);
+  color: var(--text);
+}
 button {
   cursor: pointer;
   display: inline-flex;
@@ -789,7 +795,7 @@ p {
   -webkit-backdrop-filter: var(--glass-blur);
   color: var(--text-subtle);
   position: fixed;
-  top: 62px;
+  top: 88px;
   bottom: 16px;
   left: 16px;
   display: flex;
@@ -891,6 +897,20 @@ p {
   justify-content: space-between;
   padding: 0 32px 0 16px;
   gap: 24px;
+}
+/* Cabeçalho único do app: fica fixo no topo em todas as telas. */
+.app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 25; /* acima do conteúdo e do menu lateral, abaixo dos modais (30) */
+  padding: 0 32px 0 24px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--border);
+}
+.app-topbar ~ .app-shell {
+  min-height: calc(100vh - 72px);
 }
 .wordmark {
   font-size: 21px;
@@ -1987,7 +2007,8 @@ h1 {
     grid-template-columns: 260px minmax(0, 1fr);
     gap: 20px;
   }
-  .topbar {
+  .topbar,
+  .app-topbar {
     padding: 0 24px;
   }
   main {
@@ -2021,7 +2042,7 @@ h1 {
   .rail {
     width: 60px;
     left: 8px;
-    top: 54px;
+    top: 78px;
     bottom: 8px;
   }
   .main-shell {
@@ -2038,7 +2059,8 @@ h1 {
   .nav-item {
     font-size: 10px;
   }
-  .topbar {
+  .topbar,
+  .app-topbar {
     height: 70px;
     padding: 0 16px;
   }
