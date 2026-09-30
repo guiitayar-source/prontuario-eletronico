@@ -64,9 +64,9 @@ export default function Settings({
                     <Palette size={20} />
                   </div>
                   <div>
-                    <h2>Paleta de Cores</h2>
+                    <h2>Cor de destaque</h2>
                     <p>
-                      Escolha o esquema de cores que melhor combina com a sua rotina médica. A alteração é instantânea.
+                      Define a cor dos botões, do item ativo no menu e do brilho do fundo. A alteração é instantânea.
                     </p>
                   </div>
                 </div>
@@ -81,32 +81,26 @@ export default function Settings({
                         className={`theme-option-card ${isSelected ? 'selected' : ''}`}
                         onClick={() => setTheme(t.id as ThemeName)}
                       >
-                        <div className="theme-preview-bars">
-                          <span
-                            className="preview-bar-header"
-                            style={{ background: t.headerColor }}
-                            title="Cabeçalho superior"
-                          />
-                          <div className="preview-body-row">
+                        <div
+                          className="theme-preview"
+                          style={{
+                            backgroundImage: gradient
+                              ? `radial-gradient(at 0% 0%, ${t.accent}55, transparent 60%), radial-gradient(at 100% 100%, ${t.accent2}55, transparent 60%)`
+                              : 'none',
+                          }}
+                          aria-hidden
+                        >
+                          <span className="theme-preview-rail">
+                            <span style={{ background: t.accent }} />
+                          </span>
+                          <span className="theme-preview-card">
+                            <span className="theme-preview-line" />
+                            <span className="theme-preview-line short" />
                             <span
-                              className="preview-bar-rail"
-                              style={{ background: t.railColor }}
-                              title="Barra lateral"
+                              className="theme-preview-btn"
+                              style={{ background: t.accent }}
                             />
-                            <div
-                              className="preview-bar-content"
-                              style={{ background: gradient ? t.bgGradient : t.bgColor }}
-                            >
-                              <span
-                                className="preview-chip-accent"
-                                style={{ background: t.accentSoft }}
-                              />
-                              <span
-                                className="preview-btn-primary"
-                                style={{ background: t.primaryColor }}
-                              />
-                            </div>
-                          </div>
+                          </span>
                         </div>
 
                         <div className="theme-option-info">
@@ -133,18 +127,18 @@ export default function Settings({
                     <Sparkles size={20} />
                   </div>
                   <div>
-                    <h2>Acabamento dos Painéis</h2>
+                    <h2>Fundo</h2>
                     <p>
-                      Controle a textura e o degradê de fundo nos cartões de histórico, resumos e painéis informativos.
+                      Liga ou desliga o degradê atrás dos painéis de vidro.
                     </p>
                   </div>
                 </div>
 
                 <div className="gradient-toggle-row">
                   <div className="gradient-toggle-desc">
-                    <strong>Degradê Suave nos Painéis de Apoio</strong>
+                    <strong>Degradê no fundo</strong>
                     <p>
-                      Aplica uma transição suave em degradê entre o bege/linho natural e o fundo esverdeado neutro nos cartões e caixas de informação. As áreas de digitação e prontuário permanecem com fundo branco de alto contraste para não cansar a visão clínica.
+                      Com o degradê desligado, o fundo fica escuro e liso, com menos distração.
                     </p>
                   </div>
 

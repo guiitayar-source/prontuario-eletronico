@@ -416,19 +416,19 @@ export function DocumentHistory({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <strong>{d.kind}</strong>
             {d.status === 'SIGNED' ? (
-              <span style={{ backgroundColor: '#e6f4ea', color: '#137333', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--success)', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <CheckCircle2 size={12} /> Assinado ICP-Brasil
               </span>
             ) : d.status === 'SIGNING' ? (
-              <span style={{ backgroundColor: '#fef7e0', color: '#b06000', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+              <span style={{ backgroundColor: 'var(--warning-soft)', color: 'var(--warning)', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
                 ⏳ Assinando...
               </span>
             ) : d.status === 'SIGNATURE_FAILED' ? (
-              <span style={{ backgroundColor: '#fce8e6', color: '#c5221f', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ backgroundColor: 'var(--danger-soft)', color: 'var(--danger)', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <AlertCircle size={12} /> Falha na assinatura
               </span>
             ) : (
-              <span style={{ backgroundColor: '#f1f3f4', color: '#5f6368', fontSize: '11px', padding: '2px 8px', borderRadius: '12px' }}>
+              <span style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-muted)', fontSize: '11px', padding: '2px 8px', borderRadius: '12px' }}>
                 Rascunho
               </span>
             )}
@@ -1002,11 +1002,11 @@ export function DocumentEditor({
             borderRadius: '6px',
             fontSize: '13px',
             backgroundColor:
-              docs.signatureNotice.type === 'success' ? '#e6f4ea' : '#fce8e6',
+              docs.signatureNotice.type === 'success' ? 'var(--accent-soft)' : 'var(--danger-soft)',
             color:
-              docs.signatureNotice.type === 'success' ? '#137333' : '#c5221f',
+              docs.signatureNotice.type === 'success' ? 'var(--success)' : 'var(--danger)',
             border: `1px solid ${
-              docs.signatureNotice.type === 'success' ? '#ceead6' : '#fad2cf'
+              docs.signatureNotice.type === 'success' ? 'var(--accent-border)' : 'var(--danger-border)'
             }`,
           }}
         >
@@ -1018,11 +1018,11 @@ export function DocumentEditor({
         <div
           style={{
             padding: '12px 16px',
-            backgroundColor: '#e6f4ea',
-            border: '1px solid #ceead6',
+            backgroundColor: 'var(--accent-soft)',
+            border: '1px solid var(--accent-border)',
             borderRadius: '6px',
             marginBottom: '16px',
-            color: '#137333',
+            color: 'var(--success)',
             fontSize: '13px',
           }}
         >
@@ -1038,8 +1038,8 @@ export function DocumentEditor({
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '10px 14px',
-            backgroundColor: docs.signatureSession ? '#f0f7ff' : '#f8f9fa',
-            border: `1px solid ${docs.signatureSession ? '#c2e0ff' : '#dadce0'}`,
+            backgroundColor: docs.signatureSession ? 'var(--info-soft)' : 'var(--surface)',
+            border: `1px solid ${docs.signatureSession ? 'var(--info-border)' : 'var(--border)'}`,
             borderRadius: '6px',
             marginBottom: '16px',
             fontSize: '13px',
@@ -1047,9 +1047,9 @@ export function DocumentEditor({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {docs.signatureSession ? (
-              <ShieldCheck size={18} color="#0b66c2" />
+              <ShieldCheck size={18} color="var(--info)" />
             ) : (
-              <Key size={18} color="#5f6368" />
+              <Key size={18} color="var(--text-muted)" />
             )}
             <span>
               {docs.signatureSession ? (
@@ -1247,7 +1247,7 @@ export function DocumentEditor({
               className="primary"
               disabled={docs.busy || docs.signingDocId === d.id || !d.text.trim()}
               style={{
-                backgroundColor: docs.signatureSession ? '#0d652d' : undefined,
+                backgroundColor: docs.signatureSession ? 'var(--success)' : undefined,
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -1279,7 +1279,7 @@ export function DocumentEditor({
         style={{
           display: 'block',
           fontSize: '12px',
-          color: '#5f6368',
+          color: 'var(--text-muted)',
           margin: '6px 0',
         }}
       >
@@ -1303,7 +1303,7 @@ export function DocumentEditor({
           <iframe
             title="Prévia do documento em PDF"
             src={docs.preview}
-            style={{ width: '100%', height: 440, border: '1px solid #ddd' }}
+            style={{ width: '100%', height: 440, border: '1px solid var(--border)' }}
           />
           <a
             className="secondary"

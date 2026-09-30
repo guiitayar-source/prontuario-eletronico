@@ -579,8 +579,8 @@ export default function Attachments({
                   fontSize: '11px',
                   padding: '1px 6px',
                   borderRadius: '4px',
-                  background: file.has_exams ? '#e8f5e9' : '#fff3e0',
-                  color: file.has_exams ? '#2e7d32' : '#b26a00',
+                  background: file.has_exams ? 'var(--accent-soft)' : 'var(--warning-soft)',
+                  color: file.has_exams ? 'var(--success)' : 'var(--warning)',
                   fontWeight: 500,
                 }}
               >
@@ -712,8 +712,8 @@ export default function Attachments({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '8px 12px',
-                      background: '#faf9f5',
-                      border: '1px solid #e8e6e1',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
                       borderRadius: '6px',
                       marginBottom: '8px',
                       gap: '12px',
@@ -722,7 +722,7 @@ export default function Attachments({
                   >
                     <div>
                       <strong>{file.name}</strong>{' '}
-                      <small style={{ color: '#7c8975' }}>
+                      <small style={{ color: 'var(--text-subtle)' }}>
                         ({formatBytes(file.size)}) · {categoryNames[file.category]}
                       </small>
                       {file.category === 'exam' && (
@@ -732,8 +732,8 @@ export default function Attachments({
                             fontSize: '11px',
                             padding: '2px 6px',
                             borderRadius: '4px',
-                            background: file.has_exams ? '#e8f5e9' : '#fff3e0',
-                            color: file.has_exams ? '#2e7d32' : '#b26a00',
+                            background: file.has_exams ? 'var(--accent-soft)' : 'var(--warning-soft)',
+                            color: file.has_exams ? 'var(--success)' : 'var(--warning)',
                           }}
                         >
                           {file.has_exams ? 'Exames preenchidos' : 'Sem exames preenchidos'}
@@ -751,7 +751,7 @@ export default function Attachments({
                       {canPurge ? (
                         <button
                           className="secondary"
-                          style={{ color: '#894832', borderColor: '#e0c4ba' }}
+                          style={{ color: 'var(--danger)', borderColor: 'var(--danger-border)' }}
                           disabled={busy}
                           onClick={() => setPurgeConfirm(file)}
                           title="Excluir permanentemente do banco e armazenamento"
@@ -762,7 +762,7 @@ export default function Attachments({
                       ) : (
                         isDoctor && (
                           <span
-                            style={{ fontSize: '11px', color: '#999' }}
+                            style={{ fontSize: '11px', color: 'var(--text-subtle)' }}
                             title="Preencha os resultados do exame no sistema para liberar a exclusão definitiva ou solicite ao administrador"
                           >
                             Exclusão requer exames preenchidos
@@ -931,11 +931,11 @@ export default function Attachments({
                 <p>
                   O arquivo físico será removido permanentemente do armazenamento e do banco de dados para liberar espaço. Esta ação não poderá ser desfeita.
                 </p>
-                {error && <p role="alert" style={{ color: '#894832', margin: '8px 0' }}>{error}</p>}
+                {error && <p role="alert" style={{ color: 'var(--danger)', margin: '8px 0' }}>{error}</p>}
                 <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
                   <button
                     className="primary danger"
-                    style={{ margin: 0, background: '#894832' }}
+                    style={{ margin: 0, background: 'var(--danger)' }}
                     disabled={busy}
                     onClick={() => purgeFile(purgeConfirm)}
                   >
@@ -958,16 +958,16 @@ export default function Attachments({
                 <h2 id="capture-title">Remover este anexo?</h2>
                 <p><strong>{remove.name}</strong> ({formatBytes(remove.size)})</p>
                 {remove.category === 'exam' && (
-                  <p style={{ fontSize: '13px', color: remove.has_exams ? '#2e7d32' : '#b26a00', margin: '8px 0' }}>
+                  <p style={{ fontSize: '13px', color: remove.has_exams ? 'var(--success)' : 'var(--warning)', margin: '8px 0' }}>
                     {remove.has_exams
                       ? '✓ Os resultados deste exame já estão registrados no prontuário.'
                       : 'ℹ Esta foto ainda não possui resultados de exames preenchidos no prontuário.'}
                   </p>
                 )}
                 <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div style={{ border: '1px solid #dcdad5', borderRadius: '8px', padding: '12px' }}>
+                  <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '12px' }}>
                     <strong style={{ display: 'block', marginBottom: '4px' }}>Arquivar anexo (recomendado)</strong>
-                    <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>
+                    <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
                       O arquivo sairá da lista ativa, mas será preservado com segurança e poderá ser restaurado a qualquer momento.
                     </p>
                     <button
@@ -979,9 +979,9 @@ export default function Attachments({
                       Arquivar anexo
                     </button>
                   </div>
-                  <div style={{ border: '1px solid #e0c4ba', borderRadius: '8px', padding: '12px', background: '#fdf9f8' }}>
-                    <strong style={{ display: 'block', marginBottom: '4px', color: '#894832' }}>Excluir definitivamente (liberar espaço)</strong>
-                    <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>
+                  <div style={{ border: '1px solid var(--danger-border)', borderRadius: '8px', padding: '12px', background: 'var(--danger-soft)' }}>
+                    <strong style={{ display: 'block', marginBottom: '4px', color: 'var(--danger)' }}>Excluir definitivamente (liberar espaço)</strong>
+                    <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
                       {isOwner
                         ? 'Como administrador, você pode excluir permanentemente do banco e do armazenamento para economizar espaço.'
                         : remove.has_exams
@@ -991,7 +991,7 @@ export default function Attachments({
                     {(isOwner || (isDoctor && remove.has_exams)) ? (
                       <button
                         className="primary danger"
-                        style={{ marginTop: '10px', background: '#894832' }}
+                        style={{ marginTop: '10px', background: 'var(--danger)' }}
                         disabled={busy}
                         onClick={() => purgeFile(remove)}
                       >
@@ -1009,7 +1009,7 @@ export default function Attachments({
                     )}
                   </div>
                 </div>
-                {error && <p role="alert" style={{ color: '#894832', marginTop: '12px' }}>{error}</p>}
+                {error && <p role="alert" style={{ color: 'var(--danger)', marginTop: '12px' }}>{error}</p>}
               </>
             ) : (
               <>

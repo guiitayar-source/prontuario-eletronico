@@ -255,9 +255,9 @@ export default function Team({
                                 <span
                                   className="role-badge"
                                   style={{
-                                    background: '#fff8eb',
-                                    color: '#9c5b05',
-                                    border: '1px solid #fedf89',
+                                    background: 'var(--warning-soft)',
+                                    color: 'var(--warning)',
+                                    border: '1px solid var(--warning-border)',
                                     fontSize: '11px',
                                     padding: '2px 8px',
                                     fontWeight: 500,
@@ -388,7 +388,7 @@ export default function Team({
                     <div className="team-role-card">
                       <div className="team-role-card-head">
                         <span className="team-role-title">
-                          <Users size={18} style={{ color: '#2a5b73' }} />
+                          <Users size={18} style={{ color: 'var(--info)' }} />
                           Secretária
                         </span>
                         <span className="role-badge secretary">Acesso Administrativo</span>
@@ -406,7 +406,7 @@ export default function Team({
                           <Check size={16} className="team-feature-check" />
                           Envio e organização de guias e documentos
                         </li>
-                        <li style={{ color: '#824838', fontWeight: 500 }}>
+                        <li style={{ color: 'var(--warning)', fontWeight: 500 }}>
                           <Lock size={16} className="team-feature-lock" />
                           Sigilo: sem acesso a prontuários e anotações clínicas
                         </li>

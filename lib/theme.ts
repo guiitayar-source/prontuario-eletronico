@@ -1,69 +1,55 @@
 'use client';
 import { useEffect, useState } from 'react';
 
-export type ThemeName = 'verde' | 'azul' | 'salvia' | 'grafite';
+export type ThemeName = 'menta' | 'ceu' | 'lavanda' | 'ambar';
 
 export type ThemeConfig = {
   id: ThemeName;
   name: string;
   description: string;
-  railColor: string;
-  headerColor: string;
-  primaryColor: string;
-  accentSoft: string;
-  bgColor: string;
-  bgGradient: string;
+  /** Cor de destaque e segunda cor do degradê, usadas na prévia. */
+  accent: string;
+  accent2: string;
 };
 
 export const THEMES: ThemeConfig[] = [
   {
-    id: 'verde',
-    name: 'Verde Clínico',
-    description: 'Padrão tradicional de consultório, sóbrio e elegante em tom floresta.',
-    railColor: '#143e38',
-    headerColor: '#11332a',
-    primaryColor: '#24583e',
-    accentSoft: '#edf5ed',
-    bgColor: '#f5f7f5',
-    bgGradient: 'linear-gradient(135deg, #f7f4ea 0%, #edf3eb 50%, #dceadc 100%)',
+    id: 'menta',
+    name: 'Menta',
+    description: 'Verde-menta com brilho azul-petróleo. O padrão do prontuário.',
+    accent: '#7fd6a8',
+    accent2: '#4fa3c7',
   },
   {
-    id: 'azul',
-    name: 'Azul Hospitalar',
-    description: 'Estilo médico hospitalar contemporâneo em tons de azul calmo e sereno.',
-    railColor: '#102a3d',
-    headerColor: '#0c202f',
-    primaryColor: '#1a547e',
-    accentSoft: '#eaf2f8',
-    bgColor: '#f3f6f9',
-    bgGradient: 'linear-gradient(135deg, #f7f5ed 0%, #ebf2f8 50%, #d2e4f4 100%)',
+    id: 'ceu',
+    name: 'Céu',
+    description: 'Azul claro e sereno sobre degradê índigo.',
+    accent: '#7cc4e8',
+    accent2: '#788cf0',
   },
   {
-    id: 'salvia',
-    name: 'Sálvia & Linho',
-    description: 'Tons orgânicos de verde sálvia com sensação aconchegante e natural.',
-    railColor: '#253d32',
-    headerColor: '#1d3027',
-    primaryColor: '#365b47',
-    accentSoft: '#edf3ef',
-    bgColor: '#f6f7f2',
-    bgGradient: 'linear-gradient(135deg, #f8f5eb 0%, #edf2ec 50%, #d8e5d8 100%)',
+    id: 'lavanda',
+    name: 'Lavanda',
+    description: 'Lilás suave com toques de azul, mais acolhedor.',
+    accent: '#c7b3f0',
+    accent2: '#9dbcff',
   },
   {
-    id: 'grafite',
-    name: 'Grafite & Slate',
-    description: 'Visual moderno e neutro em ardósia e chumbo de alta sobriedade.',
-    railColor: '#1e293b',
-    headerColor: '#0f172a',
-    primaryColor: '#334155',
-    accentSoft: '#f1f5f9',
-    bgColor: '#f5f7f9',
-    bgGradient: 'linear-gradient(135deg, #f8f6f0 0%, #edf1f5 50%, #d8dfe6 100%)',
+    id: 'ambar',
+    name: 'Âmbar',
+    description: 'Tom quente de âmbar e terracota, para quem prefere calor.',
+    accent: '#e8c27c',
+    accent2: '#e28c6e',
   },
 ];
 
+const DEFAULT_THEME: ThemeName = 'menta';
 const STORAGE_THEME = 'psywrite_theme';
 const STORAGE_GRADIENT = 'psywrite_gradient';
+
+function isThemeName(value: string | null): value is ThemeName {
+  return THEMES.some((t) => t.id === value);
+}
 
 export function applyTheme(theme: ThemeName, gradient: boolean) {
   if (typeof document === 'undefined') return;
@@ -73,14 +59,16 @@ export function applyTheme(theme: ThemeName, gradient: boolean) {
 }
 
 export function useTheme() {
-  const [theme, setThemeState] = useState<ThemeName>('verde');
-  const [gradient, setGradientState] = useState<boolean>(false);
+  const [theme, setThemeState] = useState<ThemeName>(DEFAULT_THEME);
+  const [gradient, setGradientState] = useState<boolean>(true);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     try {
-      const savedTheme = (localStorage.getItem(STORAGE_THEME) as ThemeName) || 'verde';
-      const savedGradient = localStorage.getItem(STORAGE_GRADIENT) === 'true';
+      const stored = localStorage.getItem(STORAGE_THEME);
+      // Nomes de temas antigos (verde, azul…) caem no padrão.
+      const savedTheme = isThemeName(stored) ? stored : DEFAULT_THEME;
+      const savedGradient = localStorage.getItem(STORAGE_GRADIENT) !== 'false';
       setThemeState(savedTheme);
       setGradientState(savedGradient);
       applyTheme(savedTheme, savedGradient);

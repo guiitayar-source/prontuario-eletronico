@@ -14,13 +14,14 @@ import { apiFetch } from '@/lib/supabase/http';
 import { PatientDetails, PatientSearch } from './patients/registry';
 import Attachments from './capture/desktop';
 import { AnamnesatorAssistant } from './anamnesator-assistant';
+import { CollapsibleCard } from './collapsible-card';
 import { DEMO_ID, initials, age, type Patient } from '@/lib/patient-fields';
 import { TopBar } from './topbar';
 import { NavigationRail } from './navigation-rail';
 import {
   ChevronRight,
-  PanelLeftClose,
-  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Clock3,
   Check,
   FileText,
@@ -567,12 +568,12 @@ export default function ClinicalRecord({
                     aria-expanded={panel}
                   >
                     {panel ? (
-                      <PanelLeftClose size={16} />
+                      <PanelRightClose size={16} />
                     ) : (
-                      <PanelLeftOpen size={16} />
+                      <PanelRightOpen size={16} />
                     )}
                     <span>
-                      {panel ? 'Recolher histórico' : 'Mostrar histórico'}
+                      {panel ? 'Recolher painel lateral' : 'Mostrar painel lateral'}
                     </span>
                   </button>
                 )}
@@ -610,50 +611,6 @@ export default function ClinicalRecord({
               </div>
               <div hidden={tab !== 'consulta' || !medical}>
                 <div className={panel ? 'workspace' : 'workspace focused'}>
-                  {panel && (
-                    <aside className="clinical-sidebar">
-                      <ClinicalContextSummary
-                        context={clinicalContext}
-                        onEdit={() => setModal('contexto')}
-                      />
-                      <section className="history-card">
-                        <div className="card-heading">
-                          <span>
-                            <Clock3 size={16} /> Histórico de consultas
-                          </span>
-                        </div>
-                        {!rows.length && (
-                          <p className="muted">Nenhuma consulta registrada.</p>
-                        )}
-                        {rows.map((r) => (
-                          <button
-                            key={r.id}
-                            className="consultation-history-link"
-                            aria-current={
-                              current?.id === r.id ? 'true' : undefined
-                            }
-                            disabled={busy}
-                            onClick={() => leave(() => choose(r))}
-                          >
-                            <span className="history-date">
-                              {date(r.created_at)}
-                            </span>
-                            <strong>
-                              {r.status === 'SIGNED' || r.signed_at
-                                ? '✓ Assinada digitalmente'
-                                : r.finalized_at
-                                  ? 'Finalizada (não assinada)'
-                                  : 'Em atendimento'}
-                            </strong>
-                            <span>
-                              {r.text.slice(0, 150) || 'Rascunho vazio'}
-                              {r.text.length > 150 ? '…' : ''}
-                            </span>
-                          </button>
-                        ))}
-                      </section>
-                    </aside>
-                  )}
                   <section className="editor-card">
                     <div className="editor-header">
                       <div>
@@ -1017,6 +974,49 @@ export default function ClinicalRecord({
                       )}
                     </footer>
                   </section>
+                  {panel && (
+                    <aside className="clinical-sidebar" aria-label="Contexto e histórico">
+                      <ClinicalContextSummary
+                        context={clinicalContext}
+                        onEdit={() => setModal('contexto')}
+                      />
+                      <CollapsibleCard
+                        storageKey="historico"
+                        title="Histórico de consultas"
+                        icon={<Clock3 size={16} aria-hidden />}
+                      >
+                        {!rows.length && (
+                          <p className="muted">Nenhuma consulta registrada.</p>
+                        )}
+                        {rows.map((r) => (
+                          <button
+                            key={r.id}
+                            className="consultation-history-link"
+                            aria-current={
+                              current?.id === r.id ? 'true' : undefined
+                            }
+                            disabled={busy}
+                            onClick={() => leave(() => choose(r))}
+                          >
+                            <span className="history-date">
+                              {date(r.created_at)}
+                            </span>
+                            <strong>
+                              {r.status === 'SIGNED' || r.signed_at
+                                ? '✓ Assinada digitalmente'
+                                : r.finalized_at
+                                  ? 'Finalizada (não assinada)'
+                                  : 'Em atendimento'}
+                            </strong>
+                            <span>
+                              {r.text.slice(0, 150) || 'Rascunho vazio'}
+                              {r.text.length > 150 ? '…' : ''}
+                            </span>
+                          </button>
+                        ))}
+                      </CollapsibleCard>
+                    </aside>
+                  )}
                 </div>
                 <div className="footnote">
                   Ambiente de demonstração. Use apenas dados fictícios. O

@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/supabase/http';
+import { ClipboardList } from 'lucide-react';
+import { CollapsibleCard } from './collapsible-card';
 
 export type Condition = {
   id: string;
@@ -178,13 +180,16 @@ export function ClinicalContextSummary({
     activeA = context.allergies.filter((x) => x.status === 'active'),
     activeC = context.conditions.filter((x) => x.status !== 'resolved');
   return (
-    <>
-      <div className="section-label context-heading">
-        <span>CONTEXTO DO ATENDIMENTO</span>
+    <CollapsibleCard
+      storageKey="contexto"
+      title="Contexto clínico"
+      icon={<ClipboardList size={16} aria-hidden />}
+      action={
         <button className="text-button" onClick={onEdit}>
-          Editar contexto
+          Editar
         </button>
-      </div>
+      }
+    >
       <section className="mini-section">
         <div className="card-heading">
           <span>Diagnósticos e hipóteses</span>
@@ -254,7 +259,7 @@ export function ClinicalContextSummary({
           {context.error}
         </p>
       )}
-    </>
+    </CollapsibleCard>
   );
 }
 export function ClinicalContextEditor({

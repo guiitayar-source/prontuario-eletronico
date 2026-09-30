@@ -3,7 +3,7 @@
   padding: 24px;
   border: 1px solid #8899aa30;
   border-radius: 18px;
-  background: var(--theme-card-gradient, #fff);
+  background: var(--surface);
   --exam-accent: var(--theme-primary, #24583e);
 }
 .exam-workspace output {
@@ -33,7 +33,7 @@
   border: 1px solid #8899aa60;
   border-radius: 8px;
   padding: 10px;
-  background: var(--background, #fff);
+  background: var(--background, var(--surface));
   color: inherit;
   font: inherit;
 }
@@ -41,7 +41,7 @@
 .exam-workspace select:focus-visible,
 .exam-workspace textarea:focus-visible,
 .exam-workspace button:focus-visible {
-  outline: 2px solid #537d98;
+  outline: 2px solid var(--info);
   outline-offset: 2px;
 }
 .exam-workspace button:disabled {
@@ -61,9 +61,9 @@
   gap: 18px;
   padding: 18px;
   margin-bottom: 20px;
-  border: 1px solid var(--theme-accent-border, #d6e4d4);
+  border: 1px solid var(--theme-accent-border, var(--border));
   border-radius: 12px;
-  background: var(--theme-accent-soft, #edf3ec);
+  background: var(--theme-accent-soft, var(--surface-2));
 }
 .exam-ai p {
   margin-bottom: 0;
@@ -100,16 +100,16 @@
   margin: 14px 0;
   padding: 12px 12px 12px 32px;
   border-radius: 8px;
-  background: #fff4e8;
-  color: #7a4d2d;
+  background: var(--surface-2);
+  color: var(--warning);
   font-size: 13px;
 }
 .exam-ai-review {
   margin: 14px 0;
   padding: 14px 16px;
-  border: 1px solid var(--theme-accent-border, #d6e4d4);
+  border: 1px solid var(--theme-accent-border, var(--border));
   border-radius: 9px;
-  background: var(--theme-accent-soft, #edf3ec);
+  background: var(--theme-accent-soft, var(--surface-2));
 }
 .exam-ai-review p {
   margin-bottom: 4px;
@@ -133,14 +133,14 @@
   padding: 15px 16px;
   border: 1px solid #8899aa55;
   border-radius: 10px;
-  background: var(--background, #fff);
+  background: var(--background, var(--surface));
   color: inherit;
   text-align: left;
   cursor: pointer;
 }
 .exam-provider-list > button:not(:disabled):hover {
-  border-color: var(--theme-primary, #24583e);
-  background: var(--theme-accent-soft, #edf3ec);
+  border-color: var(--theme-primary, var(--accent-border));
+  background: var(--theme-accent-soft, var(--surface-2));
 }
 .exam-provider-list > button:disabled {
   opacity: 0.6;
@@ -153,18 +153,18 @@
   flex: 0 0 auto;
   font-size: 13px;
   font-weight: 600;
-  color: var(--theme-primary, #24583e);
+  color: var(--theme-primary, var(--accent));
 }
 .exam-provider-list > button.unconfigured .exam-provider-status {
-  color: #718096;
+  color: var(--info);
 }
 .exam-provider-warning {
   margin: 14px 0 0;
   padding: 10px 14px;
   border-radius: 8px;
-  background: #fdf2e9;
-  border: 1px solid #fbd38d;
-  color: #7c2d12;
+  background: var(--surface-2);
+  border: 1px solid var(--warning-border);
+  color: var(--warning);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -172,8 +172,8 @@
   margin-top: 14px;
   padding: 12px 14px;
   border-radius: 8px;
-  background: #f7fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--surface);
+  border: 1px solid var(--border);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -194,7 +194,7 @@
   gap: 4px;
   margin-top: 7px;
   padding: 9px 11px;
-  border-left: 3px solid var(--exam-accent, #537d98);
+  border-left: 3px solid var(--exam-accent, var(--info));
   background: #8899aa0d;
   font-size: 12px;
   line-height: 1.45;
@@ -306,7 +306,7 @@
 .exam-workspace th:first-child {
   position: sticky;
   left: 0;
-  background: var(--background, #fff);
+  background: var(--background, var(--surface));
   z-index: 1;
 }
 .exam-workspace td small {
