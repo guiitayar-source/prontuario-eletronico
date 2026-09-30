@@ -1,0 +1,97 @@
+'use client';
+import { Mic } from 'lucide-react';
+import { AnamnesatorAssistant } from '../anamnesator-assistant';
+import type { useConsultationTimer } from '@/hooks/use-consultation-timer';
+
+/** Anamnesator: gravação e transcrição revisadas antes de entrar na evolução. */
+export function AnamnesatorDialog({
+  disabled,
+  onApply,
+}: {
+  disabled: boolean;
+  onApply: (text: string, mode: 'replace' | 'append') => void;
+}) {
+  return (
+    <>
+      <div className="modal-icon">
+        <Mic />
+      </div>
+      <h2 id="dialog-title">Anamnesator</h2>
+      <p>Grave, transcreva e revise cada etapa antes de incorporar o texto ao prontuário.</p>
+      <AnamnesatorAssistant disabled={disabled} onApply={onApply} />
+    </>
+  );
+}
+
+/** Confirmação de finalização sem assinatura digital. */
+export function FinalizeDialog({
+  timer,
+  busy,
+  onConfirm,
+}: {
+  timer: ReturnType<typeof useConsultationTimer>;
+  busy: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <>
+      <h2 id="dialog-title">Finalizar esta consulta?</h2>
+      <p>
+        O texto ficará bloqueado para edição. Correções posteriores
+        serão registradas como adendos.
+      </p>
+      <div className="info-box" style={{ marginBottom: 12 }}>
+        Tempo de atendimento registrado:{' '}
+        <strong>{timer.formattedDigits}</strong>
+        {timer.humanDuration && timer.humanDuration !== '0 s'
+          ? ` (${timer.humanDuration})`
+          : ''}
+      </div>
+      <div className="info-box">
+        Esta ação não aplica assinatura digital nem cria um prontuário
+        válido para uso clínico.
+      </div>
+      <button className="primary" disabled={busy} onClick={onConfirm}>
+        Confirmar finalização
+      </button>
+    </>
+  );
+}
+
+/** Adendo a uma consulta finalizada: o texto original é preservado. */
+export function AddendumDialog({
+  value,
+  busy,
+  onChange,
+  onSubmit,
+}: {
+  value: string;
+  busy: boolean;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <>
+      <h2 id="dialog-title">Registrar adendo</h2>
+      <p>
+        O texto original será preservado. O adendo registrará autor e
+        horário.
+      </p>
+      <textarea
+        className="document-editor"
+        aria-label="Novo adendo"
+        value={value}
+        maxLength={100000}
+        disabled={busy}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        className="primary"
+        disabled={busy || !value.trim()}
+        onClick={onSubmit}
+      >
+        Registrar adendo
+      </button>
+    </>
+  );
+}

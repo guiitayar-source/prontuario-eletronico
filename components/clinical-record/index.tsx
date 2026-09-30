@@ -9,7 +9,6 @@ import { documentTemplate } from '@/lib/document-fields';
 import { apiFetch } from '@/lib/supabase/http';
 import { PatientDetails } from '../patients/registry';
 import Attachments from '../capture/desktop';
-import { AnamnesatorAssistant } from '../anamnesator-assistant';
 import { ConsultationDiagnoses } from '../diagnoses';
 import { upsertDiagnosisBlock } from '@/lib/cid/evolution-block';
 import { initials, age, type Patient } from '@/lib/patient-fields';
@@ -22,7 +21,6 @@ import {
   Check,
   FileText,
   Mic,
-  X,
   ArrowUpRight,
   Timer,
 } from 'lucide-react';
@@ -34,6 +32,8 @@ import { date, type RecordEntry } from './types';
 import { EvolutionStatusBanner } from './status-banner';
 import { EvolutionActions } from './actions';
 import { RecordSidebar } from './sidebar';
+import { AnamnesatorDialog, FinalizeDialog, AddendumDialog } from './dialogs';
+import { DialogFrame } from '../dialog-frame';
 
 async function request(patientId: string, action?: string, data?: unknown) {
   const r = await apiFetch(
@@ -800,129 +800,51 @@ export default function ClinicalRecord({
         />
       )}
       {modal && modal !== 'assinatura-detalhes' && (
-        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- clique no fundo fecha; pelo teclado, Esc
-        <div
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) closeModal();
-          }}
+        <DialogFrame
+          className={
+            modal === 'contexto'
+              ? 'modal context-modal'
+              : modal === 'anamnesator'
+                ? 'modal anamnesator-modal'
+              : modal === 'documento'
+                ? 'modal document-modal'
+              : modal === 'receita'
+                ? 'modal document-modal prescription-modal'
+                : 'modal'
+          }
+          onClose={closeModal}
         >
-          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onKeyDown prende o foco dentro do diálogo */}
-          <section
-            className={
-              modal === 'contexto'
-                ? 'modal context-modal'
-                : modal === 'anamnesator'
-                  ? 'modal anamnesator-modal'
-                : modal === 'documento'
-                  ? 'modal document-modal'
-                : modal === 'receita'
-                  ? 'modal document-modal prescription-modal'
-                  : 'modal'
-            }
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="dialog-title"
-            onKeyDown={(e) => {
-              if (e.key === 'Tab') {
-                const nodes = e.currentTarget.querySelectorAll<HTMLElement>(
-                  'button:not([disabled]), input, textarea, select',
-                );
-                const first = nodes[0],
-                  last = nodes[nodes.length - 1];
-                if (e.shiftKey && document.activeElement === first) {
-                  e.preventDefault();
-                  last?.focus();
-                } else if (!e.shiftKey && document.activeElement === last) {
-                  e.preventDefault();
-                  first?.focus();
-                }
-              }
-            }}
-          >
-            <button
-              className="close"
-              autoFocus
-              aria-label="Fechar"
-              onClick={closeModal}
-            >
-              <X size={20} />
-            </button>
-            {modal === 'anamnesator' ? (
-              <>
-                <div className="modal-icon">
-                  <Mic />
-                </div>
-                <h2 id="dialog-title">Anamnesator</h2>
-                <p>Grave, transcreva e revise cada etapa antes de incorporar o texto ao prontuário.</p>
-                <AnamnesatorAssistant
-                  disabled={!current || finalized}
-                  onApply={(value, mode) => {
-                    const next = mode === 'replace' ? value : [latest.current.trim(), value].filter(Boolean).join('\n\n');
-                    latest.current = next;
-                    setText(next);
-                    setStatus('Alterações pendentes');
-                    closeModal();
-                  }}
-                />
-              </>
-            ) : modal === 'contexto' ? (
-              <ClinicalContextEditor
-                context={clinicalContext}
-                onClose={closeModal}
-              />
-            ) : modal === 'finalizar' ? (
-              <>
-                <h2 id="dialog-title">Finalizar esta consulta?</h2>
-                <p>
-                  O texto ficará bloqueado para edição. Correções posteriores
-                  serão registradas como adendos.
-                </p>
-                <div className="info-box" style={{ marginBottom: 12 }}>
-                  Tempo de atendimento registrado:{' '}
-                  <strong>{timer.formattedDigits}</strong>
-                  {timer.humanDuration && timer.humanDuration !== '0 s'
-                    ? ` (${timer.humanDuration})`
-                    : ''}
-                </div>
-                <div className="info-box">
-                  Esta ação não aplica assinatura digital nem cria um prontuário
-                  válido para uso clínico.
-                </div>
-                <button className="primary" disabled={busy} onClick={finish}>
-                  Confirmar finalização
-                </button>
-              </>
-            ) : modal === 'reiniciar' ? (
-              <>
-                <h2 id="dialog-title">Registrar adendo</h2>
-                <p>
-                  O texto original será preservado. O adendo registrará autor e
-                  horário.
-                </p>
-                <textarea
-                  className="document-editor"
-                  aria-label="Novo adendo"
-                  value={addendum}
-                  maxLength={100000}
-                  disabled={busy}
-                  onChange={(e) => setAddendum(e.target.value)}
-                />
-                <button
-                  className="primary"
-                  disabled={busy || !addendum.trim()}
-                  onClick={() => void append().then(() => setModal(''))}
-                >
-                  Registrar adendo
-                </button>
-              </>
-            ) : modal === 'receita' ? (
-              <PrescriptionWorkspace docs={docs} consultationId={current?.id} />
-            ) : (
-              <DocumentEditor docs={docs} />
-            )}
-          </section>
-        </div>
+          {modal === 'anamnesator' ? (
+            <AnamnesatorDialog
+              disabled={!current || finalized}
+              onApply={(value, mode) => {
+                const next = mode === 'replace' ? value : [latest.current.trim(), value].filter(Boolean).join('\n\n');
+                latest.current = next;
+                setText(next);
+                setStatus('Alterações pendentes');
+                closeModal();
+              }}
+            />
+          ) : modal === 'contexto' ? (
+            <ClinicalContextEditor
+              context={clinicalContext}
+              onClose={closeModal}
+            />
+          ) : modal === 'finalizar' ? (
+            <FinalizeDialog timer={timer} busy={busy} onConfirm={finish} />
+          ) : modal === 'reiniciar' ? (
+            <AddendumDialog
+              value={addendum}
+              busy={busy}
+              onChange={setAddendum}
+              onSubmit={() => void append().then(() => setModal(''))}
+            />
+          ) : modal === 'receita' ? (
+            <PrescriptionWorkspace docs={docs} consultationId={current?.id} />
+          ) : (
+            <DocumentEditor docs={docs} />
+          )}
+        </DialogFrame>
       )}
     </div>
   );
