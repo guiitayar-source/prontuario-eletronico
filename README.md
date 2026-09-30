@@ -9,7 +9,7 @@ Sistema web moderno para clínicas e consultórios com foco em prontuário eletr
 - **Framework**: Next.js 16 (App Router) & React 19 (Server e Client Components)
 - **Linguagem**: TypeScript (tipagem estrita ponta a ponta)
 - **Banco de Dados & Backend**: Supabase (PostgreSQL com Row Level Security - RLS, MFA, Auth e Storage privado)
-- **Inteligência Artificial Multimodal**: Google Gemini API & OpenAI API (extração de dados estruturados com JSON Schema e transcrição de laudos/fotos)
+- **Inteligência Artificial Multimodal**: OpenAI API (extração de dados estruturados com JSON Schema e transcrição de laudos/fotos)
 - **Visualização & PDFs**: Recharts (gráficos temporais de exames) e gerador de PDF sob medida com fontes incorporadas (receituários em 2 vias A4)
 - **Estilização**: CSS modular nativo por recurso, garantindo alta performance sem dependências pesadas de runtime
 
@@ -45,7 +45,7 @@ Sistema web moderno para clínicas e consultórios com foco em prontuário eletr
 
 ### 6. Biblioteca & Acompanhamento de Exames Laboratoriais
 - **Catálogo Estruturado da Clínica**: Definição de exames reutilizáveis com parâmetros dinâmicos (numéricos, opções pré-definidas ou texto).
-- **Extração Assistida por IA**: Upload de laudos (PDF ou imagem) com leitura estruturada via modelos Gemini ou OpenAI.
+- **Extração Assistida por IA**: Upload de laudos (PDF ou imagem) com leitura estruturada via modelos OpenAI.
 - **Revisão Humana Obrigatória**: Nenhuma sugestão de IA entra no prontuário sem conferência explícita de valores, unidades e referências pelo profissional, exibindo o trecho original do documento como evidência.
 - **Histórico Longitudinal & Gráficos**: Gráficos temporais interativos com agrupamento automático de unidades compatíveis (ex: séries de hemograma).
 - **Correções Auditáveis**: Retificação de resultados com motivo obrigatório, preservando o valor anterior para fins periciais e legais.
@@ -87,7 +87,7 @@ O projeto passou por uma ampla auditoria e refatoração arquitetural com foco e
 
 #### 3. Unificação dos Clientes de IA
 - **Criação de `lib/ai/client.ts`**:
-  - Centralização de requisições de texto com JSON Schema estruturado (`requestOpenAiText`, `requestGeminiText`) e processamento multimodal de arquivos (`requestOpenAiFile`, `requestGeminiFile`).
+  - Centralização de requisições de texto com JSON Schema estruturado (`requestOpenAiText`) e processamento multimodal de arquivos (`requestOpenAiFile`).
   - Verificação unificada de status de configuração de chaves (`isAiProviderConfigured`).
 - **Eliminação de ~400 linhas duplicadas** de chamadas HTTP, payloads e adaptação de schemas em `lib/supabase/document-ai.ts` e `lib/supabase/ai-files.ts`.
 

@@ -17,7 +17,6 @@ assert.match(status.API_URL, /^http:\/\/127\.0\.0\.1:/);
 process.env.NEXT_PUBLIC_SUPABASE_URL = status.API_URL;
 process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = status.PUBLISHABLE_KEY;
 process.env.OPENAI_API_KEY = 'test-key';
-process.env.GEMINI_API_KEY = 'test-key';
 
 const clientOptions = {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -69,7 +68,6 @@ async function call(account, data) {
 
 const originalFetch = globalThis.fetch;
 let openAiRequest;
-let geminiRequest;
 
 try {
   const doctor = await createUser();
@@ -167,23 +165,6 @@ try {
         usage: { input_tokens: 320, output_tokens: 40, total_tokens: 360 },
       });
     }
-    if (url.includes('generativelanguage.googleapis.com')) {
-      geminiRequest = JSON.parse(init.body);
-      return Response.json({
-        candidates: [
-          {
-            content: {
-              parts: [{ text: 'Rascunho sintético do Gemini.' }],
-            },
-          },
-        ],
-        usageMetadata: {
-          promptTokenCount: 280,
-          candidatesTokenCount: 35,
-          totalTokenCount: 315,
-        },
-      });
-    }
     return originalFetch(input, init);
   };
 
@@ -241,14 +222,7 @@ try {
     includeClinicalContext: false,
     currentText: '',
   });
-  payload = await response.json();
-  assert.equal(response.status, 200, payload.error);
-  assert.equal(payload.draft, 'Rascunho sintético do Gemini.');
-  assert.equal(payload.usage.totalTokens, 315);
-  assert.match(
-    geminiRequest.systemInstruction.parts[0].text,
-    /revisão de um médico/,
-  );
+  assert.equal(response.status, 422, 'Gemini não é mais um modelo aceito');
   assert.equal(
     (
       await admin
@@ -257,7 +231,7 @@ try {
         .eq('clinic_id', clinic)
         .eq('action', 'ai_document_request')
     ).data.length,
-    3,
+    2,
   );
 
   response = await call(doctor, { action: 'delete-template', id: templateId });

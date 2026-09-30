@@ -29,7 +29,7 @@ import {
 import './exams.css';
 
 type AiModel = {
-  id: 'gemini-flash' | 'openai-luna' | 'openai-mini' | 'demo';
+  id: 'openai-luna' | 'openai-mini' | 'demo';
   label: string;
   model: string;
   configured: boolean;
@@ -751,12 +751,8 @@ export default function Exams({
                   className={model.configured ? 'configured' : 'unconfigured'}
                   onClick={() => {
                     if (!model.configured) {
-                      const keyName =
-                        model.id === 'gemini-flash'
-                          ? 'GEMINI_API_KEY'
-                          : 'OPENAI_API_KEY';
                       setProviderKeyNote(
-                        `Para usar ${model.label}, adicione ${keyName} ao arquivo .env.local do servidor.`,
+                        `Para usar ${model.label}, adicione OPENAI_API_KEY ao arquivo .env.local do servidor.`,
                       );
                       return;
                     }
@@ -784,7 +780,7 @@ export default function Exams({
               <div className="exam-provider-note">
                 <p>
                   <strong>Chaves de IA:</strong> Configure{' '}
-                  <code>GEMINI_API_KEY</code> ou <code>OPENAI_API_KEY</code> no
+                  <code>OPENAI_API_KEY</code> no
                   arquivo <code>.env.local</code> para habilitar a extração real.
                 </p>
                 <p>

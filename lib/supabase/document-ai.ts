@@ -2,7 +2,6 @@ import { documentKinds } from '../document-fields.ts';
 import {
   isAiProviderConfigured,
   requestOpenAiText,
-  requestGeminiText,
 } from '../ai/client.ts';
 import {
   boundedBody,
@@ -13,8 +12,8 @@ import {
   writeGuard,
 } from './server.ts';
 
-type Provider = 'openai' | 'gemini';
-type ModelId = 'gemini-flash' | 'openai-luna' | 'openai-mini';
+type Provider = 'openai';
+type ModelId = 'openai-luna' | 'openai-mini';
 type ModelChoice = {
   provider: Provider;
   label: string;
@@ -25,11 +24,6 @@ const uuid =
 
 function models(): Record<ModelId, ModelChoice> {
   return {
-    'gemini-flash': {
-      provider: 'gemini',
-      label: 'Gemini · Flash',
-      model: process.env.GEMINI_DOCUMENT_MODEL || 'gemini-2.5-flash',
-    },
     'openai-luna': {
       provider: 'openai',
       label: 'OpenAI · Luna',
@@ -90,15 +84,6 @@ Responda apenas com o texto do rascunho, em português do Brasil, sem Markdown.`
 
 async function askOpenAI(model: string, prompt: string) {
   return requestOpenAiText({
-    model,
-    instructions: systemInstructions,
-    prompt,
-    maxOutputTokens: 5_000,
-  });
-}
-
-async function askGemini(model: string, prompt: string) {
-  return requestGeminiText({
     model,
     instructions: systemInstructions,
     prompt,
@@ -314,10 +299,7 @@ ${instructions ? `\nInstruções do médico:\n${instructions}` : ''}${section('C
       }),
     );
 
-    const result =
-      choice.provider === 'gemini'
-        ? await askGemini(choice.model, prompt)
-        : await askOpenAI(choice.model, prompt);
+    const result = await askOpenAI(choice.model, prompt);
     return json({
       draft: result.text,
       model: { id: modelId, label: choice.label, model: choice.model },

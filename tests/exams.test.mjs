@@ -14,12 +14,10 @@ import { proposalValues } from '../lib/exam-extraction.ts';
 import {
   normalizeDocumentTranscription,
   normalizeExamExtraction,
-  geminiOutputText,
   responseOutputText,
 } from '../lib/openai-files.ts';
 import { exportFHIR } from '../lib/fhir/export.ts';
 import {
-  adaptSchemaForGemini,
   optimizeImageForAi,
 } from '../lib/supabase/ai-files.ts';
 const definition = {
@@ -113,14 +111,6 @@ test('AI proposals are bounded, catalog-matched and remain separate from results
   assert.equal(
     responseOutputText({
       output: [{ content: [{ type: 'output_text', text: '{"ok":true}' }] }],
-    }),
-    '{"ok":true}',
-  );
-  assert.equal(
-    geminiOutputText({
-      candidates: [
-        { content: { parts: [{ text: '{"ok":' }, { text: 'true}' }] } },
-      ],
     }),
     '{"ok":true}',
   );
@@ -313,28 +303,6 @@ test('FHIR exports only active results with units and references, no invented LO
     (e) => e.resource.resourceType === 'DiagnosticReport',
   ).resource;
   assert.equal(report.result[0].reference, observations[0].fullUrl);
-});
-
-test('adaptSchemaForGemini converts union null types to nullable and preserves structure', () => {
-  const schema = {
-    type: 'object',
-    properties: {
-      fieldId: { type: ['string', 'null'] },
-      page: { type: ['integer', 'null'] },
-      confidence: { type: ['number', 'null'] },
-      originalName: { type: 'string' },
-    },
-  };
-  const adapted = adaptSchemaForGemini(schema);
-  assert.deepEqual(adapted, {
-    type: 'object',
-    properties: {
-      fieldId: { type: 'string', nullable: true },
-      page: { type: 'integer', nullable: true },
-      confidence: { type: 'number', nullable: true },
-      originalName: { type: 'string' },
-    },
-  });
 });
 
 test('optimizeImageForAi leaves PDF untouched and optimizes images', async () => {

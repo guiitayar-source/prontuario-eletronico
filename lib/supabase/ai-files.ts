@@ -4,7 +4,6 @@ import type { ExamDefinition } from '../exams.ts';
 import {
   isAiProviderConfigured,
   requestOpenAiFile,
-  requestGeminiFile,
 } from '../ai/client.ts';
 import {
   examExtractionSchema,
@@ -33,20 +32,6 @@ type SharpFn = (
   options?: { failOnError?: boolean },
 ) => SharpInstance;
 const sharp = _sharp as unknown as SharpFn;
-
-export function adaptSchemaForGemini(schema: object): object {
-  const jsonStr = JSON.stringify(schema);
-  return JSON.parse(jsonStr, (_key, value) => {
-    if (value && typeof value === 'object' && Array.isArray(value.type)) {
-      const types = value.type as string[];
-      if (types.includes('null') && types.length === 2) {
-        const actualType = types.find((t) => t !== 'null');
-        return { ...value, type: actualType, nullable: true };
-      }
-    }
-    return value;
-  });
-}
 
 export async function optimizeImageForAi(
   bytes: Uint8Array,
@@ -109,19 +94,14 @@ const ALLOWED_MIMES = new Set([
   'image/webp',
 ]);
 
-type AiProviderId = 'openai' | 'gemini' | 'demo';
+type AiProviderId = 'openai' | 'demo';
 type AiAction = 'extract-exams' | 'transcribe-document';
-type AiExamModelId = 'gemini-flash' | 'openai-luna' | 'openai-mini' | 'demo';
+type AiExamModelId = 'openai-luna' | 'openai-mini' | 'demo';
 
 const EXAM_MODELS: Record<
   AiExamModelId,
   { provider: AiProviderId; label: string; model: string }
 > = {
-  'gemini-flash': {
-    provider: 'gemini',
-    label: 'Gemini · Flash',
-    model: process.env.GEMINI_EXAM_MODEL || 'gemini-2.5-flash',
-  },
   'openai-luna': {
     provider: 'openai',
     label: 'OpenAI · Luna',
@@ -143,19 +123,11 @@ const EXAM_MODELS: Record<
 };
 
 const providerLabel = (provider: AiProviderId) => {
-  if (provider === 'gemini') return 'Gemini';
   if (provider === 'openai') return 'OpenAI';
   return 'Demonstração';
 };
 
 function providerModel(provider: AiProviderId, action: AiAction) {
-  if (provider === 'gemini') {
-    return action === 'transcribe-document'
-      ? process.env.GEMINI_TRANSCRIPTION_MODEL ||
-          process.env.GEMINI_EXAM_MODEL ||
-          'gemini-2.5-flash'
-      : process.env.GEMINI_EXAM_MODEL || 'gemini-2.5-flash';
-  }
   if (provider === 'demo') {
     return 'simulacao-local';
   }
@@ -193,17 +165,6 @@ type FileAiOptions = {
 
 async function askOpenAI(options: FileAiOptions) {
   return requestOpenAiFile(options);
-}
-
-async function askGemini(options: FileAiOptions) {
-  return requestGeminiFile({
-    model: options.model,
-    instructions: options.instructions,
-    bytes: options.bytes,
-    mime: options.mime,
-    geminiSchema: adaptSchemaForGemini(options.schema),
-    maxOutputTokens: options.maxOutputTokens,
-  });
 }
 
 function generateDemoExtraction(definitions: ExamDefinition[]) {
@@ -331,17 +292,10 @@ function generateDemoExtraction(definitions: ExamDefinition[]) {
   }
   return {
     warnings: [
-      'Leitura simulada em modo de demonstração. Adicione GEMINI_API_KEY ou OPENAI_API_KEY no servidor para análise real por IA.',
+      'Leitura simulada em modo de demonstração. Adicione OPENAI_API_KEY no servidor para análise real por IA.',
     ],
     exams,
   };
-}
-
-function askProvider(
-  provider: AiProviderId,
-  options: Parameters<typeof askOpenAI>[0],
-) {
-  return provider === 'gemini' ? askGemini(options) : askOpenAI(options);
 }
 
 export const aiFiles = handle(async (request, { db, clinic, role }) => {
@@ -380,7 +334,7 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
   const provider = data.provider === undefined ? 'openai' : data.provider;
   if (
     !selectedChoice &&
-    (typeof provider !== 'string' || !['openai', 'gemini'].includes(provider))
+    provider !== 'openai'
   )
     throw new HttpError(422, 'Selecione um provedor de IA válido.');
   const selectedProvider =
@@ -441,7 +395,7 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
 
   if (action === 'transcribe-document') {
     const model = providerModel(selectedProvider, selectedAction);
-    const result = await askProvider(selectedProvider, {
+    const result = await askOpenAI({
       bytes: aiBytes,
       mime: aiMime,
       name: attachment.name,
@@ -495,7 +449,7 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
     }
   }
 
-  const result = await askProvider(selectedProvider, {
+  const result = await askOpenAI({
     bytes: aiBytes,
     mime: aiMime,
     name: attachment.name,

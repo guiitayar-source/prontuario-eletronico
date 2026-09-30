@@ -137,8 +137,8 @@ try {
     source: 'ai_reviewed',
     provenance: {
       attachment_id: 'att-exam',
-      provider: 'google',
-      model: 'gemini-2.5-flash',
+      provider: 'openai',
+      model: 'gpt-4o-mini',
       extracted_at: new Date().toISOString(),
       reviewed_at: new Date().toISOString(),
     },
