@@ -28,8 +28,15 @@ Estado: protótipo em validação, **sem liberação para dados reais** — ver 
 - `supabase/migrations/` — esquema. Escritas passam por funções `security definer` (`*_write`)
   com controle de versão otimista (`version`); leitura por RLS com `has_clinic_role`.
   Nunca edite uma migração já aplicada: crie outra (`AAAAMMDDHHMMSS_nome.sql`).
-- `components/` — telas e componentes cliente. `clinical-record.tsx` é o atendimento;
-  `topbar.tsx` tem a busca global (desenhada por portal na barra da conta, em `mfa.tsx`).
+- `components/` — telas e componentes cliente. Telas grandes viram pasta com `index.tsx`
+  (ou `index.ts` reexportando) e a lógica num hook `use-*.ts`, deixando o componente só com a tela:
+  - `clinical-record/` — atendimento: `index.tsx` (estado e fluxo), `status-banner`, `actions`,
+    `sidebar`, `dialogs`, `types`.
+  - `documents/` — `use-documents.ts`, `use-document-ai.ts`, `editor`, `ai-box`, `history`.
+  - `capture/` — anexos: `use-attachments.ts` (lógica), `desktop.tsx` (tela), `client.ts` (API).
+  - `dialog-frame.tsx` — moldura padrão de diálogo (fundo, foco preso, fechar); `modal.tsx` usa
+    `<dialog>` nativo. `topbar.tsx` tem a busca global (desenhada por portal na barra da conta,
+    em `mfa.tsx`).
 - `lib/cid/` — catálogos CID-10/CID-11 e o bloco de diagnósticos da evolução.
 - `lib/signature/` — assinatura ICP-Brasil (Bird ID); ver `ARQUITETURA_ASSINATURAS.md`.
 - `app/globals.css` só importa `app/styles/*.css`, **na ordem da cascata** (a ordem importa).
