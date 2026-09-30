@@ -11,6 +11,7 @@ import {
   validateResult,
 } from '../lib/exams.ts';
 import { proposalValues } from '../lib/exam-extraction.ts';
+import { requestOpenAiFile } from '../lib/ai/client.ts';
 import {
   normalizeDocumentTranscription,
   normalizeExamExtraction,
@@ -342,4 +343,41 @@ test('optimizeImageForAi leaves PDF untouched and optimizes images', async () =>
   const pdfRes = await optimizeImageForAi(pdfBytes, 'application/pdf');
   assert.equal(pdfRes.bytes, pdfBytes);
   assert.equal(pdfRes.mime, 'application/pdf');
+});
+
+test('GPT-6 Luna reads exam files with medium reasoning', async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  let requestBody;
+  process.env.OPENAI_API_KEY = 'test-key';
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(init.body);
+    return Response.json({ status: 'completed', output_text: '{"ok":true}' });
+  };
+
+  try {
+    const result = await requestOpenAiFile({
+      model: 'gpt-6-luna',
+      instructions: 'Extraia os dados do exame.',
+      bytes: new Uint8Array([37, 80, 68, 70]),
+      mime: 'application/pdf',
+      name: 'exame.pdf',
+      schemaName: 'test_extraction',
+      schema: {
+        type: 'object',
+        properties: { ok: { type: 'boolean' } },
+        required: ['ok'],
+        additionalProperties: false,
+      },
+    });
+    assert.deepEqual(result, { ok: true });
+    assert.equal(requestBody.model, 'gpt-6-luna');
+    assert.deepEqual(requestBody.reasoning, { effort: 'medium' });
+    assert.equal(requestBody.store, false);
+    assert.equal(requestBody.text.format.name, 'test_extraction');
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
 });
