@@ -228,7 +228,7 @@ export default function ClinicalRecord({
     };
   }, [patient.id, medical, appointmentId]);
 
-  async function persist(finalize = false) {
+  async function persist(finalize = false): Promise<boolean> {
     if (
       !current ||
       flight.current ||
@@ -237,7 +237,7 @@ export default function ClinicalRecord({
       current.status === 'SIGNED' ||
       current.signed_at
     )
-      return;
+      return false;
     flight.current = true;
     setFinalizing(finalize);
     setBusy(true);
@@ -258,10 +258,12 @@ export default function ClinicalRecord({
       );
       setStatus(latest.current === snapshot ? 'Salvo' : 'Alterações pendentes');
       setError('');
+      return true;
     } catch (e) {
       blocked.current = true;
       setError((e as Error).message);
       setStatus('Não salvo — seu texto permanece nesta tela');
+      return false;
     } finally {
       flight.current = false;
       setFinalizing(false);
@@ -269,16 +271,26 @@ export default function ClinicalRecord({
     }
   }
 
+  async function prepareEvolutionForSignature() {
+    if (!current) return false;
+    if (!current.finalized_at && latest.current !== saved.current) {
+      if (!(await persist(false))) return false;
+    }
+    if (latest.current !== saved.current) {
+      setError('Há alterações não salvas. Salve a evolução antes de assinar.');
+      setStatus('Alterações pendentes');
+      return false;
+    }
+    return true;
+  }
+
   async function handleSignEvolution() {
     if (!current || busy || signing) return;
-    setError('');
     setSigning(true);
-    setStatus('Assinando evolução com certificado Bird ID…');
     try {
-      // Salva rascunho apenas se a consulta ainda não estiver finalizada
-      if (dirty && !current.finalized_at) {
-        await persist(false);
-      }
+      if (!(await prepareEvolutionForSignature())) return;
+      setError('');
+      setStatus('Assinando evolução com certificado Bird ID…');
       const r = await apiFetch('/api/digital-signature/sign-evolution', {
         method: 'POST',
         headers: {
@@ -307,11 +319,11 @@ export default function ClinicalRecord({
   }
 
   async function handleConnectAndSign() {
-    if (!current) return;
+    if (!current || busy || signing) return;
+    setSigning(true);
     try {
-      if (dirty && !current.finalized_at) {
-        await persist(false);
-      }
+      if (!(await prepareEvolutionForSignature())) return;
+      setError('');
       if (typeof window !== 'undefined' && patient?.id) {
         sessionStorage.setItem('birdid_return_patient_id', patient.id);
         sessionStorage.setItem('birdid_return_tab', 'consulta');
@@ -329,6 +341,8 @@ export default function ClinicalRecord({
       }
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setSigning(false);
     }
   }
 

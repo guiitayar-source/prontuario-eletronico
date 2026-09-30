@@ -24,6 +24,7 @@
     "test:exams": "node tests/exams.test.mjs && node tests/exams-db.mjs",
     "test:attachment-delete": "node tests/attachment-delete-db.mjs",
     "test:signature": "node tests/digital-signature.test.mjs",
+    "test:signature-flow": "node tests/evolution-save-before-sign.test.mjs",
     "verify-signature": "node scripts/verify-signature.mjs",
     "backup:create": "node --env-file=.env.local scripts/backup.mjs create",
     "backup:verify": "node scripts/backup.mjs verify"
