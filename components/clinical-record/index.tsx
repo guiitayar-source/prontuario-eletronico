@@ -1,80 +1,40 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { useAccess } from './auth';
-import { ImportedHistory } from './imports';
-import {
-  useClinicalContext,
-  ClinicalContextSummary,
-  ClinicalContextEditor,
-} from './clinical-context';
-import { useDocuments, DocumentHistory, DocumentEditor } from './documents';
-import { PrescriptionWorkspace } from './prescriptions';
+import { useAccess } from '../auth';
+import { ImportedHistory } from '../imports';
+import { useClinicalContext, ClinicalContextEditor } from '../clinical-context';
+import { useDocuments, DocumentHistory, DocumentEditor } from '../documents';
+import { PrescriptionWorkspace } from '../prescriptions';
 import { documentTemplate } from '@/lib/document-fields';
 import { apiFetch } from '@/lib/supabase/http';
-import { PatientDetails } from './patients/registry';
-import Attachments from './capture/desktop';
-import { AnamnesatorAssistant } from './anamnesator-assistant';
-import { CollapsibleCard } from './collapsible-card';
-import { ConsultationDiagnoses } from './diagnoses';
+import { PatientDetails } from '../patients/registry';
+import Attachments from '../capture/desktop';
+import { AnamnesatorAssistant } from '../anamnesator-assistant';
+import { ConsultationDiagnoses } from '../diagnoses';
 import { upsertDiagnosisBlock } from '@/lib/cid/evolution-block';
 import { initials, age, type Patient } from '@/lib/patient-fields';
-import { useSearchGuard } from './topbar';
-import { NavigationRail } from './navigation-rail';
+import { useSearchGuard } from '../topbar';
+import { NavigationRail } from '../navigation-rail';
 import {
   ChevronRight,
   PanelRightClose,
   PanelRightOpen,
-  Clock3,
   Check,
   FileText,
-  Pill,
   Mic,
   X,
   ArrowUpRight,
-  LockKeyhole,
-  ShieldCheck,
-  FileCheck,
-  KeyRound,
-  Loader2,
   Timer,
 } from 'lucide-react';
-import { EvolutionSignatureDetailsModal } from './evolution-signature-details-modal';
+import { EvolutionSignatureDetailsModal } from '../evolution-signature-details-modal';
 import type { SignatureSessionData } from '@/lib/signature/types';
 import { useConsultationTimer } from '@/hooks/use-consultation-timer';
-import { ConsultationTimer } from './consultation-timer';
+import { ConsultationTimer } from '../consultation-timer';
+import { date, type RecordEntry } from './types';
+import { EvolutionStatusBanner } from './status-banner';
+import { EvolutionActions } from './actions';
+import { RecordSidebar } from './sidebar';
 
-type RecordEntry = {
-  id: string;
-  text: string;
-  version: number;
-  created_at: string;
-  finalized_at: string | null;
-  author_id: string;
-  finalized_by: string | null;
-  status?: string;
-  signed_at?: string | null;
-  signed_by?: string | null;
-  current_signature_id?: string | null;
-  current_signature?: {
-    id: string;
-    signer_user_id: string;
-    certificate_subject: string;
-    certificate_issuer: string;
-    certificate_serial: string;
-    certificate_fingerprint: string;
-    signed_at: string;
-    verification_status: string;
-    document_hash: string;
-    provider: string;
-    canonical_data?: Record<string, unknown>;
-  } | null;
-  consultation_addenda?: {
-    id: string;
-    text: string;
-    author_id: string;
-    created_at: string;
-  }[];
-};
 async function request(patientId: string, action?: string, data?: unknown) {
   const r = await apiFetch(
     '/api/consultations?' +
@@ -100,8 +60,6 @@ async function request(patientId: string, action?: string, data?: unknown) {
   if (!r.ok) throw new Error(result.error);
   return result;
 }
-const date = (v: string) =>
-  new Date(v).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 export default function ClinicalRecord({
   patient,
   onHome,
@@ -749,78 +707,18 @@ export default function ClinicalRecord({
                       }
                       spellCheck
                     />
-                    {isSigned ? (
-                      <div className="signed-evolution-banner">
-                        <div className="signed-badge-header">
-                          <ShieldCheck size={20} className="signed-badge-icon" />
-                          <div>
-                            <strong>Evolução assinada digitalmente (ICP-Brasil)</strong>
-                            <p>
-                              Assinada em {date(current.signed_at || current.created_at)}
-                              {current.current_signature?.certificate_subject
-                                ? ` por ${current.current_signature.certificate_subject.match(/CN=([^,\n/]+)/i)?.[1] || current.current_signature.certificate_subject}`
-                                : ''}
-                              . Registro eletrônico nativo imutável.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            className="secondary compact-btn"
-                            onClick={() => setModal('assinatura-detalhes')}
-                          >
-                            <FileCheck size={15} /> Ver detalhes da assinatura
-                          </button>
-                        </div>
-                      </div>
-                    ) : isFinalizedUnsigned ? (
-                      <div className="unsigned-finalized-banner">
-                        <div className="unsigned-finalized-header">
-                          <div className="unsigned-badge-icon">
-                            <KeyRound size={20} />
-                          </div>
-                          <div className="unsigned-badge-text">
-                            <strong>Consulta finalizada sem assinatura digital</strong>
-                            <p>
-                              Finalizada em {current?.finalized_at && date(current.finalized_at)}.
-                              Você pode assinar este registro eletrônico agora com seu certificado digital ICP-Brasil.
-                            </p>
-                          </div>
-                          {signatureSession ? (
-                            <button
-                              type="button"
-                              className="primary signature-btn compact-btn"
-                              disabled={busy || signing}
-                              onClick={() => void handleSignEvolution()}
-                            >
-                              {signing ? (
-                                <>
-                                  <Loader2 size={14} className="spin" /> Assinando…
-                                </>
-                              ) : (
-                                <>
-                                  <ShieldCheck size={15} /> Assinar agora (ICP-Brasil)
-                                </>
-                              )}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="primary signature-connect-btn compact-btn"
-                              disabled={busy || signing}
-                              onClick={() => void handleConnectAndSign()}
-                            >
-                              <KeyRound size={15} /> Conectar Bird ID para assinar
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ) : finalized ? (
-                      <div className="finalized-info">
-                        <LockKeyhole size={15} /> Finalizada em{' '}
-                        {current?.finalized_at && date(current.finalized_at)}.
-                        Correções por adendos. Sem assinatura digital.
-                      </div>
-                    ) : null}
+                    <EvolutionStatusBanner
+                      current={current}
+                      isSigned={isSigned}
+                      isFinalizedUnsigned={isFinalizedUnsigned}
+                      finalized={finalized}
+                      hasSignatureSession={!!signatureSession}
+                      busy={busy}
+                      signing={signing}
+                      onSign={() => void handleSignEvolution()}
+                      onConnect={() => void handleConnectAndSign()}
+                      onShowDetails={() => setModal('assinatura-detalhes')}
+                    />
                     {current?.consultation_addenda?.map((a) => (
                       <article className="consultation-addendum" key={a.id}>
                         <strong>Adendo · {date(a.created_at)}</strong>
@@ -853,177 +751,38 @@ export default function ClinicalRecord({
                         setStatus('Alterações pendentes');
                       }}
                     />
-                    <footer className="editor-actions">
-                      <button
-                        className="secondary"
-                        onClick={() => {
-                          docs.open(undefined, current?.id);
-                          setModal('documento');
-                        }}
-                      >
-                        <FileText size={16} /> Novo documento
-                      </button>
-                      <button className="secondary" onClick={openPrescription}>
-                        <Pill size={16} /> Nova receita
-                      </button>
-                      {isSigned ? (
-                        <>
-                          <button
-                            type="button"
-                            className="secondary"
-                            onClick={() => setModal('assinatura-detalhes')}
-                          >
-                            <FileCheck size={16} /> Detalhes da assinatura
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary"
-                            onClick={() => setModal('reiniciar')}
-                          >
-                            Registrar adendo
-                          </button>
-                        </>
-                      ) : isFinalizedUnsigned ? (
-                        <div className="editor-action-buttons">
-                          <button
-                            type="button"
-                            className="secondary"
-                            onClick={() => setModal('reiniciar')}
-                          >
-                            Registrar adendo
-                          </button>
-
-                          {signatureSession ? (
-                            <button
-                              type="button"
-                              className="primary signature-btn"
-                              disabled={busy || signing}
-                              onClick={() => void handleSignEvolution()}
-                            >
-                              {signing ? (
-                                <>
-                                  <Loader2 size={16} className="spin" /> Assinando ICP-Brasil…
-                                </>
-                              ) : (
-                                <>
-                                  <ShieldCheck size={17} /> Assinar evolução (ICP-Brasil)
-                                </>
-                              )}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="primary signature-connect-btn"
-                              disabled={busy || signing}
-                              onClick={() => void handleConnectAndSign()}
-                            >
-                              <KeyRound size={17} /> Conectar Bird ID para assinar
-                            </button>
-                          )}
-                        </div>
-                      ) : finalized ? (
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => setModal('reiniciar')}
-                        >
-                          Registrar adendo
-                        </button>
-                      ) : (
-                        <div className="editor-action-buttons">
-                          <button
-                            type="button"
-                            className="secondary"
-                            disabled={!ready || busy || signing || !dirty}
-                            onClick={() => void persist(false)}
-                          >
-                            Salvar rascunho
-                          </button>
-
-                          {signatureSession ? (
-                            <button
-                              type="button"
-                              className="primary signature-btn"
-                              disabled={!ready || busy || signing || !text.trim()}
-                              onClick={() => void handleSignEvolution()}
-                            >
-                              {signing ? (
-                                <>
-                                  <Loader2 size={16} className="spin" /> Assinando ICP-Brasil…
-                                </>
-                              ) : (
-                                <>
-                                  <ShieldCheck size={17} /> Finalizar e assinar
-                                </>
-                              )}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="primary signature-connect-btn"
-                              disabled={!ready || busy || signing || !text.trim()}
-                              onClick={() => void handleConnectAndSign()}
-                            >
-                              <KeyRound size={17} /> Conectar Bird ID para assinar
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}
-                            disabled={!ready || busy || signing || !text.trim()}
-                            onClick={() => setModal('finalizar')}
-                            title="Finalizar consulta sem aplicar assinatura digital ICP-Brasil"
-                          >
-                            Finalizar sem assinar
-                          </button>
-                        </div>
-                      )}
-                    </footer>
+                    <EvolutionActions
+                      isSigned={isSigned}
+                      isFinalizedUnsigned={isFinalizedUnsigned}
+                      finalized={finalized}
+                      hasSignatureSession={!!signatureSession}
+                      busy={busy}
+                      signing={signing}
+                      ready={ready}
+                      dirty={dirty}
+                      hasText={!!text.trim()}
+                      onNewDocument={() => {
+                        docs.open(undefined, current?.id);
+                        setModal('documento');
+                      }}
+                      onNewPrescription={openPrescription}
+                      onShowDetails={() => setModal('assinatura-detalhes')}
+                      onAddendum={() => setModal('reiniciar')}
+                      onSaveDraft={() => void persist(false)}
+                      onSign={() => void handleSignEvolution()}
+                      onConnect={() => void handleConnectAndSign()}
+                      onFinalizeUnsigned={() => setModal('finalizar')}
+                    />
                   </section>
                   {panel && (
-                    <aside className="clinical-sidebar" aria-label="Contexto e histórico">
-                      <ClinicalContextSummary
-                        context={clinicalContext}
-                        onEdit={() => setModal('contexto')}
-                      />
-                      <CollapsibleCard
-                        storageKey="historico"
-                        title="Histórico de consultas"
-                        icon={<Clock3 size={16} aria-hidden />}
-                      >
-                        {!rows.length && (
-                          <p className="muted">Nenhuma consulta registrada.</p>
-                        )}
-                        {rows.map((r) => (
-                          <button
-                            key={r.id}
-                            className="consultation-history-link"
-                            aria-current={
-                              current?.id === r.id ? 'true' : undefined
-                            }
-                            disabled={busy}
-                            onClick={() => leave(() => choose(r))}
-                          >
-                            <span className="history-date">
-                              {date(r.created_at)}
-                            </span>
-                            <strong>
-                              {r.status === 'SIGNED' || r.signed_at
-                                ? '✓ Assinada digitalmente'
-                                : r.finalized_at
-                                  ? 'Finalizada (não assinada)'
-                                  : 'Em atendimento'}
-                            </strong>
-                            <span>
-                              {r.text.slice(0, 150) || 'Rascunho vazio'}
-                              {r.text.length > 150 ? '…' : ''}
-                            </span>
-                          </button>
-                        ))}
-                      </CollapsibleCard>
-                    </aside>
+                    <RecordSidebar
+                      context={clinicalContext}
+                      onEditContext={() => setModal('contexto')}
+                      rows={rows}
+                      currentId={current?.id}
+                      busy={busy}
+                      onChoose={(r) => leave(() => choose(r))}
+                    />
                   )}
                 </div>
                 <div className="footnote">
