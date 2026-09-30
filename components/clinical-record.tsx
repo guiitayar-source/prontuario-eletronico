@@ -11,7 +11,7 @@ import { useDocuments, DocumentHistory, DocumentEditor } from './documents';
 import { PrescriptionWorkspace } from './prescriptions';
 import { documentTemplate } from '@/lib/document-fields';
 import { apiFetch } from '@/lib/supabase/http';
-import { PatientDetails, PatientSearch } from './patients/registry';
+import { PatientDetails } from './patients/registry';
 import Attachments from './capture/desktop';
 import { AnamnesatorAssistant } from './anamnesator-assistant';
 import { CollapsibleCard } from './collapsible-card';
@@ -468,12 +468,6 @@ export default function ClinicalRecord({
   }
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        if ((modal === 'documento' || modal === 'receita') && !docs.close())
-          return;
-        setModal('busca');
-      }
       if (e.key === 'Escape') closeModal();
     };
     window.addEventListener('keydown', handler);
@@ -496,7 +490,16 @@ export default function ClinicalRecord({
         onSettings={onSettings ? () => leave(onSettings) : undefined}
       />
       <div className="main-shell">
-        <TopBar onOpenSearch={() => setModal('busca')} />
+        <TopBar
+          onSelectPatient={(p) => leave(() => onSelect(p))}
+          onBeforeSearch={() => {
+            if (!modal) return true;
+            if ((modal === 'documento' || modal === 'receita') && !docs.close())
+              return false;
+            setModal('');
+            return true;
+          }}
+        />
         <main>
           <div className="breadcrumb">
             <button onClick={() => leave(onAgenda)}>Consultório</button>
@@ -1112,18 +1115,7 @@ export default function ClinicalRecord({
             >
               <X size={20} />
             </button>
-            {modal === 'busca' ? (
-              <>
-                <h2 id="dialog-title">Buscar paciente</h2>
-                <PatientSearch
-                  compact
-                  onOpen={(p) => {
-                    closeModal();
-                    leave(() => onSelect(p));
-                  }}
-                />
-              </>
-            ) : modal === 'anamnesator' ? (
+            {modal === 'anamnesator' ? (
               <>
                 <div className="modal-icon">
                   <Mic />

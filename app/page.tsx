@@ -5,14 +5,13 @@ import Consultation from '@/components/consultation';
 import Agenda from '@/components/agenda';
 import Team from '@/components/team';
 import Settings from '@/components/settings';
-import { PatientSearchModal } from '@/components/patient-search-modal';
+import { focusPatientSearch } from '@/components/topbar';
 import type { Patient } from '@/lib/patient-fields';
 
 export default function Home() {
   const [appointmentId, setAppointmentId] = useState<string | undefined>();
   const [patient, setPatient] = useState<Patient | null>(null),
     [error, setError] = useState(''),
-    [searchOpen, setSearchOpen] = useState(false),
     [section, setSection] = useState<
       'patients' | 'agenda' | 'team' | 'settings'
     >('patients');
@@ -34,7 +33,9 @@ export default function Home() {
         setError(signatureError);
         window.history.replaceState({}, '', window.location.pathname);
       } else if (signatureStatus === 'connected') {
-        const returnPatientId = sessionStorage.getItem('birdid_return_patient_id');
+        const returnPatientId = sessionStorage.getItem(
+          'birdid_return_patient_id',
+        );
         if (returnPatientId) {
           sessionStorage.removeItem('birdid_return_patient_id');
           void open(returnPatientId);
@@ -90,14 +91,6 @@ export default function Home() {
           </button>
         </div>
       )}
-      <PatientSearchModal
-        isOpen={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onSelect={(p) => {
-          setSearchOpen(false);
-          selectPatient(p);
-        }}
-      />
       {patient ? (
         <Consultation
           key={patient.id}
@@ -187,7 +180,7 @@ export default function Home() {
             setError('');
             setSection('settings');
           }}
-          onConsultation={() => setSearchOpen(true)}
+          onConsultation={focusPatientSearch}
         />
       )}
     </>

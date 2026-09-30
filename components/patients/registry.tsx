@@ -304,7 +304,7 @@ export default function Registry({
                   <h1>Pacientes</h1>
                   <p>
                     {tab === 'list'
-                      ? 'Encontre um paciente ou comece um novo cadastro.'
+                      ? 'Busque um paciente no topo da página ou comece um novo cadastro.'
                       : 'Traga prontuários de outro sistema ou exporte o prontuário de um paciente.'}
                   </p>
                 </div>
@@ -340,7 +340,7 @@ export default function Registry({
                   />
                 </div>
               ) : (
-                <PatientSearch onOpen={onOpen} />
+                <PatientSearch searchable={false} onOpen={onOpen} />
               )}
             </>
           )}

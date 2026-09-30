@@ -7,10 +7,13 @@ import { initials, age, type Patient } from '@/lib/patient-fields';
 export function PatientSearch({
   onOpen,
   compact = false,
+  searchable = true,
   revision = 0,
 }: {
   onOpen: (p: Patient) => void;
   compact?: boolean;
+  /** Sem campo de busca: apenas lista paginada (a busca fica no cabeçalho). */
+  searchable?: boolean;
   revision?: number;
 }) {
   const [query, setQuery] = useState(''),
@@ -51,19 +54,21 @@ export function PatientSearch({
   }, [query, page, revision, retry]);
   return (
     <div className={compact ? 'patient-search compact' : 'patient-search'}>
-      <label className="registry-search">
-        <Search size={18} />
-        <input
-          autoFocus={compact}
-          aria-label="Buscar pacientes"
-          placeholder="Buscar por nome, CPF, telefone ou e-mail"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(0);
-          }}
-        />
-      </label>
+      {searchable && (
+        <label className="registry-search">
+          <Search size={18} />
+          <input
+            autoFocus={compact}
+            aria-label="Buscar pacientes"
+            placeholder="Buscar por nome, CPF, telefone ou e-mail"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(0);
+            }}
+          />
+        </label>
+      )}
       {error ? (
         <div className="capture-error" role="alert">
           {error}
@@ -108,7 +113,11 @@ export function PatientSearch({
             <div className="registry-empty">
               <UserRound size={30} />
               <h3>Nenhum paciente encontrado</h3>
-              <p>Confira a busca ou adicione um novo cadastro.</p>
+              <p>
+                {searchable
+                  ? 'Confira a busca ou adicione um novo cadastro.'
+                  : 'Adicione um novo cadastro para começar.'}
+              </p>
             </div>
           )}
           {total > 50 && (
