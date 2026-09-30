@@ -130,11 +130,11 @@ html[data-gradient='false'] body {
 /* Painel lateral da consulta: cartões recolhíveis */
 .clinical-sidebar {
   position: sticky;
-  top: 88px;
+  top: 62px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  max-height: calc(100vh - 104px);
+  max-height: calc(100vh - 78px);
   overflow-y: auto;
 }
 .side-card {
@@ -791,7 +791,7 @@ p {
   -webkit-backdrop-filter: var(--glass-blur);
   color: var(--text-subtle);
   position: fixed;
-  top: 88px;
+  top: 62px;
   bottom: 16px;
   left: 16px;
   display: flex;
@@ -885,55 +885,26 @@ p {
   width: calc(100% - 104px);
   min-height: 100vh;
 }
-.topbar {
-  height: 72px;
-  background: transparent;
+/* Busca de pacientes, desenhada no meio da barra da conta. */
+.account-bar-search {
+  flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 32px 0 16px;
-  gap: 24px;
-}
-/* Cabeçalho único do app: fica fixo no topo em todas as telas. */
-.app-topbar {
-  position: sticky;
-  top: 0;
-  z-index: 25; /* acima do conteúdo e do menu lateral, abaixo dos modais (30) */
-  padding: 0 32px 0 24px;
-  background: color-mix(in srgb, var(--bg) 72%, transparent);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border-bottom: 1px solid var(--border);
-}
-.app-topbar ~ .app-shell {
-  min-height: calc(100vh - 72px);
-}
-.wordmark {
-  font-size: 21px;
-  font-weight: 650;
-  letter-spacing: -0.7px;
-}
-.wordmark span {
-  display: block;
-  font-size: 10px;
-  letter-spacing: 2px;
-  color: var(--text-muted);
-  margin-top: 3px;
+  justify-content: center;
+  min-width: 0;
 }
 .search {
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  width: 100%;
+  max-width: 440px;
+  font-size: 13px;
   color: var(--text-subtle);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  padding: 8px 14px;
-  min-width: 360px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 4px 10px;
   justify-content: flex-start;
 }
 .search:focus-within {
@@ -990,19 +961,10 @@ p {
   border-radius: 6px;
   padding: 2px 7px;
 }
-.demo-label {
-  font-size: 12px;
-  color: var(--theme-badge-color, var(--text-muted));
-  background: var(--theme-badge-bg, var(--surface-2));
-  padding: 7px 11px;
-  border-radius: 5px;
-  white-space: nowrap;
-  transition: background-color 0.25s ease, color 0.25s ease;
-}
 main {
   max-width: 1530px;
   margin: auto;
-  padding: 8px 32px 32px 16px;
+  padding: 16px 32px 32px 16px;
 }
 .breadcrumb {
   display: flex;
@@ -1996,16 +1958,9 @@ h1 {
   }
 }
 @media (max-width: 1100px) {
-  .demo-label {
-    display: none;
-  }
   .workspace {
     grid-template-columns: 260px minmax(0, 1fr);
     gap: 20px;
-  }
-  .topbar,
-  .app-topbar {
-    padding: 0 24px;
   }
   main {
     padding: 22px 24px;
@@ -2038,7 +1993,7 @@ h1 {
   .rail {
     width: 60px;
     left: 8px;
-    top: 78px;
+    top: 54px;
     bottom: 8px;
   }
   .main-shell {
@@ -2055,25 +2010,12 @@ h1 {
   .nav-item {
     font-size: 10px;
   }
-  .topbar,
-  .app-topbar {
-    height: 70px;
-    padding: 0 16px;
-  }
-  .wordmark {
-    font-size: 17px;
-  }
-  .wordmark span {
-    font-size: 8px;
-  }
   .search {
-    min-width: 0;
-    flex: 1;
-    padding: 6px 10px;
+    padding: 4px 8px;
   }
   .search-dropdown {
     position: fixed;
-    top: 64px;
+    top: 50px;
     left: 8px;
     right: 8px;
   }
@@ -3498,8 +3440,9 @@ h1 {
     padding: 0 12px;
     gap: 8px;
   }
-  .user-email {
-    max-width: 110px;
+  .user-email,
+  .account-sep {
+    display: none;
   }
   .clinic-name {
     max-width: 120px;

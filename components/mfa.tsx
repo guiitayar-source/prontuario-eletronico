@@ -285,6 +285,9 @@ export function MFAGate({
           </span>
         </div>
 
+        {/* A busca de pacientes é desenhada aqui pelo AppHeader (portal). */}
+        <div className="account-bar-search" id="account-bar-search" />
+
         <div className="account-bar-right">
           <button
             type="button"

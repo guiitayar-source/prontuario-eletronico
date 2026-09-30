@@ -9,6 +9,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Search } from 'lucide-react';
 import { apiFetch as fetch } from '@/lib/supabase/http';
 import { initials, age, type Patient } from '@/lib/patient-fields';
@@ -40,7 +41,7 @@ export function useSearchGuard(guard: SearchGuard) {
   });
 }
 
-/** Cabeçalho único e fixo do app, com a busca de pacientes, sobre todas as telas. */
+/** Busca de pacientes na barra superior da conta (PsyWrite · clínica), em todas as telas. */
 export function AppHeader({
   onSelectPatient,
   children,
@@ -49,22 +50,27 @@ export function AppHeader({
   children: ReactNode;
 }) {
   const guard = useRef<SearchGuard>({});
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => setSlot(document.getElementById('account-bar-search')), []);
+  const search = (
+    <PatientSearchBox
+      onSelectPatient={(p) => {
+        const open = () => onSelectPatient(p);
+        if (guard.current.beforeSelect) guard.current.beforeSelect(open);
+        else open();
+      }}
+      onBeforeSearch={() => guard.current.beforeSearch?.() ?? true}
+    />
+  );
   return (
     <SearchGuardContext.Provider value={guard}>
-      <TopBar
-        onSelectPatient={(p) => {
-          const open = () => onSelectPatient(p);
-          if (guard.current.beforeSelect) guard.current.beforeSelect(open);
-          else open();
-        }}
-        onBeforeSearch={() => guard.current.beforeSearch?.() ?? true}
-      />
+      {slot && createPortal(search, slot)}
       {children}
     </SearchGuardContext.Provider>
   );
 }
 
-function TopBar({
+function PatientSearchBox({
   onSelectPatient,
   onBeforeSearch,
 }: {
@@ -144,106 +150,97 @@ function TopBar({
   };
 
   return (
-    <header className="topbar app-topbar">
-      <div className="wordmark">
-        meu prontuário<span>CONSULTÓRIO</span>
-      </div>
-      <div className="search" ref={boxRef}>
-        <Search size={16} />
-        <input
-          id={INPUT_ID}
-          ref={inputRef}
-          role="combobox"
-          aria-label="Buscar paciente"
-          aria-expanded={open}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          aria-activedescendant={
-            open && list[active] ? `${listId}-${active}` : undefined
-          }
-          autoComplete="off"
-          placeholder="Buscar paciente"
-          value={query}
-          onFocus={() => setOpen(true)}
-          onChange={(e) => {
-            setQuery(e.target.value);
+    <div className="search" ref={boxRef}>
+      <Search size={16} />
+      <input
+        id={INPUT_ID}
+        ref={inputRef}
+        role="combobox"
+        aria-label="Buscar paciente"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={
+          open && list[active] ? `${listId}-${active}` : undefined
+        }
+        autoComplete="off"
+        placeholder="Buscar paciente"
+        value={query}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            setOpen(false);
+            inputRef.current?.blur();
+          } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
             setOpen(true);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.stopPropagation();
-              setOpen(false);
-              inputRef.current?.blur();
-            } else if (e.key === 'ArrowDown') {
-              e.preventDefault();
-              setOpen(true);
-              setActive((i) => Math.min(i + 1, list.length - 1));
-            } else if (e.key === 'ArrowUp') {
-              e.preventDefault();
-              setActive((i) => Math.max(i - 1, 0));
-            } else if (e.key === 'Enter' && open && list[active]) {
-              e.preventDefault();
-              select(list[active]);
-            }
-          }}
-        />
-        <kbd>Ctrl K</kbd>
-        {open && (
-          <div className="search-dropdown" id={listId} role="listbox">
-            {error ? (
-              <p className="search-dropdown-status" role="alert">
-                {error}
-              </p>
-            ) : busy && !list.length ? (
-              <p className="search-dropdown-status" role="status">
-                Carregando pacientes…
-              </p>
-            ) : !list.length ? (
-              <p className="search-dropdown-status">
-                Nenhum paciente encontrado
-              </p>
-            ) : (
-              <>
-                {list.map((p, i) => (
-                  <button
-                    type="button"
-                    role="option"
-                    id={`${listId}-${i}`}
-                    aria-selected={i === active}
-                    className={
-                      i === active ? 'search-result active' : 'search-result'
-                    }
-                    key={p.id}
-                    tabIndex={-1}
-                    onMouseEnter={() => setActive(i)}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => select(p)}
-                  >
-                    <span className="avatar patient">
-                      {initials(p.social_name || p.name)}
-                    </span>
-                    <span>
-                      <strong>{p.social_name || p.name}</strong>
-                      <small>
-                        {p.social_name ? `${p.name} · ` : ''}
-                        {age(p.dob)}
-                        {p.phone ? ` · ${p.phone}` : ''}
-                      </small>
-                    </span>
-                  </button>
-                ))}
-                {total > list.length && (
-                  <p className="search-dropdown-status">
-                    Mostrando {list.length} de {total}. Refine a busca.
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-      <span className="demo-label">Protótipo · dados fictícios</span>
-    </header>
+            setActive((i) => Math.min(i + 1, list.length - 1));
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActive((i) => Math.max(i - 1, 0));
+          } else if (e.key === 'Enter' && open && list[active]) {
+            e.preventDefault();
+            select(list[active]);
+          }
+        }}
+      />
+      <kbd>Ctrl K</kbd>
+      {open && (
+        <div className="search-dropdown" id={listId} role="listbox">
+          {error ? (
+            <p className="search-dropdown-status" role="alert">
+              {error}
+            </p>
+          ) : busy && !list.length ? (
+            <p className="search-dropdown-status" role="status">
+              Carregando pacientes…
+            </p>
+          ) : !list.length ? (
+            <p className="search-dropdown-status">Nenhum paciente encontrado</p>
+          ) : (
+            <>
+              {list.map((p, i) => (
+                <button
+                  type="button"
+                  role="option"
+                  id={`${listId}-${i}`}
+                  aria-selected={i === active}
+                  className={
+                    i === active ? 'search-result active' : 'search-result'
+                  }
+                  key={p.id}
+                  tabIndex={-1}
+                  onMouseEnter={() => setActive(i)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => select(p)}
+                >
+                  <span className="avatar patient">
+                    {initials(p.social_name || p.name)}
+                  </span>
+                  <span>
+                    <strong>{p.social_name || p.name}</strong>
+                    <small>
+                      {p.social_name ? `${p.name} · ` : ''}
+                      {age(p.dob)}
+                      {p.phone ? ` · ${p.phone}` : ''}
+                    </small>
+                  </span>
+                </button>
+              ))}
+              {total > list.length && (
+                <p className="search-dropdown-status">
+                  Mostrando {list.length} de {total}. Refine a busca.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
-
