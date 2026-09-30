@@ -1,19 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import {
-  ShieldCheck,
-  Stethoscope,
-  Users,
-  UserPlus,
-  UserX,
-  Shield,
-  Lock,
-  Mail,
-  Check,
-  AlertCircle,
-  CheckCircle2,
-  Send,
-} from 'lucide-react';
+import { Check } from 'lucide-react';
 import { apiFetch } from '@/lib/supabase/http';
 import { useAccess } from './auth';
 import { NavigationRail } from './navigation-rail';
@@ -31,6 +18,16 @@ const label = {
   doctor: 'Médico',
   secretary: 'Secretária',
 };
+
+// Reflete as checagens de papel da API (lib/supabase/*) e das políticas RLS.
+const permissions: [string, boolean, boolean][] = [
+  ['Prontuário, evolução e contexto clínico', true, false],
+  ['Receitas, atestados e documentos', true, false],
+  ['Exames e leitura por IA', true, false],
+  ['Agenda', true, true],
+  ['Cadastro de pacientes', true, true],
+  ['Envio de anexos', true, true],
+];
 
 function getInitials(email: string): string {
   const namePart = email.split('@')[0] || '';
@@ -128,33 +125,20 @@ export default function Team({
             <div className="listing-heading">
               <div className="eyebrow">ADMINISTRAÇÃO</div>
               <h1>Equipe e acessos</h1>
-              <p>
-                Gerencie os integrantes da clínica e controle os níveis de acesso médico e administrativo de acordo com o sigilo profissional.
-              </p>
+              <p>Integrantes da clínica e o que cada papel pode acessar.</p>
             </div>
 
             {role !== 'owner' ? (
-              <div className="capture-error" role="alert">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <AlertCircle size={18} />
-                  <span>Somente o proprietário da clínica pode gerenciar a equipe e permissões.</span>
-                </div>
-              </div>
+              <p className="capture-error" role="alert">
+                Somente o proprietário da clínica pode gerenciar a equipe e as permissões.
+              </p>
             ) : (
-              <div className="team-container">
-                <section className="team-invite team-invite-card">
-                  <div className="team-card-header">
-                    <div className="team-header-icon">
-                      <UserPlus size={20} />
-                    </div>
-                    <div>
-                      <h2>Convidar novo integrante</h2>
-                      <p>
-                        Envie um convite para habilitar acesso individual à clínica ou vincular uma conta existente.
-                      </p>
-                    </div>
-                  </div>
-
+              <div className="team-page">
+                <section className="team-section">
+                  <h2>Convidar integrante</h2>
+                  <p className="team-section-note">
+                    O convite habilita um acesso individual à clínica ou vincula uma conta existente.
+                  </p>
                   <form
                     className="team-invite-form"
                     onSubmit={(e) => {
@@ -169,118 +153,83 @@ export default function Team({
                       });
                     }}
                   >
-                    <div className="team-field-group">
-                      <label htmlFor="team-email-input">E-mail</label>
-                      <div className="team-input-wrapper">
-                        <Mail size={16} className="input-icon" />
-                        <input
-                          id="team-email-input"
-                          required
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="pessoa@consultorio.med.br"
-                          disabled={busy}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="team-field-group">
-                      <label htmlFor="team-newrole-select">Nível de permissão</label>
+                    <label className="team-field">
+                      <span>E-mail</span>
+                      <input
+                        required
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="pessoa@consultorio.med.br"
+                        disabled={busy}
+                      />
+                    </label>
+                    <label className="team-field">
+                      <span>Papel</span>
                       <select
-                        id="team-newrole-select"
                         value={newRole}
                         disabled={busy}
                         onChange={(e) =>
                           setNewRole(e.target.value as 'doctor' | 'secretary')
                         }
                       >
-                        <option value="secretary">Secretária (Administrativo)</option>
-                        <option value="doctor">Médico (Clínico)</option>
+                        <option value="secretary">Secretária</option>
+                        <option value="doctor">Médico</option>
                       </select>
-                    </div>
-
+                    </label>
                     <button className="primary" disabled={busy || !email}>
-                      <UserPlus size={16} />
-                      {busy ? 'Enviando convite...' : 'Enviar convite'}
+                      {busy ? 'Enviando…' : 'Enviar convite'}
                     </button>
                   </form>
+                  {error && (
+                    <p className="capture-error" role="alert">
+                      {error}
+                    </p>
+                  )}
+                  {message && (
+                    <p className="capture-message" role="status">
+                      {message}
+                    </p>
+                  )}
                 </section>
 
-                {error && (
-                  <div className="capture-error" role="alert">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <AlertCircle size={18} />
-                      <span>{error}</span>
-                    </div>
-                  </div>
-                )}
-
-                {message && (
-                  <div className="capture-message" role="status">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <CheckCircle2 size={18} />
-                      <span>{message}</span>
-                    </div>
-                  </div>
-                )}
-
-                <section className="team-list team-list-card">
-                  <div className="team-list-header">
-                    <h2>Integrantes da equipe</h2>
-                    <span className="team-count-badge">
-                      {members.length} {members.length === 1 ? 'integrante ativo' : 'integrantes ativos'}
-                    </span>
-                  </div>
-
-                  <div className="team-members-list">
+                <section className="team-section">
+                  <h2>
+                    Integrantes <span className="team-count">· {members.length}</span>
+                  </h2>
+                  <ul className="team-members">
                     {members.map((member) => (
-                      <article key={member.user_id} className="team-member team-member-item">
-                        <div className="team-member-main">
-                          <span className={`team-avatar ${member.role}`}>
-                            {getInitials(member.email)}
-                          </span>
-                          <div className="team-member-details">
-                            <div className="team-member-email-row">
-                              <strong className="team-member-email">{member.email}</strong>
-                              <span className={`role-badge ${member.role}`}>
-                                {label[member.role]}
-                              </span>
-                              {member.pendingFirstAccess && (
-                                <span
-                                  className="role-badge"
-                                  style={{
-                                    background: 'var(--warning-soft)',
-                                    color: 'var(--warning)',
-                                    border: '1px solid var(--warning-border)',
-                                    fontSize: '11px',
-                                    padding: '2px 8px',
-                                    fontWeight: 500,
-                                  }}
-                                  title="Este integrante foi convidado mas ainda não cadastrou a senha individual no primeiro acesso"
-                                >
-                                  Primeiro acesso pendente
-                                </span>
-                              )}
-                            </div>
-                            <span className="team-member-meta">
-                              Incluído em{' '}
-                              {new Date(member.created_at).toLocaleDateString('pt-BR')}
-                            </span>
-                          </div>
+                      <li key={member.user_id} className="team-member-row">
+                        <span className="team-avatar" aria-hidden>
+                          {getInitials(member.email)}
+                        </span>
+                        <div className="team-member-info">
+                          <strong>{member.email}</strong>
+                          <small>
+                            {label[member.role]}
+                            {member.pendingFirstAccess && ' · primeiro acesso pendente'}
+                            {' · desde '}
+                            {new Date(member.created_at).toLocaleDateString('pt-BR')}
+                          </small>
                         </div>
-
-                        {member.role === 'owner' ? (
-                          <div className="team-actions team-member-actions">
-                            <span className="role-badge owner">
-                              <Shield size={13} />
-                              Proprietário
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="team-actions team-member-actions">
+                        {member.role !== 'owner' && (
+                          <div className="team-member-actions">
+                            <select
+                              aria-label={'Papel de ' + member.email}
+                              value={member.role}
+                              disabled={busy}
+                              onChange={(e) =>
+                                void change('role', {
+                                  user_id: member.user_id,
+                                  role: e.target.value,
+                                })
+                              }
+                            >
+                              <option value="secretary">Secretária</option>
+                              <option value="doctor">Médico</option>
+                            </select>
                             <button
-                              className="team-resend-button"
+                              className="text-button"
                               disabled={busy}
                               type="button"
                               title="Reenviar e-mail de convite para este integrante"
@@ -294,29 +243,12 @@ export default function Team({
                                 });
                               }}
                             >
-                              <Send size={14} />
                               Reenviar convite
                             </button>
-                            <select
-                              aria-label={'Papel de ' + member.email}
-                              value={member.role}
-                              disabled={busy}
-                              className="team-role-select"
-                              onChange={(e) =>
-                                void change('role', {
-                                  user_id: member.user_id,
-                                  role: e.target.value,
-                                })
-                              }
-                            >
-                              <option value="secretary">Secretária</option>
-                              <option value="doctor">Médico</option>
-                            </select>
                             <button
-                              className="team-revoke-button"
+                              className="text-button danger"
                               disabled={busy}
                               type="button"
-                              title="Revogar acesso à clínica"
                               onClick={() => {
                                 if (
                                   window.confirm(
@@ -328,86 +260,38 @@ export default function Team({
                                   });
                               }}
                             >
-                              <UserX size={15} />
-                              Revogar acesso
+                              Revogar
                             </button>
                           </div>
                         )}
-                      </article>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </section>
 
-                <section className="team-roles-guide note-card-enhanced">
-                  <div className="team-guide-header">
-                    <div className="team-header-icon">
-                      <ShieldCheck size={20} />
-                    </div>
-                    <div>
-                      <h3>Controle de Acessos e Diretrizes de Privacidade</h3>
-                      <p>
-                        Estrutura configurada em conformidade com as diretrizes do CFM e a Lei Geral de Proteção de Dados (LGPD).
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="team-roles-grid">
-                    <div className="team-role-card">
-                      <div className="team-role-card-head">
-                        <span className="team-role-title">
-                          <Stethoscope size={18} className="team-feature-check" />
-                          Médico
-                        </span>
-                        <span className="role-badge doctor">Acesso Clínico</span>
-                      </div>
-                      <ul className="team-role-features">
-                        <li>
-                          <Check size={16} className="team-feature-check" />
-                          Prontuário completo, histórico e evolução clínica
-                        </li>
-                        <li>
-                          <Check size={16} className="team-feature-check" />
-                          Prescrições, atestados e pedidos de exames
-                        </li>
-                        <li>
-                          <Check size={16} className="team-feature-check" />
-                          Agenda de atendimentos e lista de pacientes
-                        </li>
-                        <li>
-                          <Check size={16} className="team-feature-check" />
-                          Visualização e anexação de laudos/exames
-                        </li>
-                      </ul>
-                    </div>
-
-                    <div className="team-role-card">
-                      <div className="team-role-card-head">
-                        <span className="team-role-title">
-                          <Users size={18} style={{ color: 'var(--info)' }} />
-                          Secretária
-                        </span>
-                        <span className="role-badge secretary">Acesso Administrativo</span>
-                      </div>
-                      <ul className="team-role-features">
-                        <li>
-                          <Check size={16} className="team-feature-check" />
-                          Gestão e marcação de consultas na agenda
-                        </li>
-                        <li>
-                          <Check size={16} className="team-feature-check" />
-                          Cadastro e atualização cadastral de pacientes
-                        </li>
-                        <li>
-                          <Check size={16} className="team-feature-check" />
-                          Envio e organização de guias e documentos
-                        </li>
-                        <li style={{ color: 'var(--warning)', fontWeight: 500 }}>
-                          <Lock size={16} className="team-feature-lock" />
-                          Sigilo: sem acesso a prontuários e anotações clínicas
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
+                <section className="team-section">
+                  <h2>Permissões por papel</h2>
+                  <table className="team-permissions">
+                    <thead>
+                      <tr>
+                        <th scope="col">Área</th>
+                        <th scope="col">Médico</th>
+                        <th scope="col">Secretária</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {permissions.map(([area, doctor, secretary]) => (
+                        <tr key={area}>
+                          <th scope="row">{area}</th>
+                          <td>{doctor ? <Check size={15} aria-label="Sim" /> : <span aria-label="Não">—</span>}</td>
+                          <td>{secretary ? <Check size={15} aria-label="Sim" /> : <span aria-label="Não">—</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="team-section-note">
+                    A secretária não acessa prontuários, documentos clínicos nem anotações, em linha com o sigilo profissional (CFM) e a LGPD. Somente o proprietário gerencia a equipe.
+                  </p>
                 </section>
               </div>
             )}

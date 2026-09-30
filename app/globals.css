@@ -116,10 +116,6 @@ html[data-gradient='false'] body {
 .sample-card,
 .patient-search,
 .detail-group,
-.team-invite-card,
-.team-list,
-.team-roles-guide,
-.team-role-card,
 .received-section,
 .agenda-list,
 .settings-card,
@@ -3998,483 +3994,157 @@ h1 {
 }
 
 /* ==========================================================================
-   Equipe e Gestão de Acessos
+   Equipe e acessos: visual sóbrio, sem cores por papel nem cartões aninhados
    ========================================================================== */
-
-.team-container {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-/* Card: Convidar Integrante */
-.team-invite-card {
-  background: var(--surface);
-  border: 1px solid var(--theme-border, var(--border));
-  border-radius: 12px;
-  padding: 24px 28px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
-}
-
-.team-card-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.team-header-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  background: var(--theme-accent-soft, var(--surface-2));
-  color: var(--theme-primary, var(--accent));
+.team-page {
   display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  border: 1px solid var(--theme-accent-border, var(--border));
-  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
 }
-
-.team-card-header h2 {
-  font-size: 18px;
+.team-section {
+  padding: 28px 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 14px;
+}
+.team-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.team-section h2 {
+  font-size: 16px;
   font-weight: 600;
-  color: var(--accent);
-  margin: 0 0 4px 0;
-  letter-spacing: -0.3px;
 }
-
-.team-card-header p {
-  font-size: 13.5px;
+.team-count {
+  font-weight: 400;
+  color: var(--text-subtle);
+}
+.team-section-note {
+  font-size: 13px;
+  line-height: 1.55;
   color: var(--text-muted);
-  margin: 0;
-  line-height: 1.5;
 }
-
 .team-invite-form {
   display: grid;
-  grid-template-columns: 1fr 220px auto;
-  gap: 16px;
-  align-items: flex-end;
-}
-
-.team-field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.team-field-group label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--theme-primary, var(--text));
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
-
-.team-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.team-input-wrapper .input-icon {
-  position: absolute;
-  left: 14px;
-  color: var(--text-subtle);
-  pointer-events: none;
-}
-
-.team-input-wrapper input {
-  width: 100%;
-  height: 42px;
-  padding: 0 14px 0 40px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  font-size: 14px;
-  color: var(--accent);
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
-}
-
-.team-input-wrapper input:focus {
-  background: var(--surface);
-  border-color: var(--accent-border);
-  box-shadow: 0 0 0 3px rgba(118, 180, 165, 0.35);
-}
-
-.team-field-group select {
-  width: 100%;
-  height: 42px;
-  padding: 0 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  font-size: 14px;
-  color: var(--accent);
-  outline: none;
-  cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
-}
-
-.team-field-group select:focus {
-  background: var(--surface);
-  border-color: var(--accent-border);
-  box-shadow: 0 0 0 3px rgba(118, 180, 165, 0.35);
-}
-
-.team-invite-form button.primary {
-  height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 22px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.team-invite-form button.primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Card: Lista de Integrantes */
-.team-list-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px 28px;
-  box-shadow: 0 4px 20px rgba(33, 58, 44, 0.04);
-}
-
-.team-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--theme-border-subtle, var(--border));
-  margin-bottom: 6px;
-}
-
-.team-list-header h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--accent);
-  margin: 0;
-  letter-spacing: -0.3px;
-}
-
-.team-count-badge {
-  font-size: 12.5px;
-  font-weight: 550;
-  color: var(--theme-primary, var(--accent));
-  background: var(--theme-accent-soft, var(--surface-2));
-  padding: 4px 12px;
-  border-radius: 20px;
-  border: 1px solid var(--theme-accent-border, var(--border));
-  transition: all 0.25s ease;
-}
-
-.team-members-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.team-member-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--border);
-  transition: background-color 0.15s ease;
-}
-
-.team-member-item:last-child {
-  border-bottom: none;
-  padding-bottom: 4px;
-}
-
-.team-member-main {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.team-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 14px;
-  font-weight: 600;
-  flex-shrink: 0;
-  letter-spacing: 0.5px;
-}
-
-.team-avatar.owner {
-  background: var(--surface-2);
-  color: var(--warning);
-  border: 1.5px solid var(--warning-border);
-}
-
-.team-avatar.doctor {
-  background: var(--theme-avatar-doctor-bg, var(--surface-2));
-  color: var(--theme-avatar-doctor-color, var(--accent));
-  border: 1.5px solid var(--theme-accent-border, var(--border));
-  transition: all 0.25s ease;
-}
-
-.team-avatar.secretary {
-  background: var(--surface-2);
-  color: var(--info);
-  border: 1.5px solid var(--info-border);
-}
-
-.team-member-details {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.team-member-email-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.team-member-email {
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--accent);
-}
-
-.team-member-meta {
-  font-size: 12.5px;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.role-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 5px;
-  letter-spacing: 0.2px;
-}
-
-.role-badge.owner {
-  background: var(--surface-2);
-  color: var(--warning);
-  border: 1px solid var(--warning-border);
-}
-
-.role-badge.doctor {
-  background: var(--theme-accent-soft, var(--surface-2));
-  color: var(--theme-primary, var(--accent));
-  border: 1px solid var(--theme-accent-border, var(--border));
-  transition: all 0.25s ease;
-}
-
-.role-badge.secretary {
-  background: var(--surface-2);
-  color: var(--info);
-  border: 1px solid var(--border);
-}
-
-.team-member-actions {
-  display: flex;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
+  align-items: end;
   gap: 12px;
 }
-
-.team-role-select {
-  padding: 7px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+.team-field {
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.team-field input,
+.team-field select,
+.team-member-actions select {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
   background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  min-width: 0;
+}
+.team-member-actions select {
   font-size: 13px;
-  font-weight: 500;
-  color: var(--accent);
-  outline: none;
-  cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+  padding: 6px 9px;
 }
-
-.team-role-select:focus {
-  background: var(--surface);
-  border-color: var(--accent-border);
-  box-shadow: 0 0 0 2px rgba(118, 180, 165, 0.35);
+.team-members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
-
-.team-revoke-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--danger);
-  background: transparent;
-  border: 1px solid transparent;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.team-revoke-button:hover:not(:disabled) {
-  background: var(--surface);
-  border-color: var(--danger-border);
-  color: var(--danger);
-}
-
-.team-revoke-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.team-resend-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--info);
-  background: transparent;
-  border: 1px solid var(--info-border);
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.team-resend-button:hover:not(:disabled) {
-  background: var(--surface);
-  border-color: var(--info-border);
-  color: var(--info);
-}
-
-.team-resend-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Card: Guia de Permissões e Segurança */
-.team-roles-guide {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px 28px;
-}
-
-.team-guide-header {
+.team-member-row {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-bottom: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
 }
-
-.team-guide-header h3 {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--accent);
-  margin: 0 0 4px 0;
+.team-member-row:last-child {
+  border-bottom: 0;
 }
-
-.team-guide-header p {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin: 0;
-  line-height: 1.4;
-}
-
-.team-roles-grid {
+.team-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-
-.team-role-card {
-  background: var(--surface);
-  border: 1px solid var(--theme-border, var(--border));
-  border-radius: 10px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  transition: border-color 0.25s ease;
-}
-
-.team-role-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.team-role-title {
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--theme-color, var(--accent));
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.team-role-features {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.team-role-features li {
-  font-size: 13px;
-  color: var(--theme-color, var(--text-muted));
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  line-height: 1.45;
-}
-
-.team-role-features li svg {
+  place-items: center;
   flex-shrink: 0;
-  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-2);
 }
-
-.team-feature-check {
-  color: var(--theme-primary, var(--accent));
-  transition: color 0.25s ease;
+.team-member-info {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
 }
-
-.team-feature-lock {
-  color: var(--danger);
+.team-member-info strong {
+  font-size: 14px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
 }
-
+.team-member-info small {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+}
+.team-member-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.team-member-actions .text-button {
+  font-size: 12.5px;
+}
+.team-permissions {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.team-permissions th,
+.team-permissions td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  width: 120px;
+}
+.team-permissions th:first-child {
+  text-align: left;
+  width: auto;
+  font-weight: 450;
+}
+.team-permissions thead th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-subtle);
+}
+.team-permissions td {
+  color: var(--text-subtle);
+}
+.team-permissions td svg {
+  color: var(--text);
+  vertical-align: middle;
+}
 @media (max-width: 760px) {
   .team-invite-form {
     grid-template-columns: 1fr;
-    gap: 14px;
   }
-  .team-member-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 14px;
+  .team-member-row {
+    flex-wrap: wrap;
   }
   .team-member-actions {
     width: 100%;
     justify-content: flex-end;
   }
-  .team-roles-grid {
-    grid-template-columns: 1fr;
+  .team-permissions th,
+  .team-permissions td {
+    width: 84px;
+    padding: 9px 6px;
   }
 }
 
