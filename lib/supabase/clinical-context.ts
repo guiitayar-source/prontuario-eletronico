@@ -18,7 +18,7 @@ export const clinicalContext = handle(async (request, { db, clinic, role }) => {
   if (!patient || patient.length > 180)
     throw new HttpError(400, 'Informe o paciente.');
   if (request.method === 'GET') {
-    const [conditions, medications, allergies, state] = await Promise.all([
+    const [conditions, medications, allergies, state, links] = await Promise.all([
       db
         .from('patient_conditions')
         .select('*')
@@ -43,12 +43,20 @@ export const clinicalContext = handle(async (request, { db, clinic, role }) => {
         .eq('clinic_id', clinic)
         .eq('id', patient)
         .maybeSingle(),
+      db
+        .from('consultation_diagnoses')
+        .select('*')
+        .eq('clinic_id', clinic)
+        .eq('patient_id', patient)
+        .order('created_at', { ascending: true }),
     ]);
     return json({
       conditions: check(conditions),
       medications: check(medications),
       allergies: check(allergies),
       allergyState: check(state) || { state: 'unknown', version: 0 },
+      // Tolerante até a migração 20260930010000 ser aplicada.
+      consultationDiagnoses: links.error ? [] : links.data,
     });
   }
   writeGuard(request, 'X-Clinical-Context-Action');
@@ -56,6 +64,32 @@ export const clinicalContext = handle(async (request, { db, clinic, role }) => {
   if (typeof d.entity !== 'string')
     throw new HttpError(422, 'Confira os dados do contexto clínico.');
   const entity = d.entity;
+  if (entity === 'consultation_diagnosis') {
+    if (
+      d.patient_id !== patient ||
+      typeof d.consultation_id !== 'string' ||
+      !uuid.test(d.consultation_id) ||
+      typeof d.condition_id !== 'string' ||
+      !uuid.test(d.condition_id) ||
+      typeof d.linked !== 'boolean'
+    )
+      throw new HttpError(422, 'Confira os dados do diagnóstico.');
+    return json({
+      record: check(
+        await db.rpc('consultation_diagnosis_link', {
+          c: clinic,
+          consultation: d.consultation_id,
+          condition: d.condition_id,
+          linked: d.linked,
+        }),
+      ),
+    });
+  }
+  if (
+    d.consultation_id != null &&
+    (typeof d.consultation_id !== 'string' || !uuid.test(d.consultation_id))
+  )
+    throw new HttpError(422, 'Identificador de consulta inválido.');
   if (
     !(entity in allowed) ||
     d.patient_id !== patient ||
@@ -91,6 +125,9 @@ export const clinicalContext = handle(async (request, { db, clinic, role }) => {
     throw new HttpError(422, 'Preencha a descrição principal.');
   for (const [name, max] of [
     ['cid_code', 20],
+    ['icd11_code', 20],
+    ['icd11_title', 500],
+    ['icd11_release', 20],
     ['notes', 4000],
     ['dose', 200],
     ['instructions', 1000],

@@ -15,6 +15,8 @@ import { PatientDetails } from './patients/registry';
 import Attachments from './capture/desktop';
 import { AnamnesatorAssistant } from './anamnesator-assistant';
 import { CollapsibleCard } from './collapsible-card';
+import { ConsultationDiagnoses } from './diagnoses';
+import { upsertDiagnosisBlock } from '@/lib/cid/evolution-block';
 import { DEMO_ID, initials, age, type Patient } from '@/lib/patient-fields';
 import { TopBar } from './topbar';
 import { NavigationRail } from './navigation-rail';
@@ -848,6 +850,18 @@ export default function ClinicalRecord({
                         palavras
                       </span>
                     </div>
+                    <ConsultationDiagnoses
+                      context={clinicalContext}
+                      consultationId={current?.id}
+                      locked={finalized}
+                      onEvolutionBlock={(block) => {
+                        const next = upsertDiagnosisBlock(latest.current, block);
+                        if (next === latest.current) return;
+                        latest.current = next;
+                        setText(next);
+                        setStatus('Alterações pendentes');
+                      }}
+                    />
                     <footer className="editor-actions">
                       <button
                         className="secondary"

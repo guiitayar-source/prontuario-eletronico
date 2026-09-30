@@ -5296,3 +5296,318 @@ h1 {
 .signature-status-banner.warning .status-badge-icon {
   color: var(--warning);
 }
+
+/* Diagnósticos do atendimento (CID-10 com sugestões CID-11) */
+.consultation-diagnoses {
+  padding: 18px 30px 20px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+}
+.diagnoses-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.diagnoses-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+.diagnoses-header small {
+  font-size: 11.5px;
+  color: var(--text-subtle);
+}
+.diagnoses-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.diagnoses-list > li {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px 12px;
+}
+.diagnosis-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.diagnosis-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.diagnosis-main strong {
+  font-size: 14px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.consultation-diagnoses code,
+.cid-dropdown code,
+.icd11-chip code,
+.context-cid-selected code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-primary, var(--accent));
+  margin-right: 8px;
+}
+.diagnosis-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.diagnosis-actions select {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 8px;
+  color: var(--text-muted);
+}
+.icon-button:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.icd11-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--on-accent);
+  background: var(--theme-primary, var(--accent));
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.icd11-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.diagnoses-previous {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.diagnoses-previous > small {
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-right: 2px;
+}
+.diagnosis-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text);
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+.diagnosis-chip code {
+  margin-right: 2px;
+}
+.diagnosis-chip:hover:not(:disabled) {
+  border-style: solid;
+  background: var(--surface-2);
+}
+.diagnosis-draft {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 14px;
+}
+.diagnosis-draft-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 12px;
+}
+.diagnosis-draft-row label {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.diagnosis-draft-row input,
+.diagnosis-draft-row select {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.diagnosis-draft-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.cid-autocomplete {
+  position: relative;
+}
+.cid-autocomplete .cid-input,
+.modal .context-form .cid-autocomplete label.cid-input {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 7px 12px;
+  color: var(--text-muted);
+}
+.cid-autocomplete .cid-input:focus-within {
+  border-color: var(--theme-primary, var(--accent));
+}
+.cid-autocomplete .cid-input input,
+.modal .context-form .cid-autocomplete .cid-input input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  padding: 3px 0;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+}
+.cid-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface-solid);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+}
+.cid-option {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 4px;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.cid-option code {
+  min-width: 48px;
+}
+.cid-option.active {
+  background: var(--theme-hover-bg, var(--surface-2));
+}
+.cid-dropdown-status {
+  font-size: 13px;
+  color: var(--text-subtle);
+  padding: 8px 10px;
+  margin: 0;
+}
+.icd11-suggestions {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.icd11-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.icd11-heading small {
+  color: var(--text-subtle);
+}
+.icd11-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.icd11-group > small {
+  flex-basis: 100%;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-subtle);
+}
+.icd11-chip {
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.icd11-chip.selected {
+  border-color: var(--theme-primary, var(--accent));
+  box-shadow: inset 0 0 0 1px var(--theme-primary, var(--accent));
+}
+.icd11-suggestions .text-button {
+  justify-self: start;
+  padding: 2px 0;
+  font-size: 12.5px;
+}
+.context-cid-field {
+  display: grid;
+  gap: 6px;
+}
+.context-cid-field > span {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+.context-cid-selected {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+}
+@media (max-width: 760px) {
+  .consultation-diagnoses {
+    padding: 16px;
+  }
+  .diagnosis-draft-row {
+    grid-template-columns: 1fr;
+  }
+}

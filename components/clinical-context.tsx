@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/supabase/http';
 import { ClipboardList } from 'lucide-react';
 import { CollapsibleCard } from './collapsible-card';
+import { CidAutocomplete, Icd11Suggestions } from './diagnoses';
 
 export type Condition = {
   id: string;
@@ -10,7 +11,21 @@ export type Condition = {
   cid_code: string | null;
   status: 'hypothesis' | 'confirmed' | 'resolved';
   notes: string | null;
+  icd11_code?: string | null;
+  icd11_title?: string | null;
+  icd11_release?: string | null;
   version: number;
+};
+export type ConsultationDiagnosis = {
+  id: string;
+  consultation_id: string;
+  condition_id: string;
+  description: string;
+  cid_code: string | null;
+  icd11_code: string | null;
+  icd11_title: string | null;
+  icd11_release: string | null;
+  status: Condition['status'];
 };
 export type Medication = {
   id: string;
@@ -34,6 +49,7 @@ type ClinicalContextResponse = {
   medications: Medication[];
   allergies: Allergy[];
   allergyState: AllergyState;
+  consultationDiagnoses?: ConsultationDiagnosis[];
 };
 async function fetchClinicalContext(patientId: string) {
   const response = await apiFetch(
@@ -56,6 +72,9 @@ const emptyCondition = (
   cid_code: '',
   status: 'hypothesis',
   notes: '',
+  icd11_code: '',
+  icd11_title: '',
+  icd11_release: '',
   version: 0,
 });
 const emptyMedication = (
@@ -89,6 +108,9 @@ export function useClinicalContext(patientId: string, enabled = true) {
       state: 'unknown',
       version: 0,
     }),
+    [consultationDiagnoses, setConsultationDiagnoses] = useState<
+      ConsultationDiagnosis[]
+    >([]),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [revision, setRevision] = useState(0);
@@ -98,6 +120,7 @@ export function useClinicalContext(patientId: string, enabled = true) {
     setMedications(d.medications);
     setAllergies(d.allergies);
     setAllergyState(d.allergyState);
+    setConsultationDiagnoses(d.consultationDiagnoses || []);
     setError('');
   }
   useEffect(() => {
@@ -110,6 +133,7 @@ export function useClinicalContext(patientId: string, enabled = true) {
           setMedications(d.medications);
           setAllergies(d.allergies);
           setAllergyState(d.allergyState);
+          setConsultationDiagnoses(d.consultationDiagnoses || []);
           setError('');
         })
         .catch((e: Error) => {
@@ -154,10 +178,19 @@ export function useClinicalContext(patientId: string, enabled = true) {
     medications,
     allergies,
     allergyState,
+    consultationDiagnoses,
     error,
     busy,
     load,
     save,
+    link: (consultationId: string, conditionId: string, linked: boolean) =>
+      save({
+        entity: 'consultation_diagnosis',
+        patient_id: patientId,
+        consultation_id: consultationId,
+        condition_id: conditionId,
+        linked,
+      }),
     emptyCondition: () => emptyCondition(patientId),
     emptyMedication: () => emptyMedication(patientId),
     emptyAllergy: () => emptyAllergy(patientId),
@@ -201,6 +234,12 @@ export function ClinicalContextSummary({
                 {x.cid_code && `${x.cid_code} · `}
                 {x.description}
               </strong>
+              {x.icd11_code && (
+                <>
+                  <br />
+                  <small>CID-11 {x.icd11_code}</small>
+                </>
+              )}
               <br />
               <small>{conditionLabel[x.status]}</small>
             </p>
@@ -327,6 +366,7 @@ export function ClinicalContextEditor({
                 <strong>
                   {x.cid_code && `${x.cid_code} · `}
                   {x.description}
+                  {x.icd11_code && ` · CID-11 ${x.icd11_code}`}
                 </strong>
                 <span className="context-item-badge">{conditionLabel[x.status]}</span>
               </button>
@@ -359,17 +399,45 @@ export function ClinicalContextEditor({
               />
             </label>
             <div className="context-form-row">
-              <label>
-                <span>CID opcional</span>
-                <input
-                  maxLength={20}
-                  placeholder="Ex.: F31.8"
-                  value={condition.cid_code || ''}
-                  onChange={(e) =>
-                    setCondition({ ...condition, cid_code: e.target.value })
-                  }
-                />
-              </label>
+              <div className="context-cid-field">
+                <span>CID-10 opcional</span>
+                {condition.cid_code ? (
+                  <div className="context-cid-selected">
+                    <code>{condition.cid_code}</code>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() =>
+                        setCondition({
+                          ...condition,
+                          cid_code: '',
+                          icd11_code: '',
+                          icd11_title: '',
+                          icd11_release: '',
+                        })
+                      }
+                    >
+                      Remover código
+                    </button>
+                  </div>
+                ) : (
+                  <CidAutocomplete
+                    placeholder="Nome ou código (ex.: F31)"
+                    onPick={(x) =>
+                      setCondition({
+                        ...condition,
+                        cid_code: x.code,
+                        description: condition.description.trim()
+                          ? condition.description
+                          : x.title,
+                        icd11_code: '',
+                        icd11_title: '',
+                        icd11_release: '',
+                      })
+                    }
+                  />
+                )}
+              </div>
               <label>
                 <span>Situação</span>
                 <select
@@ -387,6 +455,21 @@ export function ClinicalContextEditor({
                 </select>
               </label>
             </div>
+            {condition.cid_code && (
+              <Icd11Suggestions
+                key={condition.id + condition.cid_code}
+                cid10={condition.cid_code}
+                selected={condition.icd11_code}
+                onSelect={(choice) =>
+                  setCondition({
+                    ...condition,
+                    icd11_code: choice?.code || '',
+                    icd11_title: choice?.title || '',
+                    icd11_release: choice?.release || '',
+                  })
+                }
+              />
+            )}
             <label>
               <span>Observações</span>
               <textarea

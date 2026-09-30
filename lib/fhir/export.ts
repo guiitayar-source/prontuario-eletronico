@@ -174,10 +174,22 @@ export function exportFHIR(
           }),
       code: {
         text: c.description,
-        ...(c.cid_code
+        ...(c.cid_code || c.icd11_code
           ? {
               coding: [
-                { system: 'http://hl7.org/fhir/sid/icd-10', code: c.cid_code },
+                ...(c.cid_code
+                  ? [{ system: 'http://hl7.org/fhir/sid/icd-10', code: c.cid_code }]
+                  : []),
+                ...(c.icd11_code
+                  ? [
+                      {
+                        system: 'http://id.who.int/icd/release/11/mms',
+                        ...(c.icd11_release ? { version: c.icd11_release } : {}),
+                        code: c.icd11_code,
+                        ...(c.icd11_title ? { display: c.icd11_title } : {}),
+                      },
+                    ]
+                  : []),
               ],
             }
           : {}),

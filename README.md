@@ -21,6 +21,7 @@ Sistema web moderno para clínicas e consultórios com foco em prontuário eletr
 - **Evolução em Texto Livre**: Registro ágil do atendimento com salvamento automático seguro e controle de versões.
 - **Histórico Imutável & Adendos**: Consultas finalizadas são congeladas com registro de autor e carimbo de data/hora; retificações são registradas por adendos rastreáveis.
 - **Painel de Contexto Longitudinal**: Acesso rápido a diagnósticos/CID, medicamentos em uso contínuo e alergias diretamente no painel lateral da consulta.
+- **Diagnósticos do Atendimento (CID-10 → CID-11)**: Logo abaixo da evolução, busca com autocomplete na CID-10 e sugestões de correspondência na CID-11 (oficial, compatível e mesmo grupo), com opção de salvar o código CID-11 junto. Os diagnósticos selecionados são escritos em um bloco “Diagnósticos (CID):” no fim da evolução e, assim, entram no texto assinado; cada consulta também guarda uma cópia estruturada, congelada na finalização. Os catálogos ficam em `lib/cid/data/`, um arquivo por versão, gerados por `node scripts/update-cid.mjs [release]` a partir das fontes oficiais: CID-10 do DATASUS/Ministério da Saúde; CID-11 MMS em português e tabelas de correspondência © Organização Mundial da Saúde, licença CC BY-ND 3.0 IGO.
 
 ### 2. Agenda de Atendimentos
 - Criação, edição, reagendamento e cancelamento de consultas.
