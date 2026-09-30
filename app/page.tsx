@@ -102,7 +102,6 @@ export default function Home() {
             setError('');
           }}
           onUpdated={setPatient}
-          onOpenId={open}
           onAgenda={() => {
             setPatient(null);
             setSection('agenda');

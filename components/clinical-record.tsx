@@ -17,7 +17,7 @@ import { AnamnesatorAssistant } from './anamnesator-assistant';
 import { CollapsibleCard } from './collapsible-card';
 import { ConsultationDiagnoses } from './diagnoses';
 import { upsertDiagnosisBlock } from '@/lib/cid/evolution-block';
-import { DEMO_ID, initials, age, type Patient } from '@/lib/patient-fields';
+import { initials, age, type Patient } from '@/lib/patient-fields';
 import { useSearchGuard } from './topbar';
 import { NavigationRail } from './navigation-rail';
 import {
@@ -107,7 +107,6 @@ export default function ClinicalRecord({
   onHome,
   onAgenda,
   onUpdated,
-  onOpenId,
   appointmentId,
   onSettings,
 }: {
@@ -115,7 +114,6 @@ export default function ClinicalRecord({
   onHome: () => void;
   onAgenda: () => void;
   onUpdated: (p: Patient) => void;
-  onOpenId: (id: string) => void;
   appointmentId?: string;
   onSettings?: () => void;
 }) {
@@ -444,7 +442,6 @@ export default function ClinicalRecord({
     if ((modal === 'documento' || modal === 'receita') && !docs.close()) return;
     setModal('');
   }
-  const [view] = useState('consulta');
   const displayName = patient.social_name || patient.name;
   const isSigned =
     current?.status === 'SIGNED' ||
@@ -507,16 +504,9 @@ export default function ClinicalRecord({
           <div className="breadcrumb">
             <button onClick={() => leave(onAgenda)}>Consultório</button>
             <ChevronRight size={13} />
-            <span>
-              {view === 'consulta'
-                ? 'Atendimento'
-                : view === 'agenda'
-                  ? 'Agenda'
-                  : 'Pacientes'}
-            </span>
+            <span>Atendimento</span>
           </div>
-          {view === 'consulta' ? (
-            <>
+          <>
               <section className="patient-head">
                 <div className="patient-title">
                   <span className="avatar patient">
@@ -1041,40 +1031,7 @@ export default function ClinicalRecord({
                   rascunho é salvo no Supabase.
                 </div>
               </div>
-            </>
-          ) : (
-            <section className="listing">
-              <div className="listing-heading">
-                <div className="eyebrow">CONSULTÓRIO · DEMONSTRAÇÃO</div>
-                <h1>{view === 'agenda' ? 'Agenda do dia' : 'Pacientes'}</h1>
-                <p>
-                  {view === 'agenda'
-                    ? 'Terça-feira, 08 de setembro de 2026'
-                    : 'Cadastro fictício para experimentar o atendimento.'}
-                </p>
-              </div>
-              <button
-                className="appointment"
-                onClick={() => leave(() => onOpenId(DEMO_ID))}
-              >
-                <span className="time">
-                  09:00<small>09:50</small>
-                </span>
-                <span className="avatar patient">HC</span>
-                <span className="appointment-name">
-                  Helena Costa<small>Retorno · paciente fictícia</small>
-                </span>
-                <span className="open-label">
-                  Abrir consulta <ChevronRight size={18} />
-                </span>
-              </button>
-              <div className="empty-agenda">
-                {view === 'agenda'
-                  ? 'Nenhum outro atendimento neste dia de demonstração.'
-                  : '1 paciente fictícia cadastrada.'}
-              </div>
-            </section>
-          )}
+          </>
         </main>
       </div>
       {modal === 'assinatura-detalhes' && current && (
