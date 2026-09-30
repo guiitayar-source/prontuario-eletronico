@@ -32,8 +32,10 @@ Estado: protótipo em validação, **sem liberação para dados reais** — ver 
   `topbar.tsx` tem a busca global (desenhada por portal na barra da conta, em `mfa.tsx`).
 - `lib/cid/` — catálogos CID-10/CID-11 e o bloco de diagnósticos da evolução.
 - `lib/signature/` — assinatura ICP-Brasil (Bird ID); ver `ARQUITETURA_ASSINATURAS.md`.
-- `app/globals.css` — tokens do tema "Vidro Noturno" no topo (`:root`, `[data-theme]`) e estilos
-  por tela. Use as variáveis (`--text`, `--surface`, `--border`, `--accent`…), não cores soltas.
+- `app/globals.css` só importa `app/styles/*.css`, **na ordem da cascata** (a ordem importa).
+  `styles/tokens.css` tem os tokens do tema "Vidro Noturno" (`:root`, `[data-theme]`); os demais
+  arquivos são por tela. Use as variáveis (`--text`, `--surface`, `--border`, `--accent`…), não
+  cores soltas. Classes genéricas antigas (`.danger`, `.primary`) valem para o app inteiro.
 
 ## Papéis e sigilo
 

@@ -1,0 +1,111 @@
+/* Receitas: modelos e receitas anteriores ao lado do editor */
+.modal.document-modal.prescription-modal {
+  max-width: 1180px;
+}
+.prescription-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+.prescription-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-right: 22px;
+  border-right: 1px solid var(--theme-border, var(--border));
+  position: sticky;
+  top: 0;
+}
+.prescription-sidebar h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--theme-primary, var(--accent));
+}
+.prescription-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  max-height: 300px;
+  overflow: auto;
+}
+.prescription-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.prescription-list li:last-child {
+  border-bottom: 0;
+}
+.prescription-summary {
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.prescription-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.prescription-item-actions .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+}
+.prescription-sidebar .document-template-save {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.prescription-sidebar .document-template-save input {
+  flex: 1 1 140px;
+}
+@media (max-width: 900px) {
+  .prescription-layout {
+    grid-template-columns: 1fr;
+  }
+  .prescription-sidebar {
+    position: static;
+    padding-right: 0;
+    border-right: 0;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--theme-border, var(--border));
+  }
+}
+
+.professional-profile fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px 18px;
+}
+.professional-profile label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+}
+.professional-profile input[readonly] {
+  color: var(--text-muted);
+  background: var(--surface);
+}
+
+.signature-status-banner.warning {
+  background: var(--surface-2);
+  border: 1px solid var(--warning-border);
+  color: var(--warning);
+}
+.signature-status-banner.warning .status-badge-icon {
+  color: var(--warning);
+}

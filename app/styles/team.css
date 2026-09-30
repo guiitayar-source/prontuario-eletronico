@@ -1,0 +1,158 @@
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+/* ==========================================================================
+   Equipe e acessos: visual sóbrio, sem cores por papel nem cartões aninhados
+   ========================================================================== */
+.team-page {
+  display: grid;
+}
+.team-section {
+  padding: 28px 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 14px;
+}
+.team-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.team-section h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.team-count {
+  font-weight: 400;
+  color: var(--text-subtle);
+}
+.team-section-note {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.team-invite-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
+  align-items: end;
+  gap: 12px;
+}
+.team-field {
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.team-field input,
+.team-field select,
+.team-member-actions select {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  min-width: 0;
+}
+.team-member-actions select {
+  font-size: 13px;
+  padding: 6px 9px;
+}
+.team-members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.team-member-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.team-member-row:last-child {
+  border-bottom: 0;
+}
+.team-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-2);
+}
+.team-member-info {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.team-member-info strong {
+  font-size: 14px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.team-member-info small {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+}
+.team-member-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.team-member-actions .text-button {
+  font-size: 12.5px;
+}
+.team-permissions {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.team-permissions th,
+.team-permissions td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  width: 120px;
+}
+.team-permissions th:first-child {
+  text-align: left;
+  width: auto;
+  font-weight: 450;
+}
+.team-permissions thead th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-subtle);
+}
+.team-permissions td {
+  color: var(--text-subtle);
+}
+.team-permissions td svg {
+  color: var(--text);
+  vertical-align: middle;
+}
+@media (max-width: 760px) {
+  .team-invite-form {
+    grid-template-columns: 1fr;
+  }
+  .team-member-row {
+    flex-wrap: wrap;
+  }
+  .team-member-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .team-permissions th,
+  .team-permissions td {
+    width: 84px;
+    padding: 9px 6px;
+  }
+}

@@ -1,0 +1,259 @@
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  color: var(--theme-color, var(--text));
+  background: var(--theme-bg, var(--surface));
+  font-synthesis: none;
+}
+
+.agenda-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 26px 0 30px;
+}
+.agenda-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.agenda-actions input {
+  border: 1px solid var(--theme-border, var(--border));
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 10px;
+  font-size: 13px;
+  color: var(--theme-primary, var(--accent));
+}
+.agenda-list {
+  background: var(--surface);
+  border: 1px solid var(--theme-border, var(--border));
+  border-radius: 10px;
+  overflow: hidden;
+}
+.appointment-card {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  padding: 19px 24px;
+  border-bottom: 1px solid var(--theme-border-subtle, var(--border));
+}
+.appointment-card:last-child {
+  border-bottom: 0;
+}
+.appointment-card time {
+  width: 50px;
+  display: grid;
+  gap: 4px;
+  color: var(--theme-primary, var(--accent));
+}
+.appointment-card time strong {
+  font-size: 16px;
+}
+.appointment-card time span {
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+.appointment-card-main {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.appointment-card-main strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+.appointment-card-main span {
+  font-size: 13px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agenda-empty {
+  display: grid;
+  justify-items: center;
+  gap: 13px;
+  padding: 70px 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.agenda-empty h2 {
+  font-size: 19px;
+  color: var(--theme-primary, var(--text-muted));
+}
+.agenda-empty p {
+  font-size: 14px;
+  line-height: 1.7;
+}
+.appointment-form,
+.modal.appointment-form {
+  max-width: 580px;
+}
+.appointment-form label,
+.modal.appointment-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--theme-primary, var(--accent));
+  margin: 0 0 18px;
+}
+.appointment-form label > span,
+.modal.appointment-form label > span {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--theme-primary, var(--accent));
+  line-height: 1.4;
+}
+.appointment-form input,
+.appointment-form select,
+.appointment-form textarea,
+.modal.appointment-form input,
+.modal.appointment-form select,
+.modal.appointment-form textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 11px 13px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--text);
+  line-height: 1.5;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.appointment-form input:focus,
+.appointment-form select:focus,
+.appointment-form textarea:focus,
+.modal.appointment-form input:focus,
+.modal.appointment-form select:focus,
+.modal.appointment-form textarea:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px rgba(118, 180, 165, 0.35);
+  outline: none;
+  background: var(--surface);
+}
+.appointment-form input::placeholder,
+.appointment-form textarea::placeholder,
+.modal.appointment-form input::placeholder,
+.modal.appointment-form textarea::placeholder {
+  color: var(--text-subtle);
+  font-size: 14px;
+}
+.appointment-form textarea,
+.modal.appointment-form textarea {
+  min-height: 105px;
+  resize: vertical;
+  line-height: 1.6;
+}
+.appointment-fields,
+.modal.appointment-form .appointment-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 0;
+}
+.modal.appointment-form .appointment-fields label,
+.appointment-fields label {
+  margin-bottom: 18px;
+}
+.patient-matches,
+.modal.appointment-form .patient-matches {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(27, 59, 50, 0.12);
+  margin-top: 4px;
+}
+.patient-matches button,
+.modal.appointment-form .patient-matches button {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+}
+.patient-matches button:hover,
+.modal.appointment-form .patient-matches button:hover {
+  background: var(--surface-2);
+}
+.patient-matches button:last-child,
+.modal.appointment-form .patient-matches button:last-child {
+  border-bottom: 0;
+}
+.selected-patient,
+.modal.appointment-form .selected-patient {
+  display: block;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 2px;
+}
+.danger-text {
+  color: var(--warning);
+}
+.appointment-form .form-actions,
+.modal.appointment-form .form-actions {
+  position: static;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--theme-border, var(--border));
+  background: transparent;
+}
+@media (max-width: 760px) {
+  .agenda-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .agenda-actions {
+    width: 100%;
+  }
+  .agenda-actions input {
+    flex: 1;
+    min-width: 130px;
+  }
+  .appointment-card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 17px;
+  }
+  .appointment-card-main {
+    min-width: calc(100% - 70px);
+  }
+  .appointment-card .secondary {
+    margin-left: 67px;
+  }
+  .appointment-fields {
+    grid-template-columns: 1fr;
+  }
+  .appointment-card .text-button {
+    padding: 6px;
+  }
+  .agenda-list {
+    border-radius: 8px;
+  }
+}

@@ -1,0 +1,203 @@
+@media (max-width: 700px) { .anamnesator-grid { grid-template-columns: 1fr; } }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+@media (min-width: 1500px) {
+  #evolution {
+    min-height: 440px;
+  }
+}
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 20px;
+  }
+  main {
+    padding: 22px 24px;
+  }
+  .editor-header,
+  .editor-toolbar {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+  #evolution {
+    padding: 22px;
+  }
+  .editor-actions {
+    padding: 16px;
+  }
+}
+@media (max-width: 760px) {
+  .document-ai-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .document-ai-box {
+    padding: 15px;
+  }
+  .document-template-actions,
+  .document-ai-result-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .rail {
+    width: 60px;
+    left: 8px;
+    top: 54px;
+    bottom: 8px;
+  }
+  .main-shell {
+    margin-left: 76px;
+    width: calc(100% - 76px);
+  }
+  .rail nav {
+    padding: 16px 6px;
+  }
+  .nav-item {
+    width: 44px;
+    height: 44px;
+  }
+  .nav-item {
+    font-size: 10px;
+  }
+  .search {
+    padding: 4px 8px;
+  }
+  .search-dropdown {
+    position: fixed;
+    top: 50px;
+    left: 8px;
+    right: 8px;
+  }
+  .search kbd {
+    display: none;
+  }
+  main {
+    padding: 20px 16px;
+  }
+  .breadcrumb {
+    margin-bottom: 20px;
+  }
+  .patient-head {
+    align-items: flex-start;
+  }
+  .patient-title {
+    gap: 10px;
+  }
+  .patient {
+    width: 43px;
+    height: 43px;
+    font-size: 15px;
+  }
+  h1 {
+    font-size: 23px;
+  }
+  .patient-meta {
+    font-size: 12px;
+    display: block;
+    line-height: 1.5;
+  }
+  .patient-meta span {
+    padding: 0 5px;
+  }
+  .patient-title .eyebrow {
+    font-size: 8px;
+  }
+  .encounter-badge {
+    display: none;
+  }
+  .patient-head {
+    flex-wrap: wrap;
+  }
+  .consultation-timer-card {
+    min-width: 0;
+    width: 100%;
+    align-items: flex-start;
+  }
+  .patient-tabs {
+    gap: 16px;
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+  .patient-tabs button {
+    font-size: 12px;
+  }
+  .patient-tabs button:last-child span {
+    display: none;
+  }
+  .workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .clinical-sidebar {
+    width: 100%;
+    position: static;
+    max-height: none;
+  }
+  .history-card p {
+    font-size: 14px;
+  }
+  .note-card {
+    display: none;
+  }
+  .section-label {
+    margin-bottom: 10px;
+  }
+  .editor-card {
+    width: 100%;
+  }
+  .editor-header {
+    padding: 20px 17px;
+  }
+  .editor-header h2 {
+    font-size: 19px;
+  }
+  .editor-toolbar {
+    padding: 12px 17px;
+  }
+  #evolution {
+    padding: 20px 17px;
+    min-height: 390px;
+  }
+  .editor-meta {
+    padding: 15px;
+    font-size: 10px;
+  }
+  .editor-actions {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .editor-actions button {
+    flex: 1;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  .footnote {
+    line-height: 1.6;
+    text-align: left;
+  }
+  .appointment {
+    padding: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .open-label {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+  .appointment-name {
+    font-size: 16px;
+  }
+  .modal {
+    padding: 25px;
+  }
+  .modal h2 {
+    font-size: 21px;
+  }
+}

@@ -1,0 +1,354 @@
+/* Superfícies de vidro */
+.history-card,
+.sample-card,
+.patient-search,
+.detail-group,
+.received-section,
+.agenda-list,
+.settings-card,
+.import-card,
+.info-box,
+.editor-card,
+.consultation-timer-card {
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* Painel lateral da consulta: cartões recolhíveis */
+.clinical-sidebar {
+  position: sticky;
+  top: 62px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: calc(100vh - 78px);
+  overflow-y: auto;
+}
+.side-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  padding: 6px 8px;
+}
+.side-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 10px;
+}
+.side-card-toggle {
+  flex: 1;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  text-align: left;
+}
+.side-card-toggle:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.side-card-toggle > svg:first-child {
+  color: var(--accent);
+}
+.side-card-chevron {
+  margin-left: auto;
+  color: var(--text-subtle);
+  transition: transform 0.2s ease;
+}
+.side-card.collapsed .side-card-chevron {
+  transform: rotate(-90deg);
+}
+.side-card-heading .text-button {
+  font-size: 12px;
+  color: var(--accent);
+}
+.side-card-body {
+  padding: 0 12px 10px;
+}
+.side-card-body .mini-section {
+  padding: 12px 0;
+}
+.side-card-body .mini-section:last-of-type {
+  border-bottom: 0;
+}
+.side-card-body .card-heading {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.side-card-body .mini-section p {
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 6px;
+}
+.side-card-body .consultation-history-link {
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 0;
+}
+.side-card-body .consultation-history-link .history-date {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.consultation-history-link:hover:not(:disabled) strong {
+  color: var(--accent);
+}
+.consultation-history-link { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; padding: 14px 0; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text-muted); }
+.consultation-history-link[aria-current='true'] strong { color: var(--theme-primary, var(--accent)); }
+.consultation-history-link:last-child { border-bottom: 0; }
+.consultation-addendum { padding: 18px 24px; border-top: 1px solid var(--border); font-size: 13px; }
+.consultation-addendum p { white-space: pre-wrap; margin-top: 10px; }
+.consultation-addendum details { margin-top: 10px; color: var(--text-muted); overflow-wrap: anywhere; }
+.context-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.context-heading .text-button {
+  font-size: 11.5px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: var(--accent);
+  padding: 4px;
+}
+
+/* Modal Contexto */
+.modal.context-modal {
+  max-width: 620px;
+  padding: 28px 32px;
+}
+
+.context-modal-header {
+  margin-bottom: 16px;
+}
+
+.context-modal-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0 30px 4px 0;
+  letter-spacing: -0.3px;
+}
+
+.context-modal-header p {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.context-tabs {
+  margin: 16px 0 20px;
+}
+
+/* Lista de itens existentes no contexto */
+.context-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  margin-bottom: 20px;
+  background: var(--surface);
+}
+
+.context-list:empty {
+  display: none;
+}
+
+.context-list .consultation-history-link {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.context-list .consultation-history-link:hover {
+  background: var(--surface);
+}
+
+.context-list .consultation-history-link:last-child {
+  border-bottom: none;
+}
+
+.context-list .consultation-history-link strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.context-item-badge {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--accent);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Formulário de edição/criação no contexto */
+.modal .context-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+
+.modal .context-form h3 {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0 0 2px 0;
+}
+
+.modal .context-form .context-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.modal .context-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  text-align: left;
+}
+
+.modal .context-form label > span {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.modal .context-form input,
+.modal .context-form select,
+.modal .context-form textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px 13px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--accent);
+  line-height: 1.5;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.modal .context-form input:focus,
+.modal .context-form select:focus,
+.modal .context-form textarea:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px rgba(118, 180, 165, 0.35);
+  outline: none;
+  background: var(--surface);
+}
+
+.modal .context-form input::placeholder,
+.modal .context-form textarea::placeholder {
+  color: var(--text-subtle);
+  font-size: 13.5px;
+}
+
+/* Caixa de observações e textareas do contexto */
+.modal .context-form textarea {
+  min-height: 90px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.modal .context-form .editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0 0;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  background: transparent;
+}
+
+/* Estado de alergias (radio group) */
+.modal .context-allergy-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  margin: 0 0 18px 0;
+}
+
+.modal .context-allergy-state legend {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 0 6px;
+}
+
+.modal .context-allergy-state label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  margin: 0;
+  cursor: pointer;
+}
+
+.modal .context-allergy-state input[type="radio"] {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+/* Rodapé do modal de contexto */
+.context-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+@media (max-width: 600px) {
+  .modal .context-form .context-form-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}

@@ -1,0 +1,77 @@
+.primary,
+.secondary {
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  transition: background-color 0.2s ease;
+}
+.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.secondary {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+.secondary:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+.footnote {
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-subtle);
+  margin: 16px 0;
+}
+.listing {
+  max-width: 1000px;
+  margin: 36px auto;
+}
+.listing-heading {
+  margin-bottom: 35px;
+}
+.listing-heading p {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-top: 10px;
+}
+.appointment {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 25px;
+  text-align: left;
+  justify-content: flex-start;
+  border-radius: 10px;
+  gap: 20px;
+}
+.time {
+  font-size: 19px;
+}
+.time small,
+.appointment-name small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 6px;
+}
+.appointment-name {
+  font-size: 18px;
+}
+.open-label {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
+.empty-agenda {
+  padding: 30px;
+  text-align: center;
+  color: var(--text-subtle);
+  font-size: 14px;
+}

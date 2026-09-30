@@ -1,0 +1,110 @@
+/* ==========================================================================
+   Tokens do tema "Vidro Noturno"
+   Fundo escuro com degradê, superfícies translúcidas e uma cor de destaque.
+   A cor de destaque vem de [data-theme]; o degradê de [data-gradient].
+   ========================================================================== */
+:root {
+  color-scheme: dark;
+
+  --accent-rgb: 127, 214, 168;
+  --accent-2-rgb: 79, 163, 199;
+  --glow-3-rgb: 90, 70, 140;
+  --accent: rgb(var(--accent-rgb));
+  --accent-hover: color-mix(in srgb, var(--accent) 85%, white);
+  --accent-soft: rgba(var(--accent-rgb), 0.14);
+  --accent-border: rgba(var(--accent-rgb), 0.35);
+  --accent-gradient: linear-gradient(135deg, rgb(var(--accent-rgb)), rgb(var(--accent-2-rgb)));
+  --on-accent: #0c1513;
+
+  --bg: #0c1513;
+  --bg-mesh:
+    radial-gradient(at 5% 5%, rgba(var(--accent-rgb), 0.28) 0px, transparent 45%),
+    radial-gradient(at 95% 10%, rgba(var(--accent-2-rgb), 0.3) 0px, transparent 45%),
+    radial-gradient(at 60% 100%, rgba(var(--glow-3-rgb), 0.3) 0px, transparent 50%);
+
+  --surface: rgba(255, 255, 255, 0.05);
+  --surface-2: rgba(255, 255, 255, 0.08);
+  --surface-3: rgba(255, 255, 255, 0.12);
+  --surface-solid: #15201d;
+  --glass-blur: blur(18px);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+
+  --text: #e3ece8;
+  --text-strong: #f4f8f6;
+  --text-muted: #a9b8b1;
+  --text-subtle: #7f9089;
+
+  --danger: #f28b82;
+  --danger-soft: rgba(242, 139, 130, 0.14);
+  --danger-border: rgba(242, 139, 130, 0.38);
+  --warning: #f5c08e;
+  --warning-soft: rgba(240, 160, 80, 0.14);
+  --warning-border: rgba(240, 160, 80, 0.38);
+  --info: #9dbcff;
+  --info-soft: rgba(157, 188, 255, 0.14);
+  --info-border: rgba(157, 188, 255, 0.38);
+  --success: #7fd6a8;
+
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 22px;
+
+  /* Nomes antigos, mantidos como apelidos dos tokens novos */
+  --theme-bg: var(--bg);
+  --theme-bg-gradient: var(--bg-mesh);
+  --theme-color: var(--text);
+  --theme-rail-bg: var(--surface);
+  --theme-rail-active: var(--accent-soft);
+  --theme-rail-gradient: var(--surface);
+  --theme-account-bar: transparent;
+  --theme-primary: var(--accent);
+  --theme-primary-hover: var(--accent-hover);
+  --theme-focus: var(--accent);
+  --theme-accent-soft: var(--accent-soft);
+  --theme-accent-border: var(--accent-border);
+  --theme-text-accent: var(--accent);
+  --theme-card-bg: var(--surface);
+  --theme-card-border: var(--border);
+  --theme-card-gradient: var(--surface);
+  --theme-hover-bg: var(--surface-2);
+  --theme-border: var(--border);
+  --theme-border-subtle: var(--border);
+  --theme-avatar-doctor-bg: var(--accent-soft);
+  --theme-avatar-doctor-color: var(--accent);
+  --theme-avatar-patient-bg: var(--accent-soft);
+  --theme-avatar-patient-color: var(--text-strong);
+  --theme-badge-bg: var(--surface-2);
+  --theme-badge-color: var(--text-muted);
+}
+
+[data-theme='ceu'] {
+  --accent-rgb: 124, 196, 232;
+  --accent-2-rgb: 120, 140, 240;
+  --glow-3-rgb: 40, 110, 130;
+  --on-accent: #0b1320;
+}
+[data-theme='lavanda'] {
+  --accent-rgb: 199, 179, 240;
+  --accent-2-rgb: 157, 188, 255;
+  --glow-3-rgb: 150, 80, 150;
+  --on-accent: #130f1f;
+}
+[data-theme='ambar'] {
+  --accent-rgb: 232, 194, 124;
+  --accent-2-rgb: 226, 140, 110;
+  --glow-3-rgb: 60, 100, 90;
+  --on-accent: #1a1409;
+}
+
+html,
+body {
+  background-color: var(--bg);
+  background-image: var(--bg-mesh);
+  background-attachment: fixed;
+}
+html[data-gradient='false'],
+html[data-gradient='false'] body {
+  background-image: none;
+}

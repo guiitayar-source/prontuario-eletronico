@@ -1,0 +1,204 @@
+/* Supabase sign-in uses the application's existing colors and controls. */
+.auth-shell { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
+.auth-card { width: min(100%, 440px); display: grid; gap: 18px; background: var(--surface); padding: 32px; border-radius: 18px; border: 1px solid var(--border); }
+.auth-card label { display: grid; gap: 8px; }
+.auth-card input { width: 100%; min-height: 44px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; }
+.auth-account-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--accent);
+  word-break: break-all;
+}
+.auth-account-badge strong {
+  font-weight: 600;
+  color: var(--accent);
+}
+.auth-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: -4px;
+  font-size: 12.5px;
+}
+.auth-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+.auth-checklist-item.valid {
+  color: var(--accent);
+  font-weight: 500;
+}
+.auth-checklist-item.invalid {
+  color: var(--danger);
+  font-weight: 500;
+}
+/* ==========================================================================
+   Cabeçalho Principal Unificado (Account Bar)
+   ========================================================================== */
+.account-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  height: 46px;
+  padding: 0 20px;
+  background: rgba(12, 21, 19, 0.55);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.account-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.clinic-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-strong);
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+
+.clinic-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.account-sep {
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 12px;
+  user-select: none;
+}
+
+.user-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.user-email {
+  color: var(--text-subtle);
+  font-size: 12.5px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-subtle);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.header-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--text-strong);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.header-btn:active {
+  transform: translateY(1px);
+}
+
+.header-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.header-btn.btn-signout {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-subtle);
+}
+
+.header-btn.btn-signout:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.38);
+  color: var(--danger);
+}
+
+.mfa-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  margin-left: 2px;
+  box-shadow: 0 0 6px #34d399aa;
+}
+
+.header-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.16);
+  margin: 0 4px;
+}
+
+.header-alert {
+  color: var(--danger);
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+@media (max-width: 760px) {
+  .account-bar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .user-email,
+  .account-sep {
+    display: none;
+  }
+  .clinic-name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .header-btn span {
+    display: none;
+  }
+  .header-btn {
+    padding: 6px 8px;
+  }
+}
