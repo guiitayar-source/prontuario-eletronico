@@ -1839,6 +1839,9 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  /* anula o .danger genérico (fundo e margem de botão cheio) */
+  background: none;
+  margin: 0;
 }
 .document-ai-context {
   border: 1px solid var(--border);
