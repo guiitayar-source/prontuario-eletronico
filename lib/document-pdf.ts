@@ -5,6 +5,48 @@ import type { ClinicalDocument } from './document-fields.ts';
 
 const clean = (s: string) => s.replace(/\r\n?/g, '\n').replace(/\t/g, '    ');
 
+/**
+ * Quebra um texto em linhas que caibam em maxWidth. Prefere dividir em duas linhas
+ * equilibradas num separador (" - " ou " · "), como em endereços; senão, por palavra.
+ */
+export function wrapText(
+  text: string,
+  font: PDFFont,
+  size: number,
+  maxWidth: number,
+) {
+  const fits = (t: string) => font.widthOfTextAtSize(t, size) <= maxWidth;
+  if (!text || fits(text)) return text ? [text] : [];
+  let best: [string, string] | null = null;
+  for (const m of text.matchAll(/ [-·] /g)) {
+    const first = text.slice(0, m.index).trim();
+    const second = text.slice(m.index + m[0].length).trim();
+    if (!fits(first) || !fits(second)) continue;
+    const gap = Math.abs(
+      font.widthOfTextAtSize(first, size) - font.widthOfTextAtSize(second, size),
+    );
+    const bestGap = best
+      ? Math.abs(
+          font.widthOfTextAtSize(best[0], size) -
+            font.widthOfTextAtSize(best[1], size),
+        )
+      : Infinity;
+    if (gap < bestGap) best = [first, second];
+  }
+  if (best) return best;
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && !fits(next)) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 async function prescriptionPdf(
   pdf: PDFDocument,
   d: ClinicalDocument,
@@ -546,14 +588,18 @@ async function prescriptionPdf(
       color: rgb(0, 0, 0),
     });
 
-    // 7. Footer (Consultório address and phone)
-    const footLine1W = font.widthOfTextAtSize(clinicAddress, 9);
-    page.drawText(clinicAddress, {
-      x: (width - footLine1W) / 2,
-      y: 40.0,
-      size: 9,
-      font: font,
-      color: rgb(0.15, 0.15, 0.15),
+    // 7. Footer (Consultório address and phone). O endereço quebra em linhas
+    // para caber na largura útil; a última linha fica em y=40, acima do telefone.
+    const addressLines = wrapText(clinicAddress, font, 9, width - 2 * left);
+    addressLines.forEach((line, i) => {
+      const lineW = font.widthOfTextAtSize(line, 9);
+      page.drawText(line, {
+        x: (width - lineW) / 2,
+        y: 40.0 + 12 * (addressLines.length - 1 - i),
+        size: 9,
+        font: font,
+        color: rgb(0.15, 0.15, 0.15),
+      });
     });
 
     const footLine2W = font.widthOfTextAtSize(clinicPhone, 9);

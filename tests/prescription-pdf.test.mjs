@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PDFDocument } from 'pdf-lib';
-import { documentPdf } from '../lib/document-pdf.ts';
+import { documentPdf, wrapText } from '../lib/document-pdf.ts';
+import { StandardFonts } from 'pdf-lib';
 import { documentTemplate } from '../lib/document-fields.ts';
 
 // 1. Check template files exist in public/templates/
@@ -89,5 +90,19 @@ const docAtestado = {
 const atestadoBytes = await documentPdf(docAtestado);
 const atestadoPdfDoc = await PDFDocument.load(atestadoBytes);
 assert.equal(atestadoPdfDoc.getPageCount(), 1, 'Standard document should generate 1 page');
+
+// 5. Endereço longo do consultório quebra em linhas que cabem na largura útil (A4 - margens).
+const helv = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+const longAddress =
+  'Edificio Exemplo Corporate Plaza - Rua Doutor Ficticio M. Exemplar, No 100 - 5o andar, sala 508 - Parque Exemplo, Cidade Exemplo - SP, 00000-000';
+const maxWidth = 595.3 - 2 * 51.1;
+const wrapped = wrapText(longAddress, helv, 9, maxWidth);
+assert.equal(wrapped.length, 2, 'endereço longo vira duas linhas');
+assert.ok(wrapped.every((l) => helv.widthOfTextAtSize(l, 9) <= maxWidth), 'cada linha cabe na largura');
+assert.ok(!wrapped.some((l) => l.endsWith('-') || l.startsWith('-')), 'quebra no separador, sem traço solto');
+assert.deepEqual(wrapText('Rua curta, 1', helv, 9, maxWidth), ['Rua curta, 1']);
+assert.deepEqual(wrapText('', helv, 9, maxWidth), []);
+const longPdf = await documentPdf({ ...docReceita, letterhead_address: longAddress });
+assert.ok(longPdf.length > 0, 'receita com endereço longo é gerada');
 
 console.log('PASS: Receituário padrão gera 2 vias (Farmácia/Paciente) A4, com endereço, templates e download ok.');
