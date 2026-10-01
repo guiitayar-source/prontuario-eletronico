@@ -214,7 +214,42 @@ export function PatientDetails({
   onUpdated: (p: Patient) => void;
   onDirty?: (dirty: boolean) => void;
 }) {
-  const [edit, setEdit] = useState(false);
+  const owner = useAccess().role === 'owner';
+  const [edit, setEdit] = useState(false),
+    [archiving, setArchiving] = useState(false),
+    [archiveError, setArchiveError] = useState('');
+  async function toggleArchive() {
+    const archive = !patient.archived_at;
+    if (
+      archive &&
+      !window.confirm(
+        'Arquivar este paciente? Ele deixa de aparecer na lista, na busca e na agenda. Nada é excluído e você pode restaurá-lo em Pacientes → Arquivados.',
+      )
+    )
+      return;
+    setArchiving(true);
+    setArchiveError('');
+    try {
+      const r = await fetch(
+        `/api/patients?action=${archive ? 'archive' : 'restore'}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Patient-Action': '1',
+          },
+          body: JSON.stringify({ id: patient.id, version: patient.version }),
+        },
+      );
+      const d = (await r.json()) as { patient: Patient; error?: string };
+      if (!r.ok) throw new Error(d.error || 'Falha ao arquivar.');
+      onUpdated(d.patient);
+    } catch (e) {
+      setArchiveError((e as Error).message);
+    } finally {
+      setArchiving(false);
+    }
+  }
   if (edit)
     return (
       <PatientForm
@@ -236,10 +271,33 @@ export function PatientDetails({
             Atualizado em {new Date(patient.updated_at).toLocaleString('pt-BR')}
           </p>
         </div>
-        <button className="primary" onClick={() => setEdit(true)}>
-          Editar cadastro
-        </button>
+        <div className="registry-actions">
+          {owner && (
+            <button
+              className="secondary"
+              disabled={archiving}
+              onClick={() => void toggleArchive()}
+            >
+              {patient.archived_at ? 'Restaurar paciente' : 'Arquivar paciente'}
+            </button>
+          )}
+          <button className="primary" onClick={() => setEdit(true)}>
+            Editar cadastro
+          </button>
+        </div>
       </div>
+      {patient.archived_at && (
+        <div className="capture-notice">
+          Paciente arquivado em{' '}
+          {new Date(patient.archived_at).toLocaleDateString('pt-BR')}: fora da
+          lista, da busca e da agenda. O prontuário continua guardado.
+        </div>
+      )}
+      {archiveError && (
+        <div className="capture-error" role="alert">
+          {archiveError}
+        </div>
+      )}
       {fieldGroups.map((group) => (
         <section className="detail-group" key={group.title}>
           <h3>{group.title}</h3>
@@ -276,9 +334,10 @@ export default function Registry({
   onSettings?: () => void;
 }) {
   const [create, setCreate] = useState(false),
-    [tab, setTab] = useState<'list' | 'transfer'>('list'),
+    [tab, setTab] = useState<'list' | 'archived' | 'transfer'>('list'),
     [transferBusy, setTransferBusy] = useState(false);
-  const medical = ['owner', 'doctor'].includes(useAccess().role);
+  const role = useAccess().role;
+  const medical = ['owner', 'doctor'].includes(role);
   return (
     <div className="app-shell">
       <NavigationRail
@@ -300,7 +359,9 @@ export default function Registry({
                   <div className="eyebrow">CONSULTÓRIO</div>
                   <h1>Pacientes</h1>
                   <p>
-                    {tab === 'list'
+                    {tab === 'archived'
+                      ? 'Pacientes arquivados não aparecem na lista, na busca nem na agenda. Abra o cadastro para restaurar.'
+                      : tab === 'list'
                       ? 'Busque um paciente no topo da página ou comece um novo cadastro.'
                       : 'Traga prontuários de outro sistema ou exporte o prontuário de um paciente.'}
                   </p>
@@ -320,6 +381,15 @@ export default function Registry({
                   >
                     Cadastros
                   </button>
+                  {role === 'owner' && (
+                    <button
+                      className={tab === 'archived' ? 'selected' : ''}
+                      disabled={transferBusy}
+                      onClick={() => setTab('archived')}
+                    >
+                      Arquivados
+                    </button>
+                  )}
                   <button
                     className={tab === 'transfer' ? 'selected' : ''}
                     onClick={() => setTab('transfer')}
@@ -337,7 +407,12 @@ export default function Registry({
                   />
                 </div>
               ) : (
-                <PatientSearch searchable={false} onOpen={onOpen} />
+                <PatientSearch
+                  key={tab}
+                  searchable={tab === 'archived'}
+                  archived={tab === 'archived'}
+                  onOpen={onOpen}
+                />
               )}
             </>
           )}

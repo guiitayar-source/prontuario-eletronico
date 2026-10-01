@@ -64,6 +64,8 @@ export type Patient = PatientInput & {
   version: number;
   created_at: number;
   updated_at: number;
+  /** Paciente arquivado: fora das listas, busca e agenda; nada é excluído. */
+  archived_at?: number | null;
   draft_key: string;
 };
 export const fields = fieldGroups.flatMap((group) =>

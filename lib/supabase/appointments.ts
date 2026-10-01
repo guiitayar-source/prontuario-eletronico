@@ -6,7 +6,7 @@ export const appointments = handle(async (request, ctx) => {
     const day = url.searchParams.get('day') || '';
     const start = new Date(`${day}T00:00:00-03:00`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(start.getTime()) || start.toISOString().slice(0,10) !== day) throw new HttpError(400, 'Informe uma data válida.');
-    const rows = check(await ctx.db.from('appointments').select('*,patients(name,social_name)').eq('clinic_id', ctx.clinic)
+    const rows = check(await ctx.db.from('appointments').select('*,patients!inner(name,social_name)').eq('clinic_id', ctx.clinic).is('patients.archived_at', null)
       .gte('starts_at', start.toISOString()).lt('starts_at', new Date(+start + 86400000).toISOString()).order('starts_at').order('id'));
     return json({ appointments: rows.map(r => ({ ...r, starts_at: Date.parse(r.starts_at), ends_at: Date.parse(r.ends_at),
       patient_name: r.patients?.name, patient_social_name: r.patients?.social_name, patients: undefined })) });

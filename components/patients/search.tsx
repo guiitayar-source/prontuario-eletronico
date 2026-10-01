@@ -9,12 +9,15 @@ export function PatientSearch({
   compact = false,
   searchable = true,
   revision = 0,
+  archived = false,
 }: {
   onOpen: (p: Patient) => void;
   compact?: boolean;
   /** Sem campo de busca: apenas lista paginada (a busca fica no cabeçalho). */
   searchable?: boolean;
   revision?: number;
+  /** Lista os pacientes arquivados (só o proprietário). */
+  archived?: boolean;
 }) {
   const [query, setQuery] = useState(''),
     [list, setList] = useState<Patient[]>([]),
@@ -29,7 +32,7 @@ export function PatientSearch({
     const timer = setTimeout(async () => {
       try {
         const r = await fetch(
-          `/api/patients?q=${encodeURIComponent(query)}&page=${page}`,
+          `/api/patients?q=${encodeURIComponent(query)}&page=${page}${archived ? '&archived=1' : ''}`,
           { cache: 'no-store', signal: controller.signal },
         );
         const d = (await r.json()) as {
@@ -51,7 +54,7 @@ export function PatientSearch({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [query, page, revision, retry]);
+  }, [query, page, revision, retry, archived]);
   return (
     <div className={compact ? 'patient-search compact' : 'patient-search'}>
       {searchable && (
@@ -84,7 +87,13 @@ export function PatientSearch({
         <>
           <div className="directory-count">
             {total}{' '}
-            {total === 1 ? 'paciente encontrado' : 'pacientes encontrados'}
+            {archived
+              ? total === 1
+                ? 'paciente arquivado'
+                : 'pacientes arquivados'
+              : total === 1
+                ? 'paciente encontrado'
+                : 'pacientes encontrados'}
           </div>
           {list.map((p) => (
             <button
@@ -112,11 +121,17 @@ export function PatientSearch({
           {!list.length && (
             <div className="registry-empty">
               <UserRound size={30} />
-              <h3>Nenhum paciente encontrado</h3>
+              <h3>
+                {archived
+                  ? 'Nenhum paciente arquivado'
+                  : 'Nenhum paciente encontrado'}
+              </h3>
               <p>
-                {searchable
-                  ? 'Confira a busca ou adicione um novo cadastro.'
-                  : 'Adicione um novo cadastro para começar.'}
+                {archived
+                  ? 'Pacientes arquivados no cadastro aparecem aqui e podem ser restaurados.'
+                  : searchable
+                    ? 'Confira a busca ou adicione um novo cadastro.'
+                    : 'Adicione um novo cadastro para começar.'}
               </p>
             </div>
           )}

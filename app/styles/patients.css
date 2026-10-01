@@ -158,6 +158,11 @@
   margin-top: 5px;
   font-size: 13px;
 }
+.registry-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .form-actions {
   display: flex;
   justify-content: flex-end;

@@ -5,6 +5,7 @@ export function present(row: Record<string, unknown>, clinic: string): Patient {
   return {
     ...Object.fromEntries(fields.map(f => [f, row[f] || ''])), id: row.id,
     version: row.version, created_at: Date.parse(String(row.created_at)), updated_at: Date.parse(String(row.updated_at)),
+    archived_at: typeof row.archived_at === 'string' ? Date.parse(row.archived_at) : null,
     draft_key: `${clinic}:${String(row.id)}`,
   } as Patient;
 }
@@ -22,13 +23,26 @@ export const patients = handle(async (request, ctx) => {
     const page = Math.max(0, Math.min(10000, parseInt(url.searchParams.get('page') || '0') || 0));
     let q = normalize((url.searchParams.get('q') || '').slice(0, 180));
     if (/^[+\d\s().-]+$/.test(q)) q = q.replace(/\D/g, '');
-    const query = ctx.db.from('patients').select('*', { count: 'exact' }).eq('clinic_id', ctx.clinic)
+    // Arquivados só aparecem na lista própria do proprietário.
+    const archived = url.searchParams.get('archived') === '1';
+    if (archived && ctx.role !== 'owner') throw new HttpError(403, 'Sua conta não tem acesso a esta operação.');
+    const base = ctx.db.from('patients').select('*', { count: 'exact' }).eq('clinic_id', ctx.clinic);
+    const query = (archived ? base.not('archived_at', 'is', null) : base.is('archived_at', null))
       .ilike('search_text', `%${q.replace(/[\\%_]/g, '\\$&')}%`).order('name').order('id').range(page * 50, page * 50 + 49);
     const result = await query; const rows = check(result);
     return json({ patients: rows.map(r => present(r, ctx.clinic)), total: result.count || 0 });
   }
   writeGuard(request, 'x-patient-action');
   const data = await body(request), action = url.searchParams.get('action');
+  if (action === 'archive' || action === 'restore') {
+    if (ctx.role !== 'owner') throw new HttpError(403, 'Somente o proprietário arquiva ou restaura pacientes.');
+    if (typeof data.id !== 'string' || !Number.isInteger(data.version)) throw new HttpError(400, 'Identificador inválido.');
+    const row = check(await ctx.db.from('patients')
+      .update({ archived_at: action === 'archive' ? new Date().toISOString() : null, version: Number(data.version) + 1 })
+      .eq('clinic_id', ctx.clinic).eq('id', data.id).eq('version', data.version).select().maybeSingle());
+    if (!row) return json({ error: 'Cadastro alterado em outra janela. Reabra o cadastro.', conflict: true }, 409);
+    return json({ patient: present(row, ctx.clinic) });
+  }
   if (!['create', 'update'].includes(action || '')) throw new HttpError(400, 'Ação inválida.');
   if (typeof data.id !== 'string' || (data.id !== DEMO_ID && !/^[a-f0-9-]{36}$/.test(data.id))) throw new HttpError(400, 'Identificador inválido.');
   const { p, errors } = validate(data);

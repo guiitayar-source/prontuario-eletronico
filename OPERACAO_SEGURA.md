@@ -17,6 +17,7 @@ O banco protege SELECT, gravações por RPC e Storage com o nível da sessão (`
 | Ação | Proprietário | Médico | Secretária |
 |---|---|---|---|
 | Cadastro e agenda | Sim | Sim | Sim |
+| Arquivar/restaurar pacientes (some da lista, busca e agenda; nada é excluído) | Sim | Não | Não |
 | Receber, visualizar e classificar anexos | Sim | Sim | Sim |
 | Arquivar/restaurar anexos | Sim | Sim | Não |
 | Excluir definitivamente anexos | Sim (qualquer anexo) | Sim (após exames preenchidos) | Não |
