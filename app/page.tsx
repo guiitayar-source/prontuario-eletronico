@@ -31,6 +31,7 @@ export default function Home() {
 
       if (signatureError) {
         setError(signatureError);
+        sessionStorage.removeItem('birdid_return_document_id');
         window.history.replaceState({}, '', window.location.pathname);
       } else if (signatureStatus === 'connected') {
         const returnPatientId = sessionStorage.getItem(

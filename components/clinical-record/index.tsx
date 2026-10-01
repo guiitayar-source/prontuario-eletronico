@@ -396,6 +396,17 @@ export default function ClinicalRecord({
     docs.open(undefined, current?.id, false, documentTemplate('Receita'), 'Receita');
     setModal('receita');
   }
+  // Na volta da autenticação Bird ID, reabre o documento que estava sendo assinado.
+  useEffect(() => {
+    const id = sessionStorage.getItem('birdid_return_document_id');
+    const d = id && docs.rows.find((row) => row.id === id);
+    if (!d) return;
+    sessionStorage.removeItem('birdid_return_document_id');
+    docs.open(d);
+    setModal(d.kind === 'Receita' ? 'receita' : 'documento');
+    // docs.open não é estável entre renderizações; só interessa a chegada da lista.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docs.rows]);
   function closeModal() {
     if ((modal === 'documento' || modal === 'receita') && !docs.close()) return;
     setModal('');

@@ -45,9 +45,14 @@ export function useDocuments(patient: Patient, enabled = true) {
   async function connectBirdId() {
     try {
       setError('');
+      // Salva o documento aberto para reabri-lo na volta da autenticação, pronto para assinar.
+      const doc = draft && (dirty || draft.version === 0) ? await save() : draft;
+      if (draft && !doc) return;
       if (typeof window !== 'undefined' && patient?.id) {
         sessionStorage.setItem('birdid_return_patient_id', patient.id);
         sessionStorage.setItem('birdid_return_tab', 'documentos');
+        if (doc && doc.status !== 'SIGNED')
+          sessionStorage.setItem('birdid_return_document_id', doc.id);
       }
       const r = await apiFetch('/api/digital-signature/birdid/authorize');
       const data = (await r.json()) as { authorizationUrl?: string; error?: string };
