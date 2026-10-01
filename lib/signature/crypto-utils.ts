@@ -36,10 +36,16 @@ export function generatePkce(): { codeVerifier: string; codeChallenge: string } 
  * Derives or normalizes a 32-byte AES-256 key from an environment secret or provided key.
  */
 function getEncryptionKey(providedKey?: string): Buffer {
-  const rawKey =
-    providedKey ||
-    process.env.SIGNATURE_ENCRYPTION_KEY ||
-    'default-dev-signature-secret-key-32b!';
+  const configuredKey = providedKey || process.env.SIGNATURE_ENCRYPTION_KEY;
+
+  // A chave padrão é pública (está no código): só serve fora de produção.
+  if (!configuredKey && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'SIGNATURE_ENCRYPTION_KEY ausente: tokens de assinatura não podem ser cifrados em produção.'
+    );
+  }
+
+  const rawKey = configuredKey || 'default-dev-signature-secret-key-32b!';
 
   // If 64 hex characters (32 bytes in hex), parse as hex
   if (rawKey.length === 64 && /^[0-9a-fA-F]+$/.test(rawKey)) {
