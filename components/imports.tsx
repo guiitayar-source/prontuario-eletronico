@@ -230,6 +230,27 @@ export function ImportPanel({
   const blocked = preview?.plan.records.some(
     (r) => r.conflict && chosen.some((p) => p.source_id === r.patient_source),
   );
+  // O que ainda impede a confirmação, dito por paciente para não ficar só no botão desativado.
+  const nameOf = (p: { fields: { name: string } }) =>
+    p.fields.name || 'Paciente sem nome';
+  const undecided =
+    preview?.plan.patients.filter((p) => !choices[p.source_id]) || [];
+  const conflicted = chosen.filter((p) =>
+    preview?.plan.records.some(
+      (r) => r.conflict && r.patient_source === p.source_id,
+    ),
+  );
+  const pending = [
+    undecided.length
+      ? `Escolha o destino (vincular ao cadastro existente ou não importar): ${undecided.map(nameOf).join(', ')}.`
+      : '',
+    conflicted.length
+      ? `Registros já importados com conteúdo diferente; marque "Não importar este paciente": ${conflicted.map(nameOf).join(', ')}.`
+      : '',
+    preview && !undecided.length && !chosen.length
+      ? 'Nenhum paciente selecionado para importar.'
+      : '',
+  ].filter(Boolean);
   if (!medical) return <p>Acesso exclusivo da equipe médica.</p>;
   return (
     <>
@@ -437,6 +458,11 @@ export function ImportPanel({
                   ))}
               </div>
             </article>
+          ))}
+          {pending.map((m) => (
+            <p key={m} className="capture-error">
+              {m}
+            </p>
           ))}
           <label className="import-confirm">
             <input
