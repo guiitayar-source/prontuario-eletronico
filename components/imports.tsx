@@ -14,6 +14,7 @@ import {
   type ImportBatch,
   type ImportedEntry,
 } from '@/lib/imports/types';
+import { lots, readExports } from '@/lib/imports/files';
 async function call<T>(action?: string, data?: unknown): Promise<T> {
   const r = await apiFetch(
     '/api/imports' + (action ? '?action=' + action : ''),
@@ -70,7 +71,9 @@ export function ImportPanel({
 }) {
   const medical = ['owner', 'doctor'].includes(useAccess().role);
   const [source, setSource] = useState('Prontuário anterior'),
-    [file, setFile] = useState<File | null>(null),
+    [files, setFiles] = useState<File[]>([]),
+    [queue, setQueue] = useState<string[]>([]),
+    [lot, setLot] = useState({ index: 0, total: 0 }),
     [preview, setPreview] = useState<Preview | null>(null),
     [choices, setChoices] = useState<Record<string, string>>({}),
     [confirmed, setConfirmed] = useState(false),
@@ -106,44 +109,42 @@ export function ImportPanel({
     return () => window.removeEventListener('beforeunload', warn);
   }, [busy]);
   async function generate(example?: string) {
-    if (!file && !example) return;
+    if (!files.length && !example) return;
     setBusy(true);
     setError('');
     setMessage('');
     setResult(null);
     try {
-      const selectedFile = example
-        ? new File(
-            [
-              await (
-                await fetch('/examples/import-' + example + '.json')
-              ).text(),
-            ],
-            'exemplo.json',
-            { type: 'application/json' },
-          )
-        : file!;
-      if (selectedFile.size > MAX_IMPORT_BYTES)
-        throw new Error('Escolha um JSON de até 2 MB.');
-      const d = await call<Preview>('preview', {
-        source,
-        file: await selectedFile.text(),
-      });
-      setPreview(d);
-      setConfirmed(false);
-      setChoices(
-        Object.fromEntries(
-          d.plan.patients.map((p) => [
-            p.source_id,
-            p.errors.length ? 'skip' : p.candidates.length ? '' : 'new',
-          ]),
-        ),
-      );
+      const payloads = example
+        ? [await (await fetch('/examples/import-' + example + '.json')).text()]
+        : lots(await readExports(files));
+      if (
+        payloads.some(
+          (p) => new TextEncoder().encode(p).length > MAX_IMPORT_BYTES,
+        )
+      )
+        throw new Error('Escolha arquivos JSON de até 2 MB.');
+      setQueue(payloads.slice(1));
+      setLot({ index: 1, total: payloads.length });
+      await previewLot(payloads[0]);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
+  }
+  async function previewLot(file: string) {
+    const d = await call<Preview>('preview', { source, file });
+    setPreview(d);
+    setConfirmed(false);
+    setChoices(
+      Object.fromEntries(
+        d.plan.patients.map((p) => [
+          p.source_id,
+          p.errors.length ? 'skip' : p.candidates.length ? '' : 'new',
+        ]),
+      ),
+    );
   }
   async function cancel() {
     if (!preview) return;
@@ -153,6 +154,11 @@ export function ImportPanel({
       await call('cancel', { id: preview.id });
       setPreview(null);
       setConfirmed(false);
+      if (queue.length)
+        setMessage(
+          'Importação interrompida. Os lotes restantes não foram enviados.',
+        );
+      setQueue([]);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -174,10 +180,21 @@ export function ImportPanel({
       });
       setResult(d.result);
       setPreview(null);
-      setFile(null);
       setConfirmed(false);
-      setMessage('Importação concluída.');
       await refresh();
+      if (queue.length) {
+        // Próximo lote: nova prévia, que também precisa ser conferida e confirmada.
+        const [next, ...rest] = queue;
+        setQueue(rest);
+        setLot({ index: lot.index + 1, total: lot.total });
+        await previewLot(next);
+        setMessage(
+          `Lote ${lot.index} de ${lot.total} importado. Confira o próximo.`,
+        );
+      } else {
+        setFiles([]);
+        setMessage('Importação concluída.');
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -244,8 +261,9 @@ export function ImportPanel({
         <section className="import-card">
           <h2>1. Escolher a exportação</h2>
           <p>
-            JSON LGPD ou Bundle FHIR R4 · até 2 MB, 30 pacientes e 500
-            registros.
+            JSON LGPD ou Bundle FHIR R4, ou os .zip de portabilidade (com o JSON
+            dentro). Selecione vários arquivos de uma vez: eles são divididos em
+            lotes de até 30 pacientes, cada um com sua prévia.
           </p>
           <label>
             Sistema de origem
@@ -261,14 +279,15 @@ export function ImportPanel({
             permite reconhecer os registros já importados.
           </p>
           <label>
-            Arquivo JSON
+            Arquivos (.json ou .zip)
             <input
               key={result?.id || 'upload'}
               type="file"
-              accept=".json,application/json"
+              multiple
+              accept=".json,.zip,application/json,application/zip"
               disabled={busy}
               onChange={(e) => {
-                setFile(e.target.files?.[0] || null);
+                setFiles(Array.from(e.target.files || []));
                 setError('');
               }}
             />
@@ -276,10 +295,14 @@ export function ImportPanel({
           <div className="import-actions">
             <button
               className="primary"
-              disabled={busy || !file || source.trim().length < 2}
+              disabled={busy || !files.length || source.trim().length < 2}
               onClick={() => void generate()}
             >
-              {busy ? 'Analisando…' : 'Gerar prévia'}
+              {busy
+                ? 'Analisando…'
+                : files.length > 1
+                  ? `Gerar prévia (${files.length} arquivos)`
+                  : 'Gerar prévia'}
             </button>
             <button
               className="secondary"
@@ -309,6 +332,7 @@ export function ImportPanel({
             · {preview.plan.patients.length} paciente(s) ·{' '}
             {preview.plan.records.length} registro(s). Prévia válida por uma
             hora.
+            {lot.total > 1 && ` Lote ${lot.index} de ${lot.total}.`}
           </p>
           <details className="import-entry" open>
             <summary>

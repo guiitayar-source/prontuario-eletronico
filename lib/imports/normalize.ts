@@ -59,7 +59,39 @@ function date(v: unknown, warnings: string[], label: string): string | null {
   );
   return null;
 }
+// Lote com várias exportações LGPD (uma por paciente), montado pela tela de importação
+// a partir de vários arquivos .json/.zip: cada uma é lida à parte e os planos são somados.
 export function normalizeImport(input: unknown): ImportPlan {
+  const lote = obj(input).lote;
+  if (!Array.isArray(lote)) return normalizeOne(input);
+  if (!lote.length) throw new Error('Nenhuma exportação no lote.');
+  const plan: ImportPlan = {
+    format: 'lgpd',
+    patients: [],
+    records: [],
+    warnings: [],
+  };
+  for (const item of lote) {
+    const part = normalizeOne(item);
+    if (part.format !== 'lgpd')
+      throw new Error(
+        'Bundles FHIR devem ser importados um arquivo por vez, fora do lote.',
+      );
+    for (const p of part.patients)
+      if (plan.patients.some((x) => x.source_id === p.source_id))
+        throw new Error(
+          'O mesmo paciente aparece em dois arquivos do lote. Remova a exportação repetida.',
+        );
+    plan.patients.push(...part.patients);
+    plan.records.push(...part.records);
+    for (const w of part.warnings)
+      if (!plan.warnings.includes(w)) plan.warnings.push(w);
+  }
+  if (plan.patients.length > 30 || plan.records.length > 500)
+    throw new Error('Use lotes com até 30 pacientes e 500 registros clínicos.');
+  return plan;
+}
+function normalizeOne(input: unknown): ImportPlan {
   const root = obj(input);
   const plan: ImportPlan = {
     format: root.resourceType === 'Bundle' ? 'fhir-r4' : 'lgpd',
