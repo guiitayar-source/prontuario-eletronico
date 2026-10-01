@@ -37,6 +37,18 @@ function notes(v: unknown): string {
     .filter(Boolean)
     .join('\n');
 }
+const indicatorLabels: Record<string, string> = {
+  mood_score: 'Humor (0–10)',
+  weight: 'Peso',
+  height: 'Altura',
+  bp_systolic: 'PA sistólica',
+  bp_diastolic: 'PA diastólica',
+  heart_rate: 'Frequência cardíaca',
+  personal_history: 'Histórico pessoal',
+  family_history: 'Histórico familiar',
+  substance_use: 'Uso de substâncias',
+  allergies_history: 'Histórico de alergias',
+};
 function date(v: unknown, warnings: string[], label: string): string | null {
   const s = str(v);
   if (!s) return null;
@@ -206,6 +218,26 @@ function normalizeOne(input: unknown): ImportPlan {
       admin_notes: str(p.secretary_notes),
     });
     patient(pid, data);
+    // Indicadores da origem ficam junto da consulta a que pertencem; os soltos geram aviso.
+    const consultationIds = new Set(
+      arr(root.consultations).map((c) => str(obj(c).id)),
+    );
+    const indicatorsByConsultation = new Map<string, Obj>();
+    let looseIndicators = 0;
+    for (const value of arr(root.indicators)) {
+      const i = obj(value),
+        cid = str(i.consultation_id);
+      if (!cid || !consultationIds.has(cid)) {
+        looseIndicators++;
+        continue;
+      }
+      indicatorsByConsultation.set(cid, {
+        ...indicatorsByConsultation.get(cid),
+        ...Object.fromEntries(
+          Object.entries(i).filter(([k, v]) => k in indicatorLabels && str(v)),
+        ),
+      });
+    }
     const sections = [
       'consultations',
       'prescriptions',
@@ -240,6 +272,27 @@ function normalizeOne(input: unknown): ImportPlan {
                 .filter(([, v]) => typeof v === 'string')
                 .map(([k, v]) => `${str(k)}: ${str(v)}`)
                 .join('\n'),
+            ],
+            [
+              'Indicadores e históricos',
+              Object.entries({
+                ...indicatorsByConsultation.get(str(r.id)),
+                ...obj(r.indicators),
+              })
+                .filter(([, v]) => str(v))
+                .map(([k, v]) => `${indicatorLabels[k] || k}: ${str(v)}`)
+                .join('\n'),
+            ],
+            [
+              'Evolução estruturada (gerada por IA na origem)',
+              arr(obj(r.evolucao_estruturada).blocos)
+                .map((b) =>
+                  [str(obj(b).titulo), str(obj(b).conteudo)]
+                    .filter(Boolean)
+                    .join('\n'),
+                )
+                .filter(Boolean)
+                .join('\n\n'),
             ],
           ];
           const content = pieces
@@ -381,6 +434,17 @@ function normalizeOne(input: unknown): ImportPlan {
         p.created_at,
         'origem',
       );
+    if (str(p.notes))
+      record(
+        'document',
+        'patient-notes',
+        pid,
+        'Observações do cadastro de origem',
+        str(p.notes),
+        null,
+        p.created_at,
+        'origem',
+      );
     if (str(p.diagnosis))
       record(
         'condition',
@@ -392,11 +456,14 @@ function normalizeOne(input: unknown): ImportPlan {
         p.created_at,
         'origem',
       );
-    for (const section of ['files', 'indicators'])
-      if (arr(root[section]).length)
-        warning(
-          `${section}: ${arr(root[section]).length} item(ns) não importado(s) nesta versão. Preserve a exportação original.`,
-        );
+    if (arr(root.files).length)
+      warning(
+        `files: ${arr(root.files).length} item(ns) não importado(s) nesta versão. Preserve a exportação original.`,
+      );
+    if (looseIndicators)
+      warning(
+        `indicators: ${looseIndicators} item(ns) sem consulta correspondente não importado(s). Preserve a exportação original.`,
+      );
     warning(
       'Campos adicionais, consentimentos, credenciais, links externos e tokens da origem não são transferidos.',
     );
