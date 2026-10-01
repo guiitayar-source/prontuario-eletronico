@@ -209,8 +209,7 @@ export default function Attachments({
         </div>
       </div>
       <div className="capture-notice">
-        Demonstração: envie somente arquivos fictícios. Os anexos ficam
-        preservados no armazenamento privado. O arquivamento permite
+        Os anexos ficam preservados no armazenamento privado. O arquivamento permite
         recuperá-los.
       </div>
       {canCreateDocument && (

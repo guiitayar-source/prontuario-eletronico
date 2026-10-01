@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import AuthGate from '@/components/auth';
-export const metadata: Metadata = {title:'Meu Prontuário · Protótipo',description:'Protótipo de atendimento com dados inteiramente fictícios.'};
+export const metadata: Metadata = {title:'Meu Prontuário',description:'Prontuário eletrônico do consultório.'};
 const themeScript = `try{var t=localStorage.getItem('psywrite_theme');if(t)document.documentElement.setAttribute('data-theme',t);var g=localStorage.getItem('psywrite_gradient');if(g==='false')document.documentElement.setAttribute('data-gradient','false');}catch(e){}`;
 
 export default function RootLayout({

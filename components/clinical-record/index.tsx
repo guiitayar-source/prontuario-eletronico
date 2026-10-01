@@ -797,8 +797,7 @@ export default function ClinicalRecord({
                   )}
                 </div>
                 <div className="footnote">
-                  Ambiente de demonstração. Use apenas dados fictícios. O
-                  rascunho é salvo no Supabase.
+                  O rascunho é salvo automaticamente.
                 </div>
               </div>
           </>

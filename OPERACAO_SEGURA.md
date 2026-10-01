@@ -1,6 +1,6 @@
 # Preparação para uso real — PsyWrite
 
-Estado: implementação técnica em validação, **sem liberação para dados reais**. Este roteiro não é certificação legal, assinatura digital ou garantia de conformidade.
+Estado: **em uso com dados reais** desde 01/10/2026, após o titular confirmar MFA ativo e backup feito. Este roteiro não é certificação legal, assinatura digital ou garantia de conformidade.
 
 ## MFA e recuperação de acesso
 
@@ -101,10 +101,10 @@ Há opção de incorporar anexos até **2 MB somados**, respeitando limite de 3,
 
 Validação: esquema JSON oficial R4 e testes de referências, recursos, permissões e semântica. Isso não equivale à validação completa de todos os invariantes FHIR/FHIRPath ou à homologação com um sistema de destino. Referências: [FHIR R4 downloads](https://hl7.org/fhir/R4/downloads.html), [MedicationRequest](https://hl7.org/fhir/R4/medicationrequest.html), [DocumentReference](https://hl7.org/fhir/R4/documentreference.html).
 
-## Pendências antes de qualquer dado real
+## Pendências em aberto
 
-- Ativação efetiva do TOTP pelo titular e exigência para a clínica; teste de cada conta e recuperação.
-- Criar uma segunda cópia independente do `.psybackup` hospedado e executar `backup:verify` sobre essa cópia. A primeira cópia no PC de casa e o ensaio automatizado local foram concluídos em 21/09/2026.
+Em 01/10/2026 o titular confirmou o MFA resolvido e o backup feito, e liberou o uso com dados reais. Seguem em aberto:
+
 - Aprovação da política de retenção, acesso administrativo a anexos e responsabilidades de auditoria/privacidade.
 - Definir rotina e responsável pelos backups, monitorar falhas, medir duração de restauração e perda de dados tolerável. O script não é um serviço agendado.
 - Revisar ambientes, e-mails, contas privilegiadas e logs de leitura; corrigir qualquer lacuna apontada nessa revisão. Validar portabilidade no sistema destinatário quando definido.

@@ -282,9 +282,6 @@ export default function MobileCapture() {
         <p className="mobile-lead">
           Fotografe, confira e envie para o computador.
         </p>
-        <div className="capture-notice">
-          Use somente documentos fictícios nesta demonstração.
-        </div>
         {error && (
           <div className="capture-error" role="alert">
             {error}
@@ -548,7 +545,7 @@ export default function MobileCapture() {
                     disabled={sending}
                     onChange={(e) => setConfirmed(e.target.checked)}
                   />{' '}
-                  Confirmo que estes arquivos fictícios pertencem a{' '}
+                  Confirmo que estes arquivos pertencem a{' '}
                   {current?.patient_name}.
                 </label>
                 <button

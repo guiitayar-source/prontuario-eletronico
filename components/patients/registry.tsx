@@ -109,9 +109,6 @@ export function PatientForm({
           </p>
         </div>
       </div>
-      <div className="capture-notice">
-        Protótipo: cadastre somente pessoas e informações fictícias.
-      </div>
       {error && (
         <div className="capture-error" role="alert">
           {error}

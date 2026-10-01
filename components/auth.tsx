@@ -401,7 +401,6 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           >
             Sair ou entrar com outra conta
           </button>
-          <small>Ambiente de desenvolvimento — use somente dados fictícios.</small>
         </form>
       </main>
     );
@@ -457,7 +456,6 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           >
             Esqueci minha senha
           </button>
-          <small>Ambiente de desenvolvimento — use somente dados fictícios.</small>
         </form>
       </main>
     );

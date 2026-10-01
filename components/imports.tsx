@@ -320,8 +320,7 @@ export function ImportPanel({
           </div>
           <p className="muted">
             Dados clínicos entram no Histórico importado. PDFs e imagens
-            precisam ser anexados separadamente. Nesta etapa, use dados
-            fictícios.
+            precisam ser anexados separadamente.
           </p>
         </section>
       ) : (
