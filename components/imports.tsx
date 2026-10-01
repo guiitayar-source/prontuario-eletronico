@@ -141,7 +141,9 @@ export function ImportPanel({
       Object.fromEntries(
         d.plan.patients.map((p) => [
           p.source_id,
-          p.errors.length ? 'skip' : p.candidates.length ? '' : 'new',
+          p.errors.length
+            ? 'skip'
+            : p.linked_id || (p.candidates.length ? '' : 'new'),
         ]),
       ),
     );
@@ -240,7 +242,28 @@ export function ImportPanel({
       (r) => r.conflict && r.patient_source === p.source_id,
     ),
   );
+  // Mesmo nome ou CPF duas vezes no lote, ambos como cadastro novo: o banco recusa o segundo.
+  const key = (v: string) =>
+    v
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, ' ');
+  const fresh =
+    preview?.plan.patients.filter((p) => choices[p.source_id] === 'new') || [];
+  const twins = fresh.filter((p) =>
+    fresh.some(
+      (q) =>
+        q !== p &&
+        (key(q.fields.name) === key(p.fields.name) ||
+          (!!p.fields.cpf && q.fields.cpf === p.fields.cpf)),
+    ),
+  );
   const pending = [
+    twins.length
+      ? `Mesmo nome ou CPF mais de uma vez neste lote: ${[...new Set(twins.map(nameOf))].join(', ')}. Importe só um agora ("Não importar este paciente" no outro) e, depois, selecione o .zip do outro sozinho e vincule-o ao cadastro criado.`
+      : '',
     undecided.length
       ? `Escolha o destino (vincular ao cadastro existente ou não importar): ${undecided.map(nameOf).join(', ')}.`
       : '',
@@ -489,6 +512,7 @@ export function ImportPanel({
                 !confirmed ||
                 !chosen.length ||
                 !!blocked ||
+                twins.length > 0 ||
                 preview.plan.patients.some((p) => !choices[p.source_id])
               }
               onClick={() => void commit()}
