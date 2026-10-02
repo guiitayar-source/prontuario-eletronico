@@ -21,6 +21,7 @@ export type Draft = {
 };
 
 export type Reviewing = {
+  attachmentId: string;
   proposalIndex: number;
   originalName: string;
   fields: ExamExtractionProposal['exams'][number]['fields'];

@@ -63,29 +63,66 @@ export default function Exams({
   const [providerKeyNote, setProviderKeyNote] = useState('');
   const [uploading, setUploading] = useState(false);
   const examFileInputRef = useRef<HTMLInputElement>(null);
-  const [extractionAttachment, setExtractionAttachment] = useState('');
-  const [extraction, setExtraction] = useState<ExamExtractionProposal | null>(
-    null,
-  );
+  // Laudos marcados para a próxima leitura; cada um vira uma proposta própria.
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [extractions, setExtractions] = useState<ExamExtractionProposal[]>([]);
+  const [progress, setProgress] = useState('');
   const [reviewing, setReviewing] = useState<Reviewing | null>(null);
+  const chosenFiles = selectedFiles.filter((id) =>
+    attachments.some((attachment) => attachment.id === id),
+  );
+  const fileName = (id: string) =>
+    attachments.find((attachment) => attachment.id === id)?.name || 'Arquivo';
 
-  async function handleExamUpload(file: File) {
-    if (!onUploadAttachment) return;
+  // O envio renova o pedido de captura a cada arquivo; no lote, usa sempre a
+  // versão mais recente da função para não repetir um pedido já vencido.
+  const uploadRef = useRef(onUploadAttachment);
+  useEffect(() => {
+    uploadRef.current = onUploadAttachment;
+  }, [onUploadAttachment]);
+
+  async function handleExamUpload(files: File[]) {
+    if (!onUploadAttachment || !files.length) return;
     setError('');
     setMessage('');
+    if (files.length > 10) {
+      setError('Envie até 10 laudos por vez.');
+      if (examFileInputRef.current) examFileInputRef.current.value = '';
+      return;
+    }
     setUploading(true);
+    const added: string[] = [];
+    const failed: string[] = [];
     try {
-      const newId = await onUploadAttachment(file);
-      if (newId) {
-        setExtractionAttachment(newId);
-        setExtraction(null);
+      for (const [index, file] of files.entries()) {
+        setProgress(
+          files.length > 1
+            ? `Enviando ${index + 1} de ${files.length}…`
+            : 'Enviando laudo…',
+        );
+        try {
+          const newId = await uploadRef.current?.(file);
+          if (newId) added.push(newId);
+        } catch (e) {
+          failed.push(`${file.name}: ${(e as Error).message}`);
+        }
       }
-    } catch (e) {
-      setError((e as Error).message);
+      if (added.length)
+        setSelectedFiles((previous) => [...new Set([...previous, ...added])]);
+      if (failed.length)
+        setError(`Não foi possível anexar ${failed.join(' · ')}`);
     } finally {
       setUploading(false);
+      setProgress('');
       if (examFileInputRef.current) examFileInputRef.current.value = '';
     }
+  }
+  function toggleFile(id: string) {
+    setSelectedFiles((previous) =>
+      previous.includes(id)
+        ? previous.filter((item) => item !== id)
+        : [...previous, id],
+    );
   }
   const endpoint = `/api/exams?patientId=${encodeURIComponent(patientId)}`;
   const call = useCallback(
@@ -156,7 +193,7 @@ export default function Exams({
     setError('');
   }
   async function chooseProvider() {
-    if (!extractionAttachment) return;
+    if (!chosenFiles.length) return;
     setError('');
     setProviderKeyNote('');
     setProviderModal(true);
@@ -182,51 +219,79 @@ export default function Exams({
       setProviderLoading(false);
     }
   }
+  async function readFile(attachmentId: string, model: AiModel['id']) {
+    const response = await apiFetch(
+      `/api/ai-files?patientId=${encodeURIComponent(patientId)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-AI-Action': '1',
+        },
+        body: JSON.stringify({ action: 'extract-exams', attachmentId, model }),
+      },
+    );
+    const data = (await response.json()) as {
+      proposal?: ExamExtractionProposal;
+      error?: string;
+    };
+    if (!response.ok || !data.proposal)
+      throw new Error(data.error || 'Não foi possível ler o exame.');
+    return data.proposal;
+  }
   async function extractExams(model: AiModel['id']) {
-    if (!extractionAttachment) return;
+    const ids = chosenFiles;
+    if (!ids.length) return;
     setProviderModal(false);
     setError('');
     setMessage('');
     setExtracting(true);
-    try {
-      const response = await apiFetch(
-        `/api/ai-files?patientId=${encodeURIComponent(patientId)}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-AI-Action': '1',
-          },
-          body: JSON.stringify({
-            action: 'extract-exams',
-            attachmentId: extractionAttachment,
-            model,
-          }),
-        },
-      );
-      const data = (await response.json()) as {
-        proposal?: ExamExtractionProposal;
-        error?: string;
-      };
-      if (!response.ok || !data.proposal)
-        throw new Error(data.error || 'Não foi possível ler o exame.');
-      setExtraction(data.proposal);
+    setProgress(ids.length > 1 ? `Lendo 0 de ${ids.length}…` : 'Lendo laudo…');
+    const read: ExamExtractionProposal[] = [];
+    const failed: string[] = [];
+    // Cada arquivo é uma chamada separada, com no máximo três ao mesmo tempo.
+    const queue = [...ids];
+    let done = 0;
+    const worker = async () => {
+      for (let id = queue.shift(); id; id = queue.shift()) {
+        try {
+          read.push(await readFile(id, model));
+        } catch (error) {
+          failed.push(`${fileName(id)}: ${(error as Error).message}`);
+        } finally {
+          done += 1;
+          if (ids.length > 1) setProgress(`Lendo ${done} de ${ids.length}…`);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(3, ids.length) }, worker));
+    read.sort(
+      (a, b) => ids.indexOf(a.attachmentId) - ids.indexOf(b.attachmentId),
+    );
+    setExtractions((previous) => [
+      ...previous.filter((item) => !ids.includes(item.attachmentId)),
+      ...read,
+    ]);
+    // Os que falharam continuam marcados para tentar de novo.
+    setSelectedFiles((previous) =>
+      previous.filter((id) => !read.some((item) => item.attachmentId === id)),
+    );
+    if (read.length)
       setMessage(
-        data.proposal.exams.length
+        read.some((item) => item.exams.length)
           ? 'Leitura concluída. Revise cada sugestão antes de salvar.'
           : 'A leitura terminou, mas nenhum resultado foi identificado.',
       );
-    } catch (error) {
-      setError((error as Error).message);
-    } finally {
-      setExtracting(false);
-    }
+    if (failed.length) setError(`Não foi possível ler ${failed.join(' · ')}`);
+    setExtracting(false);
+    setProgress('');
   }
   function reviewProposal(
+    extraction: ExamExtractionProposal,
     exam: ExamExtractionProposal['exams'][number],
     proposalIndex: number,
   ) {
-    if (!extraction || !exam.definitionId) return;
+    if (!exam.definitionId) return;
     const definition = definitions.find(
       (item) => item.id === exam.definitionId,
     );
@@ -252,6 +317,7 @@ export default function Exams({
       },
     });
     setReviewing({
+      attachmentId: extraction.attachmentId,
       proposalIndex,
       originalName: exam.originalName,
       fields: exam.fields,
@@ -285,12 +351,15 @@ export default function Exams({
       );
       const { record } = await call({ ...payload, action: 'result' });
       setResults((previous) => [...previous, record]);
-      if (reviewing && extraction) {
-        const remaining = extraction.exams.filter(
-          (_, index) => index !== reviewing.proposalIndex,
-        );
-        setExtraction(
-          remaining.length ? { ...extraction, exams: remaining } : null,
+      if (reviewing) {
+        setExtractions((previous) =>
+          previous.flatMap((item) => {
+            if (item.attachmentId !== reviewing.attachmentId) return [item];
+            const exams = item.exams.filter(
+              (_, index) => index !== reviewing.proposalIndex,
+            );
+            return exams.length ? [{ ...item, exams }] : [];
+          }),
         );
         setReviewing(null);
       }
@@ -402,65 +471,91 @@ export default function Exams({
                         onClick={() => examFileInputRef.current?.click()}
                       >
                         <Upload size={16} />
-                        {uploading ? 'Enviando laudo…' : 'Anexar laudo'}
+                        {uploading ? progress : 'Anexar laudos'}
                       </button>
                       <input
                         ref={examFileInputRef}
                         type="file"
                         accept="image/jpeg,image/png,image/webp,application/pdf"
+                        multiple
                         hidden
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) void handleExamUpload(file);
-                        }}
+                        onChange={(e) =>
+                          void handleExamUpload(Array.from(e.target.files || []))
+                        }
                       />
                     </>
                   )}
-                  <label>
-                    Laudo anexado
-                    <select
-                      value={extractionAttachment}
-                      disabled={extracting || uploading || !attachments.length}
-                      onChange={(event) => {
-                        setExtractionAttachment(event.target.value);
-                        setExtraction(null);
-                      }}
-                    >
-                      <option value="">
-                        {attachments.length
-                          ? 'Selecione um arquivo'
-                          : 'Nenhum laudo anexado'}
-                      </option>
-                      {attachments.map((attachment) => (
-                        <option key={attachment.id} value={attachment.id}>
-                          {attachment.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                   <button
                     type="button"
                     className="primary"
-                    disabled={extracting || uploading || !extractionAttachment}
+                    disabled={extracting || uploading || !chosenFiles.length}
                     onClick={() => void chooseProvider()}
                   >
-                    {extracting ? 'Lendo laudo…' : 'Ler com IA'}
+                    {extracting
+                      ? progress
+                      : chosenFiles.length > 1
+                        ? `Ler ${chosenFiles.length} laudos com IA`
+                        : 'Ler com IA'}
                   </button>
                 </div>
-                {!attachments.length && (
+                {attachments.length ? (
+                  <fieldset
+                    className="exam-ai-files"
+                    disabled={extracting || uploading}
+                  >
+                    <legend>
+                      Laudos para leitura
+                      {attachments.length > 1 && (
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() =>
+                            setSelectedFiles(
+                              chosenFiles.length === attachments.length
+                                ? []
+                                : attachments.map((item) => item.id),
+                            )
+                          }
+                        >
+                          {chosenFiles.length === attachments.length
+                            ? 'Desmarcar todos'
+                            : 'Marcar todos'}
+                        </button>
+                      )}
+                    </legend>
+                    {attachments.map((attachment) => (
+                      <label key={attachment.id}>
+                        <input
+                          type="checkbox"
+                          checked={chosenFiles.includes(attachment.id)}
+                          onChange={() => toggleFile(attachment.id)}
+                        />
+                        <span>{attachment.name}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                ) : (
                   <small>
-                    Anexe um laudo (PDF ou imagem) ou selecione um arquivo para leitura com IA.
+                    Anexe um ou mais laudos (PDF ou imagem) para leitura com IA.
                   </small>
                 )}
               </section>
-              {extraction && (
+              {extractions.map((extraction) => (
                 <ExamProposalsSection
+                  key={extraction.attachmentId}
                   extraction={extraction}
+                  fileName={fileName(extraction.attachmentId)}
                   definitions={definitions}
-                  onDismiss={() => setExtraction(null)}
-                  onReviewProposal={(exam, index) => reviewProposal(exam, index)}
+                  onDismiss={() =>
+                    setExtractions((previous) =>
+                      previous.filter((item) => item !== extraction),
+                    )
+                  }
+                  onReviewProposal={(exam, index) =>
+                    reviewProposal(extraction, exam, index)
+                  }
                 />
-              )}
+              ))}
               <div className="exam-search">
                 <label htmlFor="exam-search">Adicionar exame manualmente</label>
                 <div className="exam-actions">
@@ -734,10 +829,17 @@ export default function Exams({
           >
             ×
           </button>
-          <h2>Escolha a IA para ler o laudo</h2>
+          <h2>
+            {chosenFiles.length > 1
+              ? `Escolha a IA para ler os ${chosenFiles.length} laudos`
+              : 'Escolha a IA para ler o laudo'}
+          </h2>
           <p>
-            O arquivo será enviado ao provedor escolhido. A leitura continuará
-            como sugestão e precisará da sua revisão antes de ser salva.
+            {chosenFiles.length > 1
+              ? 'Os arquivos serão enviados'
+              : 'O arquivo será enviado'}{' '}
+            ao provedor escolhido. A leitura continuará como sugestão e
+            precisará da sua revisão antes de ser salva.
           </p>
           {providerLoading ? (
             <output>Carregando modelos…</output>

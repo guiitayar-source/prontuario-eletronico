@@ -79,6 +79,37 @@
   min-width: 200px;
   flex: 1 1 200px;
 }
+.exam-ai-files {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.exam-ai-files legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.exam-ai .exam-ai-files label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.exam-ai-files input {
+  flex: none;
+}
 .exam-proposals {
   padding: 18px;
   margin: 0 0 20px;

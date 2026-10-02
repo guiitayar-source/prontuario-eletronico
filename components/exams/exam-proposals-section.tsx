@@ -6,6 +6,7 @@ const dateLabel = (date: string) => date.split('-').reverse().join('/');
 
 export type ExamProposalsSectionProps = {
   extraction: ExamExtractionProposal;
+  fileName: string;
   definitions: ExamDefinition[];
   onDismiss: () => void;
   onReviewProposal: (
@@ -16,6 +17,7 @@ export type ExamProposalsSectionProps = {
 
 export function ExamProposalsSection({
   extraction,
+  fileName,
   definitions,
   onDismiss,
   onReviewProposal,
@@ -26,7 +28,7 @@ export function ExamProposalsSection({
         <div>
           <h3>Sugestões para revisar</h3>
           <small>
-            {extraction.provider} · {extraction.model} · estimativas de confiança
+            {fileName} · {extraction.provider} · {extraction.model} · estimativas de confiança
             não garantem exatidão
           </small>
         </div>
