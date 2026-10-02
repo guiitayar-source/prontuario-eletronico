@@ -45,6 +45,36 @@ const localDateTime = (timestamp: number) => {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 };
 
+// Duração padrão da consulta, guardada no navegador de quem agenda.
+const DURATION_KEY = 'psywrite-appointment-duration';
+const MIN_DURATION = 10;
+const MAX_DURATION = 480;
+const validDuration = (minutes: number) =>
+  Number.isInteger(minutes) &&
+  minutes >= MIN_DURATION &&
+  minutes <= MAX_DURATION;
+
+const storedDuration = () => {
+  try {
+    const value = Number(localStorage.getItem(DURATION_KEY));
+    return validDuration(value) ? value : 50;
+  } catch {
+    return 50; // localStorage indisponível
+  }
+};
+
+const minutesOf = (time: string) => {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+/** Hora de término (HH:MM) para um início "AAAA-MM-DDTHH:MM" e uma duração. */
+const endTime = (start: string, duration: number) => {
+  const total = (minutesOf(start.slice(11, 16)) + duration) % 1440;
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+};
+
 function AppointmentForm({
   day,
   appointment,
@@ -66,8 +96,13 @@ function AppointmentForm({
   const [start, setStart] = useState(
     appointment ? localDateTime(appointment.starts_at) : defaultStart,
   );
-  const [end, setEnd] = useState(
-    appointment ? localDateTime(appointment.ends_at) : `${day}T09:50`,
+  const [duration, setDuration] = useState(storedDuration);
+  const [durationInput, setDurationInput] = useState(String(duration));
+  // O término é só a hora: o dia é sempre o do início.
+  const [end, setEnd] = useState(() =>
+    appointment
+      ? localDateTime(appointment.ends_at).slice(11, 16)
+      : endTime(defaultStart, duration),
   );
   const [modality, setModality] = useState<string>(
     appointment?.modality || 'presencial',
@@ -101,15 +136,39 @@ function AppointmentForm({
     };
   }, [query, appointment]);
 
+  function changeStart(value: string) {
+    setStart(value);
+    if (!value) return;
+    // Num horário novo vale a duração padrão; ao remarcar, mantém a duração atual.
+    const current =
+      (minutesOf(end) - minutesOf(start.slice(11, 16)) + 1440) % 1440;
+    setEnd(endTime(value, appointment && current ? current : duration));
+  }
+
+  function changeDuration(value: string) {
+    setDurationInput(value);
+    const minutes = Number(value);
+    if (!validDuration(minutes)) return;
+    setDuration(minutes);
+    if (start) setEnd(endTime(start, minutes));
+    try {
+      localStorage.setItem(DURATION_KEY, String(minutes));
+    } catch {
+      /* Vale só nesta janela. */
+    }
+  }
+
   async function save(event: React.SubmitEvent) {
     event.preventDefault();
     const selected =
       patient || (appointment ? { id: appointment.patient_id } : null);
     if (!selected) return setError('Selecione um paciente.');
     const startsAt = new Date(start).getTime();
-    const endsAt = new Date(end).getTime();
+    const endsAt = new Date(`${start.slice(0, 10)}T${end}`).getTime();
     if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt))
       return setError('Informe data e horários válidos.');
+    if (endsAt <= startsAt)
+      return setError('O término deve ser depois do início, no mesmo dia.');
     setBusy(true);
     setError('');
     try {
@@ -215,18 +274,35 @@ function AppointmentForm({
               type="datetime-local"
               value={start}
               disabled={busy}
-              onChange={(e) => setStart(e.target.value)}
+              onChange={(e) => changeStart(e.target.value)}
             />
           </label>
           <label htmlFor="appointment-end">
             <span>Término</span>
             <input
               id="appointment-end"
-              type="datetime-local"
+              type="time"
               value={end}
               disabled={busy}
               onChange={(e) => setEnd(e.target.value)}
             />
+          </label>
+          <label htmlFor="appointment-duration">
+            <span>Duração padrão</span>
+            <span className="duration-input">
+              <input
+                id="appointment-duration"
+                type="number"
+                inputMode="numeric"
+                min={MIN_DURATION}
+                max={MAX_DURATION}
+                value={durationInput}
+                disabled={busy}
+                onChange={(e) => changeDuration(e.target.value)}
+                onBlur={() => setDurationInput(String(duration))}
+              />
+              <small>min</small>
+            </span>
           </label>
         </div>
         <label htmlFor="appointment-modality">

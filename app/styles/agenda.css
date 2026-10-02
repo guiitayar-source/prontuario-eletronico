@@ -150,9 +150,19 @@
 .appointment-fields,
 .modal.appointment-form .appointment-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr;
   gap: 16px;
   margin-bottom: 0;
+}
+.appointment-form label > .duration-input,
+.modal.appointment-form label > .duration-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.duration-input small {
+  color: var(--text-subtle);
+  font-size: 13px;
 }
 .modal.appointment-form .appointment-fields label,
 .appointment-fields label {
