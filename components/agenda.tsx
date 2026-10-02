@@ -21,10 +21,35 @@ type Appointment = {
   starts_at: number;
   ends_at: number;
   modality: 'presencial' | 'teleconsulta';
-  status: 'scheduled' | 'cancelled';
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
+  arrived_at: number | null;
   admin_notes: string | null;
   version: number;
 };
+
+type Situation = 'scheduled' | 'waiting' | 'in_progress' | 'completed' | 'no_show' | 'unrecorded';
+
+const SITUATION_LABEL: Record<Situation, string> = {
+  scheduled: 'Agendado',
+  waiting: 'Aguardando',
+  in_progress: 'Em atendimento',
+  completed: 'Finalizado',
+  no_show: 'Faltou',
+  unrecorded: 'Sem registro',
+};
+
+/** Situação mostrada: "aguardando" é um agendado com chegada; dia passado sem nada é "sem registro". */
+const situationOf = (item: Appointment, past: boolean): Situation => {
+  if (item.status !== 'scheduled') return item.status as Situation;
+  if (item.arrived_at) return 'waiting';
+  return past ? 'unrecorded' : 'scheduled';
+};
+
+const clock = (timestamp: number) =>
+  new Date(timestamp).toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
 const displayDate = (day: string) =>
   new Intl.DateTimeFormat('pt-BR', {
@@ -363,10 +388,26 @@ export default function Agenda({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
+  // Cancelados saem da lista; atendidos e faltas continuam, para consulta posterior.
   const appointments = useMemo(
-    () => items.filter((item) => item.status === 'scheduled'),
+    () => items.filter((item) => item.status !== 'cancelled'),
     [items],
   );
+  const today = dateInput(new Date());
+  const past = day < today;
+  const summary = useMemo(() => {
+    const count = (status: Appointment['status']) =>
+      appointments.filter((item) => item.status === status).length;
+    const parts = [
+      `${appointments.length} ${appointments.length === 1 ? 'horário' : 'horários'}`,
+    ];
+    const completed = count('completed');
+    const missed = count('no_show');
+    if (completed)
+      parts.push(`${completed} ${completed === 1 ? 'atendido' : 'atendidos'}`);
+    if (missed) parts.push(`${missed} ${missed === 1 ? 'falta' : 'faltas'}`);
+    return parts.join(' · ');
+  }, [appointments]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -396,15 +437,23 @@ export default function Agenda({
     return () => controller.abort();
   }, [day, revision]);
 
-  async function cancel(item: Appointment) {
+  async function act(
+    item: Appointment,
+    action: 'cancel' | 'arrive' | 'no_show' | 'reset',
+  ) {
+    const name = item.patient_social_name || item.patient_name;
     if (
-      !window.confirm(
-        `Cancelar o horário de ${item.patient_social_name || item.patient_name}?`,
-      )
+      action === 'cancel' &&
+      !window.confirm(`Cancelar o horário de ${name}?`)
+    )
+      return;
+    if (
+      action === 'no_show' &&
+      !window.confirm(`Registrar que ${name} faltou?`)
     )
       return;
     try {
-      const result = await fetch('/api/appointments?action=cancel', {
+      const result = await fetch(`/api/appointments?action=${action}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -416,7 +465,7 @@ export default function Agenda({
       if (!result.ok) throw new Error(data.error);
       setRevision((value) => value + 1);
     } catch (e) {
-      setError((e as Error).message || 'Não foi possível cancelar o horário.');
+      setError((e as Error).message || 'Não foi possível atualizar o horário.');
     }
   }
   const move = (amount: number) => {
@@ -440,6 +489,9 @@ export default function Agenda({
             <div>
               <div className="eyebrow">AGENDA</div>
               <h1>{displayDate(day)}</h1>
+              {!loading && appointments.length > 0 && (
+                <p className="agenda-summary">{summary}</p>
+              )}
             </div>
             <div className="agenda-actions">
               <button
@@ -486,56 +538,102 @@ export default function Agenda({
                 Carregando agenda…
               </p>
             ) : appointments.length ? (
-              appointments.map((item) => (
-                <article className="appointment-card" key={item.id}>
-                  <time>
-                    <strong>
-                      {new Date(item.starts_at).toLocaleTimeString('pt-BR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </strong>
-                    <span>
-                      {new Date(item.ends_at).toLocaleTimeString('pt-BR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+              appointments.map((item) => {
+                const situation = situationOf(item, past);
+                const open = () => onOpenPatient(item.patient_id, item.id);
+                const pending = item.status === 'scheduled';
+                return (
+                  <article
+                    className={`appointment-card ${situation}`}
+                    key={item.id}
+                  >
+                    <time>
+                      <strong>{clock(item.starts_at)}</strong>
+                      <span>{clock(item.ends_at)}</span>
+                    </time>
+                    <span className="avatar patient">
+                      {initials(item.patient_social_name || item.patient_name)}
                     </span>
-                  </time>
-                  <span className="avatar patient">
-                    {initials(item.patient_social_name || item.patient_name)}
-                  </span>
-                  <div className="appointment-card-main">
-                    <strong>
-                      {item.patient_social_name || item.patient_name}
-                    </strong>
-                    <span>
-                      {item.modality === 'teleconsulta'
-                        ? 'Teleconsulta'
-                        : 'Presencial'}
-                      {item.admin_notes ? ` · ${item.admin_notes}` : ''}
+                    <div className="appointment-card-main">
+                      <strong>
+                        {item.patient_social_name || item.patient_name}
+                      </strong>
+                      <span>
+                        {item.modality === 'teleconsulta'
+                          ? 'Teleconsulta'
+                          : 'Presencial'}
+                        {item.arrived_at && situation === 'waiting'
+                          ? ` · chegou às ${clock(item.arrived_at)}`
+                          : ''}
+                        {item.admin_notes ? ` · ${item.admin_notes}` : ''}
+                      </span>
+                    </div>
+                    <span className={`appointment-status ${situation}`}>
+                      {SITUATION_LABEL[situation]}
                     </span>
-                  </div>
-                  <button
-                    className="secondary"
-                    onClick={() => onOpenPatient(item.patient_id, item.id)}
-                  >
-                    Iniciar consulta
-                  </button>
-                  <button
-                    className="text-button"
-                    onClick={() => setEditing(item)}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    className="text-button danger-text"
-                    onClick={() => cancel(item)}
-                  >
-                    Cancelar
-                  </button>
-                </article>
-              ))
+                    {pending && !item.arrived_at && !past && (
+                      <button
+                        className="secondary"
+                        onClick={() => act(item, 'arrive')}
+                      >
+                        Registrar chegada
+                      </button>
+                    )}
+                    {pending && (
+                      <button className="secondary" onClick={open}>
+                        Iniciar consulta
+                      </button>
+                    )}
+                    {item.status === 'in_progress' && (
+                      <button className="secondary" onClick={open}>
+                        Continuar consulta
+                      </button>
+                    )}
+                    {item.status === 'completed' && (
+                      <button className="secondary" onClick={open}>
+                        Abrir consulta
+                      </button>
+                    )}
+                    {pending && (
+                      <button
+                        className="text-button"
+                        onClick={() => setEditing(item)}
+                      >
+                        Editar
+                      </button>
+                    )}
+                    {pending &&
+                      !item.arrived_at &&
+                      item.starts_at <= Date.now() && (
+                        <button
+                          className="text-button"
+                          onClick={() => act(item, 'no_show')}
+                        >
+                          Faltou
+                        </button>
+                      )}
+                    {(item.status === 'no_show' ||
+                      (pending && item.arrived_at)) && (
+                        <button
+                          className="text-button"
+                          onClick={() => act(item, 'reset')}
+                        >
+                          {item.status === 'no_show'
+                            ? 'Desfazer falta'
+                            : 'Desfazer chegada'}
+                        </button>
+                      )}
+                    {pending && (
+                      <button
+                        className="text-button danger-text"
+                        onClick={() => act(item, 'cancel')}
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </article>
+                );
+              })
             ) : (
               <div className="agenda-empty">
                 <Clock3 size={30} />

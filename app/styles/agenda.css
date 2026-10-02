@@ -65,6 +65,32 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.agenda-summary {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+/* Situação do horário: só os estados em andamento usam a cor de destaque. */
+.appointment-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.appointment-status.waiting,
+.appointment-status.in_progress {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+.appointment-card.no_show .appointment-card-main strong,
+.appointment-card.unrecorded .appointment-card-main strong {
+  color: var(--text-muted);
+}
 .agenda-empty {
   display: grid;
   justify-items: center;
@@ -240,7 +266,7 @@
   .appointment-card-main {
     min-width: calc(100% - 70px);
   }
-  .appointment-card .secondary {
+  .appointment-card .appointment-status {
     margin-left: 67px;
   }
   .appointment-fields {
