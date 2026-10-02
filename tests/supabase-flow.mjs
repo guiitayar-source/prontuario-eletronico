@@ -45,6 +45,14 @@ try {
  ok(await call(appointments,secretary,c,'/api/appointments?action=create',{id:aid,patient_id:pid,starts_at:time,ends_at:time+1200000,modality:'presencial',admin_notes:''}),201);
  assert.equal(ok(await call(appointments,owner,c,'/api/appointments?day=2026-09-12')).appointments.length,1);
  assert.equal(ok(await call(appointments,owner,c,'/api/appointments?day=2026-09-13')).appointments.length,0);
+ const day=async()=>ok(await call(appointments,owner,c,'/api/appointments?day=2026-09-12')).appointments[0];
+ ok(await call(appointments,secretary,c,'/api/appointments?action=arrive',{id:aid,version:1}));
+ let a=await day();assert.equal(a.status,'scheduled');assert.ok(a.arrived_at>0);
+ ok(await call(appointments,secretary,c,'/api/appointments?action=no_show',{id:aid,version:a.version}));
+ a=await day();assert.equal(a.status,'no_show');assert.equal(a.arrived_at,null);
+ ok(await call(appointments,secretary,c,'/api/appointments?action=arrive',{id:aid,version:a.version}),409);
+ ok(await call(appointments,secretary,c,'/api/appointments?action=reset',{id:aid,version:a.version}));
+ assert.equal((await day()).status,'scheduled');
  const pair=ok(await call(capture,owner,c,'/api/capture?action=connect',{patientId:pid,category:'exam'}));
  ok(await call(capture,owner,c,`/api/capture?action=mobile&id=${pair.id}`,undefined,'bad'),403);
  ok(await call(capture,owner,c,`/api/capture?action=mobile&id=${pair.id}`,undefined,pair.token));
