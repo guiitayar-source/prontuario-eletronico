@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Timer, Clock3, Pause, Play, RotateCcw } from 'lucide-react';
-import type { ConsultationTimerReturn } from '@/hooks/use-consultation-timer';
+import type { ConsultationTimerReturn } from './clinical-record/use-consultation-timer';
 
 export interface ConsultationTimerProps {
   timer: ConsultationTimerReturn;

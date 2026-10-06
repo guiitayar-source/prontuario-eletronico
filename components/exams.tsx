@@ -26,7 +26,6 @@ import {
   type Draft,
   type Reviewing,
 } from './exams/exam-result-form';
-import './exams.css';
 
 type AiModel = {
   id: 'openai-luna' | 'openai-mini' | 'demo';

@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { EvolutionSignatureDetailsModal } from '../evolution-signature-details-modal';
 import type { SignatureSessionData } from '@/lib/signature/types';
-import { useConsultationTimer } from '@/hooks/use-consultation-timer';
+import { useConsultationTimer } from './use-consultation-timer';
 import { ConsultationTimer } from '../consultation-timer';
 import { date, type RecordEntry } from './types';
 import { EvolutionStatusBanner } from './status-banner';

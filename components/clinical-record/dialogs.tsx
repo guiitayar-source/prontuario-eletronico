@@ -1,7 +1,7 @@
 'use client';
 import { Mic } from 'lucide-react';
 import { AnamnesatorAssistant } from '../anamnesator-assistant';
-import type { useConsultationTimer } from '@/hooks/use-consultation-timer';
+import type { useConsultationTimer } from './use-consultation-timer';
 
 /** Anamnesator: gravação e transcrição revisadas antes de entrar na evolução. */
 export function AnamnesatorDialog({
