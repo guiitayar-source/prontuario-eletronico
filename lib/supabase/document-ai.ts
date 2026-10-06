@@ -3,6 +3,7 @@ import {
   isAiProviderConfigured,
   requestOpenAiText,
 } from '../ai/client.ts';
+import { assertAiQuota } from './ai-limit.ts';
 import {
   boundedBody,
   check,
@@ -284,6 +285,7 @@ ${instructions ? `\nInstruções do médico:\n${instructions}` : ''}${section('C
         'O contexto selecionado está muito extenso. Reduza o texto enviado.',
       );
 
+    await assertAiQuota({ db, clinic, user });
     check(
       await db.rpc('document_ai_request_audit', {
         c: clinic,

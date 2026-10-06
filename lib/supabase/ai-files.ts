@@ -13,6 +13,7 @@ import {
   transcriptionInstructions,
   transcriptionSchema,
 } from '../openai-files.ts';
+import { assertAiQuota, auditAiFileRequest } from './ai-limit.ts';
 import { body, check, handle, HttpError, json, writeGuard } from './server.ts';
 
 type SharpInstance = {
@@ -303,7 +304,7 @@ function generateDemoExtraction(definitions: ExamDefinition[]) {
   };
 }
 
-export const aiFiles = handle(async (request, { db, clinic, role }) => {
+export const aiFiles = handle(async (request, { db, clinic, role, user }) => {
   if (!['owner', 'doctor'].includes(role))
     throw new HttpError(
       403,
@@ -392,6 +393,20 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
       415,
       'O conteúdo do arquivo não corresponde ao tipo registrado.',
     );
+
+  if (selectedProvider !== 'demo') {
+    await assertAiQuota({ db, clinic, user });
+    await auditAiFileRequest({ clinic, user }, patientId, {
+      provider: selectedProvider,
+      model:
+        selectedAction === 'transcribe-document'
+          ? providerModel(selectedProvider, selectedAction)
+          : selectedChoice?.model ||
+            providerModel(selectedProvider, selectedAction),
+      action: selectedAction,
+      attachment: attachmentId,
+    });
+  }
 
   const extractedAt = new Date().toISOString();
   const { bytes: aiBytes, mime: aiMime } = await optimizeImageForAi(
