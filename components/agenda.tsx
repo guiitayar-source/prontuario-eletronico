@@ -187,7 +187,8 @@ function AppointmentForm({
     event.preventDefault();
     const selected =
       patient || (appointment ? { id: appointment.patient_id } : null);
-    if (!selected) return setError('Selecione um paciente.');
+    if (!selected)
+      return setError('Clique no nome do paciente na lista para selecioná-lo.');
     const startsAt = new Date(start).getTime();
     const endsAt = new Date(`${start.slice(0, 10)}T${end}`).getTime();
     if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt))
@@ -260,9 +261,18 @@ function AppointmentForm({
             value={query}
             disabled={!!appointment || busy}
             placeholder="Busque pelo nome"
+            autoComplete="off"
             onChange={(e) => {
               setQuery(e.target.value);
               setPatient(null);
+            }}
+            onKeyDown={(e) => {
+              // Enter com um único resultado escolhe esse paciente em vez de salvar.
+              if (e.key !== 'Enter' || patient || matches.length !== 1) return;
+              e.preventDefault();
+              setPatient(matches[0]);
+              setQuery(matches[0].social_name || matches[0].name);
+              setMatches([]);
             }}
           />
           {patient && (
