@@ -138,18 +138,23 @@ function providerModel(provider: AiProviderId, action: AiAction) {
     : process.env.OPENAI_EXAM_MODEL || 'gpt-4o-mini';
 }
 
+// A simulação inventa valores de exame: só existe quando ligada de propósito, nunca com dados reais.
+const demoEnabled = () => process.env.PSYWRITE_DEMO_AI === '1';
+
 function providerConfigured(provider: AiProviderId) {
-  if (provider === 'demo') return true;
+  if (provider === 'demo') return demoEnabled();
   return isAiProviderConfigured(provider);
 }
 
 function availableExamModels() {
-  return Object.entries(EXAM_MODELS).map(([id, choice]) => ({
-    id,
-    label: choice.label,
-    model: choice.model,
-    configured: providerConfigured(choice.provider),
-  }));
+  return Object.entries(EXAM_MODELS)
+    .filter(([, choice]) => choice.provider !== 'demo' || demoEnabled())
+    .map(([id, choice]) => ({
+      id,
+      label: choice.label,
+      model: choice.model,
+      configured: providerConfigured(choice.provider),
+    }));
 }
 
 type FileAiOptions = {
@@ -328,7 +333,8 @@ export const aiFiles = handle(async (request, { db, clinic, role }) => {
   if (
     selectedAction === 'extract-exams' &&
     requestedModel !== undefined &&
-    !selectedChoice
+    (!selectedChoice ||
+      (selectedChoice.provider === 'demo' && !demoEnabled()))
   )
     throw new HttpError(422, 'Selecione um modelo de IA válido.');
   const provider = data.provider === undefined ? 'openai' : data.provider;

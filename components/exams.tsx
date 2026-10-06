@@ -885,11 +885,6 @@ export default function Exams({
                   <code>OPENAI_API_KEY</code> no
                   arquivo <code>.env.local</code> para habilitar a extração real.
                 </p>
-                <p>
-                  Você pode usar a opção{' '}
-                  <strong>Demonstração · Simulação Local</strong> para testar a
-                  extração e o preenchimento de exames agora mesmo.
-                </p>
               </div>
             )}
         </Modal>
