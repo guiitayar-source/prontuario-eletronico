@@ -11,6 +11,7 @@
     "start": "next start --hostname 127.0.0.1",
     "lint": "oxlint",
     "format": "oxfmt",
+    "test": "node --test tests/backup-connection.test.mjs tests/digital-signature.test.mjs tests/evolution-save-before-sign.test.mjs tests/exams.test.mjs tests/prescription-pdf.test.mjs tests/timer-utils.test.mjs tests/attachment-delete-db.mjs tests/documents-date-db.mjs tests/exams-db.mjs tests/prescription-templates-db.mjs",
     "test:supabase": "node tests/supabase-flow.mjs",
     "test:consultations": "node tests/consultations.mjs",
     "test:timer": "node --test tests/timer-utils.test.mjs",

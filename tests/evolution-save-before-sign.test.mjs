@@ -8,7 +8,7 @@ import ts from 'typescript';
 // or an external signing provider. The compiler removes their TypeScript types.
 const source = ts.createSourceFile(
   'clinical-record.tsx',
-  readFileSync(new URL('../components/clinical-record.tsx', import.meta.url), 'utf8'),
+  readFileSync(new URL('../components/clinical-record/index.tsx', import.meta.url), 'utf8'),
   ts.ScriptTarget.Latest,
   true,
   ts.ScriptKind.TSX,
