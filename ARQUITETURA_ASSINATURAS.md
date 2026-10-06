@@ -41,8 +41,8 @@ app/api/digital-signature/
   test-sign                      Assina um documento sintético (teste de ponta a ponta)
 
 components/
-  documents.tsx                          Conectar Bird ID, assinar documento, baixar PDF assinado
-  clinical-record.tsx                    Assinar evolução
+  documents/use-documents.ts             Conectar Bird ID, assinar documento, baixar PDF assinado
+  clinical-record/use-clinical-record.ts Assinar evolução
   evolution-signature-details-modal.tsx  Tela "Detalhes da assinatura"
 
 scripts/

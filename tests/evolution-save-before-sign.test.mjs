@@ -7,14 +7,14 @@ import ts from 'typescript';
 // Run the component's real handlers with controlled API failures, without a DOM
 // or an external signing provider. The compiler removes their TypeScript types.
 const source = ts.createSourceFile(
-  'clinical-record.tsx',
-  readFileSync(new URL('../components/clinical-record/index.tsx', import.meta.url), 'utf8'),
+  'use-clinical-record.ts',
+  readFileSync(new URL('../components/clinical-record/use-clinical-record.ts', import.meta.url), 'utf8'),
   ts.ScriptTarget.Latest,
   true,
-  ts.ScriptKind.TSX,
+  ts.ScriptKind.TS,
 );
 const component = source.statements.find(
-  (node) => ts.isFunctionDeclaration(node) && node.name?.text === 'ClinicalRecord',
+  (node) => ts.isFunctionDeclaration(node) && node.name?.text === 'useClinicalRecord',
 );
 const names = new Set([
   'request', 'choose', 'load', 'persist', 'prepareEvolutionForSignature',
