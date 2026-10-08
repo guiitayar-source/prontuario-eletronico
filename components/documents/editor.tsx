@@ -335,8 +335,10 @@ export function DocumentEditor({
             : docs.dirty
               ? 'Alterações não salvas'
               : d.version
-                ? 'Salvo'
-                : 'Novo rascunho'}
+                ? prescription
+                  ? 'Rascunho salvo em “Receitas deste paciente” e na aba Documentos'
+                  : 'Rascunho salvo na aba Documentos deste paciente'
+                : 'Novo rascunho (ainda não salvo)'}
       </output>
       {docs.preview && (
         <>

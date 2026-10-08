@@ -40,9 +40,7 @@ export function PrescriptionWorkspace({
     [message, setMessage] = useState('');
   const d = docs.draft;
   const editable = !!d && d.status !== 'SIGNED' && !docs.busy;
-  const previous = docs.rows.filter(
-    (row) => row.kind === 'Receita' && row.id !== d?.id,
-  );
+  const patientRows = docs.rows.filter((row) => row.kind === 'Receita');
 
   function applyTemplate(t: PrescriptionTemplate, append: boolean) {
     if (!d || !editable) return;
@@ -114,9 +112,49 @@ export function PrescriptionWorkspace({
 
   return (
     <div className="prescription-layout">
-      <aside className="prescription-sidebar" aria-label="Modelos e receitas anteriores">
+      <aside className="prescription-sidebar" aria-label="Receitas do paciente e modelos gerais">
         <section>
-          <h3>Meus modelos</h3>
+          <h3>Receitas deste paciente</h3>
+          {!patientRows.length && (
+            <p className="muted">
+              Nenhuma receita salva. “Salvar rascunho” guarda a receita aqui e
+              na aba Documentos; “Repetir” copia uma receita com a data de hoje.
+            </p>
+          )}
+          <ul className="prescription-list">
+            {patientRows.map((row) => (
+              <li key={row.id}>
+                <strong>
+                  {formatDate(row)}
+                  {row.status === 'SIGNED' ? ' · Assinada' : ' · Rascunho'}
+                  {row.id === d?.id ? ' · aberta' : ''}
+                </strong>
+                <span className="prescription-summary">
+                  {summary(row.text) || 'Sem texto'}
+                </span>
+                <div className="prescription-item-actions">
+                  <button
+                    className="text-button"
+                    disabled={docs.busy}
+                    onClick={() => openPrevious(row, true)}
+                    title="Nova receita com o mesmo texto e a data de hoje"
+                  >
+                    <Repeat size={13} /> Repetir
+                  </button>
+                  <button
+                    className="text-button"
+                    disabled={docs.busy || row.id === d?.id}
+                    onClick={() => openPrevious(row, false)}
+                  >
+                    Abrir
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section>
+          <h3>Modelos gerais</h3>
           {!docs.templates.length && (
             <p className="muted">
               Nenhum modelo salvo. Escreva uma receita e use “Salvar como
@@ -195,7 +233,7 @@ export function PrescriptionWorkspace({
             </button>
           )}
           <p className="document-template-note">
-            Os modelos ficam na sua conta. Não inclua dados de pacientes.
+            Valem para todos os pacientes. Não inclua dados de pacientes.
           </p>
           {error && (
             <p role="alert" className="capture-error">
@@ -203,42 +241,6 @@ export function PrescriptionWorkspace({
             </p>
           )}
           {message && <output className="capture-notice">{message}</output>}
-        </section>
-        <section>
-          <h3>Receitas anteriores</h3>
-          {!previous.length && (
-            <p className="muted">Nenhuma receita anterior deste paciente.</p>
-          )}
-          <ul className="prescription-list">
-            {previous.map((row) => (
-              <li key={row.id}>
-                <strong>
-                  {formatDate(row)}
-                  {row.status === 'SIGNED' ? ' · Assinada' : ''}
-                </strong>
-                <span className="prescription-summary">
-                  {summary(row.text) || 'Sem texto'}
-                </span>
-                <div className="prescription-item-actions">
-                  <button
-                    className="text-button"
-                    disabled={docs.busy}
-                    onClick={() => openPrevious(row, true)}
-                    title="Nova receita com o mesmo texto e a data de hoje"
-                  >
-                    <Repeat size={13} /> Repetir
-                  </button>
-                  <button
-                    className="text-button"
-                    disabled={docs.busy}
-                    onClick={() => openPrevious(row, false)}
-                  >
-                    Abrir
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
         </section>
       </aside>
       <div className="prescription-editor">
