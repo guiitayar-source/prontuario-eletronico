@@ -64,7 +64,8 @@ export function MFAGate({
     void Promise.resolve()
       .then(refresh)
       .catch((e) => {
-        setAllowed(false);
+        // Falha passageira ao revalidar (ex.: rede na renovação do token) não derruba a tela
+        // já liberada, o que apagaria o trabalho em andamento; o banco segue exigindo aal2.
         setError(e.message);
         setReady(true);
       });
