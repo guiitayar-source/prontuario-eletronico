@@ -6,6 +6,7 @@ import { documentTemplate } from '@/lib/document-fields';
 import { apiFetch } from '@/lib/supabase/http';
 import { type Patient } from '@/lib/patient-fields';
 import { useSearchGuard } from '../topbar';
+import { useAnamnesator, useAnamnesatorTarget } from '../anamnesator';
 import type { SignatureSessionData } from '@/lib/signature/types';
 import { useConsultationTimer } from './use-consultation-timer';
 import { type RecordEntry } from './types';
@@ -386,6 +387,21 @@ export function useClinicalRecord({
   const isFinalizedUnsigned = !!current?.finalized_at && !isSigned;
   const finalized = !!current?.finalized_at || isSigned;
   const ready = !!current;
+  // A sessão do Anamnesator vive fora desta tela; aqui só se recebe o rascunho revisado.
+  const anamnesator = useAnamnesator();
+  useAnamnesatorTarget(
+    { id: patient.id, name: displayName },
+    !current || finalized,
+    (value, mode) => {
+      const next =
+        mode === 'replace'
+          ? value
+          : [latest.current.trim(), value].filter(Boolean).join('\n\n');
+      latest.current = next;
+      setText(next);
+      setStatus('Alterações pendentes');
+    },
+  );
   const visitDate = new Date(
     current?.created_at || Date.now(),
   ).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -474,5 +490,6 @@ export function useClinicalRecord({
     timer,
     save,
     finish,
+    anamnesator,
   };
 }

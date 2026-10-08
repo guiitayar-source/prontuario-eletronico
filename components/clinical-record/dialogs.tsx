@@ -1,27 +1,5 @@
 'use client';
-import { Mic } from 'lucide-react';
-import { AnamnesatorAssistant } from '../anamnesator-assistant';
 import type { useConsultationTimer } from './use-consultation-timer';
-
-/** Anamnesator: gravação e transcrição revisadas antes de entrar na evolução. */
-export function AnamnesatorDialog({
-  disabled,
-  onApply,
-}: {
-  disabled: boolean;
-  onApply: (text: string, mode: 'replace' | 'append') => void;
-}) {
-  return (
-    <>
-      <div className="modal-icon">
-        <Mic />
-      </div>
-      <h2 id="dialog-title">Anamnesator</h2>
-      <p>Grave, transcreva e revise cada etapa antes de incorporar o texto ao prontuário.</p>
-      <AnamnesatorAssistant disabled={disabled} onApply={onApply} />
-    </>
-  );
-}
 
 /** Confirmação de finalização sem assinatura digital. */
 export function FinalizeDialog({

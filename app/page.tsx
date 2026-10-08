@@ -6,6 +6,7 @@ import Agenda from '@/components/agenda';
 import Team from '@/components/team';
 import Settings from '@/components/settings';
 import { AppHeader, focusPatientSearch } from '@/components/topbar';
+import { AnamnesatorProvider } from '@/components/anamnesator';
 import type { Patient } from '@/lib/patient-fields';
 
 export default function Home() {
@@ -62,123 +63,125 @@ export default function Home() {
   };
   return (
     <AppHeader onSelectPatient={selectPatient}>
-      {error && (
-        <div
-          role="alert"
-          className="capture-error"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={() => setError('')}
+      <AnamnesatorProvider>
+        {error && (
+          <div
+            role="alert"
+            className="capture-error"
             style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'inherit',
-              font: 'inherit',
-              fontSize: '20px',
-              lineHeight: 1,
-              padding: '0 8px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
             }}
-            aria-label="Fechar mensagem"
           >
-            ×
-          </button>
-        </div>
-      )}
-      {patient ? (
-        <Consultation
-          key={patient.id}
-          patient={patient}
-          appointmentId={appointmentId}
-          onHome={() => {
-            setPatient(null);
-            setSection('patients');
-            setError('');
-          }}
-          onUpdated={setPatient}
-          onAgenda={() => {
-            setPatient(null);
-            setSection('agenda');
-            setError('');
-          }}
-          onSettings={() => {
-            setPatient(null);
-            setSection('settings');
-            setError('');
-          }}
-        />
-      ) : section === 'settings' ? (
-        <Settings
-          onPatients={() => {
-            setError('');
-            setSection('patients');
-          }}
-          onAgenda={() => {
-            setError('');
-            setSection('agenda');
-          }}
-          onTeam={() => {
-            setError('');
-            setSection('team');
-          }}
-        />
-      ) : section === 'agenda' ? (
-        <Agenda
-          onPatients={() => {
-            setError('');
-            setSection('patients');
-          }}
-          onOpenPatient={open}
-          onTeam={() => {
-            setError('');
-            setSection('team');
-          }}
-          onSettings={() => {
-            setError('');
-            setSection('settings');
-          }}
-        />
-      ) : section === 'team' ? (
-        <Team
-          onPatients={() => {
-            setError('');
-            setSection('patients');
-          }}
-          onAgenda={() => {
-            setError('');
-            setSection('agenda');
-          }}
-          onSettings={() => {
-            setError('');
-            setSection('settings');
-          }}
-        />
-      ) : (
-        <Registry
-          onOpen={selectPatient}
-          onOpenId={open}
-          onAgenda={() => {
-            setError('');
-            setSection('agenda');
-          }}
-          onTeam={() => {
-            setError('');
-            setSection('team');
-          }}
-          onSettings={() => {
-            setError('');
-            setSection('settings');
-          }}
-          onConsultation={focusPatientSearch}
-        />
-      )}
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError('')}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'inherit',
+                font: 'inherit',
+                fontSize: '20px',
+                lineHeight: 1,
+                padding: '0 8px',
+              }}
+              aria-label="Fechar mensagem"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        {patient ? (
+          <Consultation
+            key={patient.id}
+            patient={patient}
+            appointmentId={appointmentId}
+            onHome={() => {
+              setPatient(null);
+              setSection('patients');
+              setError('');
+            }}
+            onUpdated={setPatient}
+            onAgenda={() => {
+              setPatient(null);
+              setSection('agenda');
+              setError('');
+            }}
+            onSettings={() => {
+              setPatient(null);
+              setSection('settings');
+              setError('');
+            }}
+          />
+        ) : section === 'settings' ? (
+          <Settings
+            onPatients={() => {
+              setError('');
+              setSection('patients');
+            }}
+            onAgenda={() => {
+              setError('');
+              setSection('agenda');
+            }}
+            onTeam={() => {
+              setError('');
+              setSection('team');
+            }}
+          />
+        ) : section === 'agenda' ? (
+          <Agenda
+            onPatients={() => {
+              setError('');
+              setSection('patients');
+            }}
+            onOpenPatient={open}
+            onTeam={() => {
+              setError('');
+              setSection('team');
+            }}
+            onSettings={() => {
+              setError('');
+              setSection('settings');
+            }}
+          />
+        ) : section === 'team' ? (
+          <Team
+            onPatients={() => {
+              setError('');
+              setSection('patients');
+            }}
+            onAgenda={() => {
+              setError('');
+              setSection('agenda');
+            }}
+            onSettings={() => {
+              setError('');
+              setSection('settings');
+            }}
+          />
+        ) : (
+          <Registry
+            onOpen={selectPatient}
+            onOpenId={open}
+            onAgenda={() => {
+              setError('');
+              setSection('agenda');
+            }}
+            onTeam={() => {
+              setError('');
+              setSection('team');
+            }}
+            onSettings={() => {
+              setError('');
+              setSection('settings');
+            }}
+            onConsultation={focusPatientSearch}
+          />
+        )}
+      </AnamnesatorProvider>
     </AppHeader>
   );
 }

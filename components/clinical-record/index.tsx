@@ -25,7 +25,7 @@ import { date, type RecordEntry } from './types';
 import { EvolutionStatusBanner } from './status-banner';
 import { EvolutionActions } from './actions';
 import { RecordSidebar } from './sidebar';
-import { AnamnesatorDialog, FinalizeDialog, AddendumDialog } from './dialogs';
+import { FinalizeDialog, AddendumDialog } from './dialogs';
 import { DialogFrame } from '../dialog-frame';
 import { useClinicalRecord } from './use-clinical-record';
 
@@ -91,6 +91,7 @@ export default function ClinicalRecord({
     timer,
     save,
     finish,
+    anamnesator,
   } = useClinicalRecord({ patient, appointmentId });
   return (
     <div className="app-shell">
@@ -287,8 +288,16 @@ export default function ClinicalRecord({
                         </button>
                       )}
                     </div>
-                    <button onClick={() => setModal('anamnesator')}>
-                      <Mic size={16} /> Anamnesator <ArrowUpRight size={14} />
+                    <button onClick={anamnesator.show}>
+                      <Mic size={16} /> Anamnesator
+                      {anamnesator.summary &&
+                      anamnesator.patientId === patient.id ? (
+                        <span className="anamnesator-badge">
+                          {anamnesator.summary}
+                        </span>
+                      ) : (
+                        <ArrowUpRight size={14} />
+                      )}
                     </button>
                   </div>
                   {error && (
@@ -443,33 +452,15 @@ export default function ClinicalRecord({
           className={
             modal === 'contexto'
               ? 'modal context-modal'
-              : modal === 'anamnesator'
-                ? 'modal anamnesator-modal'
-                : modal === 'documento'
-                  ? 'modal document-modal'
-                  : modal === 'receita'
-                    ? 'modal document-modal prescription-modal'
-                    : 'modal'
+              : modal === 'documento'
+                ? 'modal document-modal'
+                : modal === 'receita'
+                  ? 'modal document-modal prescription-modal'
+                  : 'modal'
           }
           onClose={closeModal}
         >
-          {modal === 'anamnesator' ? (
-            <AnamnesatorDialog
-              disabled={!current || finalized}
-              onApply={(value, mode) => {
-                const next =
-                  mode === 'replace'
-                    ? value
-                    : [latest.current.trim(), value]
-                        .filter(Boolean)
-                        .join('\n\n');
-                latest.current = next;
-                setText(next);
-                setStatus('Alterações pendentes');
-                closeModal();
-              }}
-            />
-          ) : modal === 'contexto' ? (
+          {modal === 'contexto' ? (
             <ClinicalContextEditor
               context={clinicalContext}
               onClose={closeModal}

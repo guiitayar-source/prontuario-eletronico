@@ -309,12 +309,54 @@
   font-size: 12px;
   color: var(--text-muted);
 }
-.modal.anamnesator-modal {
-  width: min(960px, calc(100vw - 32px));
-  max-width: 960px;
-  max-height: calc(100vh - 32px);
+/* Anamnesator: painel flutuante não modal (o prontuário segue navegável por trás). Fica sob os modais. */
+.anamnesator-dock {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 25;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
   overflow-y: auto;
+  padding: 20px 22px 22px;
+  background: var(--surface-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 25px 90px rgba(0, 0, 0, 0.5);
 }
+.anamnesator-dock > header { display: flex; align-items: flex-start; gap: 12px; color: var(--accent); }
+.anamnesator-dock > header > svg { margin-top: 3px; flex: none; }
+.anamnesator-dock > header > div { flex: 1; min-width: 0; }
+.anamnesator-dock h2 { margin: 0; font-size: 17px; color: var(--text-strong); }
+.anamnesator-dock header p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
+.anamnesator-icon-button { padding: 6px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-muted); cursor: pointer; }
+.anamnesator-icon-button:hover { background: var(--surface); color: var(--text); }
+.anamnesator-dock .anamnesator-assistant { margin-top: 14px; }
+.anamnesator-pill {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  background: var(--surface-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.anamnesator-pill > span { width: 9px; height: 9px; flex: none; border-radius: 50%; background: var(--accent); }
+.anamnesator-pill > span.recording { background: var(--danger); animation: anamnesator-blink 1.4s ease-in-out infinite; }
+.anamnesator-pill small { overflow: hidden; color: var(--text-muted); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.anamnesator-badge { padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 600; }
+@keyframes anamnesator-blink { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .anamnesator-pill > span.recording { animation: none; } }
 .anamnesator-assistant { display: grid; gap: 16px; margin-top: 18px; }
 .anamnesator-status { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 13px; }
 .anamnesator-status > span { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); }
