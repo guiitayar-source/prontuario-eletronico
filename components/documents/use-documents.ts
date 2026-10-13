@@ -8,6 +8,12 @@ import {
 } from '@/lib/document-fields';
 import type { Patient } from '@/lib/patient-fields';
 import type { SignatureSessionData } from '@/lib/signature/types';
+import {
+  fetchBirdIdAuthorizationUrl,
+  openBirdIdTab,
+  sendTabToBirdId,
+  useBirdIdResult,
+} from '@/lib/signature/birdid-tab';
 export function useDocuments(patient: Patient, enabled = true) {
   const [rows, setRows] = useState<ClinicalDocument[]>([]),
     [profile, setProfile] = useState<DocumentProfile>({
@@ -42,7 +48,36 @@ export function useDocuments(patient: Patient, enabled = true) {
     }
   }
 
+  // Autenticação feita em outra aba: esta página continua como estava.
+  useBirdIdResult((result) => {
+    if (!enabled) return;
+    if (result.status === 'connected') {
+      void checkSignatureSession();
+      setSignatureNotice({
+        type: 'success',
+        message: '✓ Certificado digital Bird ID conectado com sucesso para esta sessão!',
+      });
+    } else {
+      setSignatureNotice({
+        type: 'error',
+        message: `Falha na conexão Bird ID: ${result.message}`,
+      });
+    }
+  });
+
   async function connectBirdId() {
+    // Aba aberta no clique, antes de qualquer await; o documento aberto segue na tela.
+    const tab = openBirdIdTab();
+    if (tab) {
+      try {
+        setError('');
+        sendTabToBirdId(tab, await fetchBirdIdAuthorizationUrl());
+      } catch (e) {
+        tab.close();
+        setError((e as Error).message);
+      }
+      return;
+    }
     try {
       setError('');
       // Salva o documento aberto para reabri-lo na volta da autenticação, pronto para assinar.

@@ -8,6 +8,12 @@ import { type Patient } from '@/lib/patient-fields';
 import { useSearchGuard } from '../topbar';
 import { useAnamnesator, useAnamnesatorTarget } from '../anamnesator';
 import type { SignatureSessionData } from '@/lib/signature/types';
+import {
+  fetchBirdIdAuthorizationUrl,
+  openBirdIdTab,
+  sendTabToBirdId,
+  useBirdIdResult,
+} from '@/lib/signature/birdid-tab';
 import { useConsultationTimer } from './use-consultation-timer';
 import { type RecordEntry } from './types';
 
@@ -118,6 +124,16 @@ export function useClinicalRecord({
       void checkSignatureSession();
     }
   }, [medical]);
+  // Autenticação feita em outra aba: esta página (e o Anamnesator) continua como estava.
+  useBirdIdResult((result) => {
+    if (!medical) return;
+    if (result.status === 'connected') {
+      void checkSignatureSession();
+      setStatus('Bird ID conectado — já é possível assinar a evolução.');
+    } else {
+      setError(result.message);
+    }
+  });
   useEffect(() => {
     let active = true;
     if (medical)
@@ -242,6 +258,17 @@ export function useClinicalRecord({
   }
   async function handleConnectAndSign() {
     if (!current || busy || signing) return;
+    // Aba separada: não recarrega esta página, então nada precisa ser salvo antes.
+    const tab = openBirdIdTab();
+    if (tab) {
+      try {
+        sendTabToBirdId(tab, await fetchBirdIdAuthorizationUrl());
+      } catch (e) {
+        tab.close();
+        setError((e as Error).message);
+      }
+      return;
+    }
     setSigning(true);
     try {
       if (!(await prepareEvolutionForSignature())) return;
