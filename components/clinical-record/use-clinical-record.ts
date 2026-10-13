@@ -401,6 +401,7 @@ export function useClinicalRecord({
       setText(next);
       setStatus('Alterações pendentes');
     },
+    current?.id,
   );
   const visitDate = new Date(
     current?.created_at || Date.now(),

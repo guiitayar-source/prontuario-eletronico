@@ -2,6 +2,10 @@
 
 Sistema web moderno para clínicas e consultórios com foco em prontuário eletrônico, acompanhamento longitudinal de pacientes, exames estruturados com suporte a IA multimodal, prescrições médicas em 2 vias, agenda e interoperabilidade em saúde (FHIR R4 / LGPD).
 
+A integração nativa com o Anamnesator Android mantém o áudio no caminho privado
+Tailscale e disponibiliza somente o texto no atendimento, no celular e no notebook.
+Consulte [o fluxo, os limites e as etapas de ativação](docs/ANAMNESATOR_NATIVE.md).
+
 ---
 
 ## 🛠️ Stack Tecnológica & Arquitetura

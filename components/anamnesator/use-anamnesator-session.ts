@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { apiFetch } from '@/lib/supabase/http';
 import {
   bridgeJson,
   extensionFor,
@@ -35,9 +36,20 @@ export function useAnamnesatorSession() {
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const destination = useRef<{
+    id: string;
+    consultation: string;
+    revision: number;
+  } | null>(null);
+  const [consultationId, setConsultationId] = useState<string>();
+  const [publicationError, setPublicationError] = useState('');
 
-  const transcriptionProviders = capabilities?.transcription_providers ?? [];
-  const draftProviders = capabilities?.draft_providers ?? [];
+  const transcriptionProviders =
+    capabilities?.transcription_providers.filter(
+      (p) => p.privacy === 'local',
+    ) ?? [];
+  const draftProviders =
+    capabilities?.draft_providers.filter((p) => p.privacy === 'local') ?? [];
   const selectedTranscription = transcriptionProviders.find(
     (item) => item.id === transcriptionProvider,
   );
@@ -70,9 +82,11 @@ export function useAnamnesatorSession() {
       const caps = (await bridgeJson('/v1/capabilities')) as Capabilities;
       setCapabilities(caps);
       const transcription = caps.transcription_providers.find(
-        (p) => p.configured,
+        (p) => p.configured && p.privacy === 'local',
       );
-      const generation = caps.draft_providers.find((p) => p.configured);
+      const generation = caps.draft_providers.find(
+        (p) => p.configured && p.privacy === 'local',
+      );
       if (transcription) {
         setTranscriptionProvider(transcription.id);
         setTranscriptionModel(transcription.models[0]?.id || '');
@@ -99,7 +113,7 @@ export function useAnamnesatorSession() {
     stream.current = null;
   }
 
-  async function startRecording(owner: SessionPatient) {
+  async function startRecording(owner: SessionPatient, consultation?: string) {
     setError('');
     try {
       const media = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -132,6 +146,11 @@ export function useAnamnesatorSession() {
       };
       next.start(1000);
       setPatient(owner);
+      setConsultationId(consultation);
+      destination.current = consultation
+        ? { id: crypto.randomUUID(), consultation, revision: 0 }
+        : null;
+      setPublicationError('');
       setAudio(null);
       setTranscript('');
       setDraft('');
@@ -169,6 +188,9 @@ export function useAnamnesatorSession() {
     releaseRecorder();
     chunks.current = [];
     setPatient(null);
+    setConsultationId(undefined);
+    destination.current = null;
+    setPublicationError('');
     setAudio(null);
     setTranscript('');
     setDraft('');
@@ -203,7 +225,9 @@ export function useAnamnesatorSession() {
       });
       if (typeof job.job_id !== 'string')
         throw new Error('O Anamnesator não devolveu um identificador válido.');
-      setTranscript(await waitForJob(job.job_id, 'transcription'));
+      const text = await waitForJob(job.job_id, 'transcription');
+      setTranscript(text);
+      await publish(text, '');
       setStatus('Transcrição recebida. Revise-a antes de gerar o rascunho.');
     } catch (cause) {
       setError((cause as Error).message);
@@ -234,13 +258,47 @@ export function useAnamnesatorSession() {
       });
       if (typeof job.job_id !== 'string')
         throw new Error('O Anamnesator não devolveu um identificador válido.');
-      setDraft(await waitForJob(job.job_id, 'anamnese'));
+      const text = await waitForJob(job.job_id, 'anamnese');
+      setDraft(text);
+      await publish(transcript, text);
       setStatus('Rascunho recebido. Revise-o antes de inserir na evolução.');
     } catch (cause) {
       setError((cause as Error).message);
       setStatus('Falha na geração do rascunho.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function publish(text = transcript, generated = draft) {
+    const current = destination.current;
+    if (!current || !text.trim()) return;
+    const revision = ++current.revision;
+    try {
+      const response = await apiFetch(
+        '/api/anamnesator?action=desktop-result',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Anamnesator-Action': '1',
+          },
+          body: JSON.stringify({
+            id: current.id,
+            consultation_id: current.consultation,
+            revision,
+            transcription: text,
+            draft: generated,
+          }),
+        },
+      );
+      if (!response.ok) throw new Error();
+      if (current.revision === revision) setPublicationError('');
+    } catch {
+      if (current.revision === revision)
+        setPublicationError(
+          'O texto está nesta sessão, mas ainda não foi salvo para os outros dispositivos. Tente salvar novamente antes de fechar.',
+        );
     }
   }
 
@@ -267,6 +325,9 @@ export function useAnamnesatorSession() {
     error,
     status,
     patient,
+    consultationId,
+    publicationError,
+    publish,
     recording,
     audio,
     transcript,

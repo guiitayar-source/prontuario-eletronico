@@ -1,5 +1,6 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { AnamnesatorNativePanel } from './native-panel';
 import {
   Mic,
   Minus,
@@ -30,11 +31,15 @@ export function AnamnesatorDock({
   onMinimize: () => void;
 }) {
   const { capabilities, connect } = session;
+  const [route, setRoute] = useState<'local' | 'native'>('local');
   useEffect(() => {
-    if (open && !capabilities) void connect();
+    if (/Android/i.test(navigator.userAgent)) setRoute('native');
+  }, []);
+  useEffect(() => {
+    if (open && route === 'local' && !capabilities) void connect();
     // connect só depende de capabilities/connecting, lidos na própria função.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, capabilities]);
+  }, [open, capabilities, route]);
 
   if (!open) {
     if (!session.active) return null;
@@ -78,7 +83,32 @@ export function AnamnesatorDock({
           <Minus size={18} />
         </button>
       </header>
-      <AnamnesatorPanel session={session} target={target} />
+      <div className="anamnesator-controls">
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={route === 'local'}
+          onClick={() => setRoute('local')}
+        >
+          Neste computador
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={route === 'native'}
+          onClick={() => setRoute('native')}
+        >
+          Celular e textos salvos
+        </button>
+      </div>
+      {route === 'native' ? (
+        <AnamnesatorNativePanel
+          key={target?.consultationId || 'none'}
+          target={target}
+        />
+      ) : (
+        <AnamnesatorPanel session={session} target={target} />
+      )}
     </section>
   );
 }
@@ -117,7 +147,12 @@ function AnamnesatorPanel({
   } = session;
   const capturing = recording === 'recording' || recording === 'paused';
   const samePatient = !!target && !!patient && target.patient.id === patient.id;
-  const canApply = samePatient && !target.disabled && !!draft.trim() && !busy;
+  const canApply =
+    samePatient &&
+    target.consultationId === session.consultationId &&
+    !target.disabled &&
+    !!draft.trim() &&
+    !busy;
 
   function record() {
     if (!target) return;
@@ -128,7 +163,7 @@ function AnamnesatorPanel({
       )
     )
       return;
-    void session.startRecording(target.patient);
+    void session.startRecording(target.patient, target.consultationId);
   }
 
   function apply(mode: 'replace' | 'append') {
@@ -154,6 +189,11 @@ function AnamnesatorPanel({
       {error && (
         <div className="capture-error" role="alert">
           {error}
+        </div>
+      )}
+      {session.publicationError && (
+        <div className="capture-error" role="alert">
+          {session.publicationError}
         </div>
       )}
       {patient && !samePatient && (
@@ -330,6 +370,16 @@ function AnamnesatorPanel({
           placeholder="A transcrição aparecerá aqui."
         />
       </label>
+      {transcript.trim() && (
+        <button
+          type="button"
+          className="secondary"
+          disabled={busy}
+          onClick={() => void session.publish()}
+        >
+          Salvar texto no PsyWrite
+        </button>
+      )}
       <button
         type="button"
         className="secondary anamnesator-generate"

@@ -20,6 +20,7 @@ export type ApplyMode = 'replace' | 'append';
 /** Atendimento aberto na tela, onde o rascunho pode ser inserido. */
 export type AnamnesatorTarget = {
   patient: SessionPatient;
+  consultationId?: string;
   disabled: boolean;
   apply: (text: string, mode: ApplyMode) => void;
 };
@@ -74,6 +75,7 @@ export function useAnamnesatorTarget(
   patient: SessionPatient,
   disabled: boolean,
   apply: AnamnesatorTarget['apply'],
+  consultationId?: string,
 ) {
   const register = useContext(AnamnesatorContext)?.register;
   const latest = useRef(apply);
@@ -84,8 +86,9 @@ export function useAnamnesatorTarget(
     if (!register) return;
     return register({
       patient: { id: patient.id, name: patient.name },
+      consultationId,
       disabled,
       apply: (text, mode) => latest.current(text, mode),
     });
-  }, [register, patient.id, patient.name, disabled]);
+  }, [register, patient.id, patient.name, disabled, consultationId]);
 }

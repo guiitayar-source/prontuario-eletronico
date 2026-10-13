@@ -26,6 +26,7 @@
     "test:attachment-delete": "node tests/attachment-delete-db.mjs",
     "test:signature": "node tests/digital-signature.test.mjs",
     "test:signature-flow": "node tests/evolution-save-before-sign.test.mjs",
+    "test:anamnesator": "node tests/anamnesator-native-db.mjs && node tests/anamnesator-native-http.test.mjs && node tests/anamnesator-private-session.test.mjs",
     "verify-signature": "node scripts/verify-signature.mjs",
     "backup:create": "node --env-file=.env.local scripts/backup.mjs create",
     "backup:verify": "node scripts/backup.mjs verify"
