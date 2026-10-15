@@ -1,0 +1,11 @@
+# Copie para ~/.config/systemd/user/ e ajuste o caminho do projeto (ver OPERACAO_SEGURA.md).
+[Unit]
+Description=Backup criptografado do PsyWrite
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/Projetos/prontuario-eletronico/scripts/backup-scheduled.sh
+TimeoutStartSec=2h
+Nice=10

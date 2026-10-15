@@ -56,6 +56,33 @@ No terminal, dentro da pasta do projeto:
 
 **Destino escolhido pelo titular:** `/home/Guilherme/Backups/PsyWrite`, no disco do Arch. A pasta foi criada com permissão privada. Para iniciar o assistente (solicita senhas ocultas no terminal): `bash scripts/backup-interactive.sh`. A segunda cópia independente fica pendente.
 
+### Backup diário automático (timer do systemd no Arch)
+
+Escolha do titular em 15/10/2026: timer no Arch agora; Supabase Pro (backup diário do próprio
+Supabase) quando houver colegas usando. `scripts/backup-scheduled.sh` faz o mesmo que o assistente,
+sem perguntas: sobe o Supabase local se preciso, cria a cópia `--remote`, roda `verify`, mantém as
+30 mais recentes (`PSYWRITE_BACKUP_KEEP`) e desliga o Supabase local se foi ele quem subiu. Em
+falha, avisa por `notify-send` e o detalhe fica em `journalctl --user -u psywrite-backup`.
+
+Instalação, uma vez, no Arch:
+
+```bash
+mkdir -p ~/.config/psywrite ~/.config/systemd/user
+install -m 600 /dev/null ~/.config/psywrite/backup.env
+# Edite e preencha: PSYWRITE_BACKUP_PASSPHRASE='...' e PSYWRITE_DB_URL='URI do Session pooler'
+cp scripts/systemd/psywrite-backup.{service,timer} ~/.config/systemd/user/
+# Se o projeto não estiver em ~/Projetos/prontuario-eletronico, corrija ExecStart no .service.
+systemctl --user daemon-reload
+systemctl --user enable --now psywrite-backup.timer
+systemctl --user start psywrite-backup.service   # primeira execução agora, para conferir
+loginctl enable-linger "$USER"                   # roda mesmo sem sessão aberta
+```
+
+Troca consciente: a senha do backup passa a ficar em disco (`~/.config/psywrite/backup.env`,
+permissão 600, fora da pasta de backups). Quem tiver acesso à sua conta no Arch abre as cópias
+locais; a criptografia continua protegendo as cópias levadas para fora. Por isso a segunda cópia
+externa segue pendente e deve ser feita com regularidade.
+
 Em 21/09/2026, o titular confirmou que este Arch é o PC de casa. O fluxo inicial é Supabase → PC de casa, com criptografia local, sem passagem pelo notebook. O ensaio `npm run test:readiness` passou nesta data: criação do pacote, restauração em banco e Storage descartáveis, conferência dos bytes dos anexos e rejeição de senha errada e pacote corrompido. A primeira cópia da origem hospedada também foi criada nessa data em `/home/Guilherme/Backups/PsyWrite`, com 13.176.010 bytes e permissão `0600`, após o ensaio de restauração executado pelo assistente.
 
 Para testar os comandos manualmente:
@@ -120,5 +147,5 @@ clínica nova.
 Em 01/10/2026 o titular confirmou o MFA resolvido e o backup feito, e liberou o uso com dados reais. Seguem em aberto:
 
 - Aprovação da política de retenção, acesso administrativo a anexos e responsabilidades de auditoria/privacidade.
-- Definir rotina e responsável pelos backups, monitorar falhas, medir duração de restauração e perda de dados tolerável. O script não é um serviço agendado.
+- Backups: rotina diária pelo timer do systemd (acima). Falta a segunda cópia externa, medir duração de restauração e definir a perda de dados tolerável.
 - Revisar ambientes, e-mails, contas privilegiadas e logs de leitura; corrigir qualquer lacuna apontada nessa revisão. Validar portabilidade no sistema destinatário quando definido.
