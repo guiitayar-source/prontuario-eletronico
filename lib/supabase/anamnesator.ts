@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { adminClient } from './admin.ts';
+import { assertFeature } from './features.ts';
 import {
   body,
   boundedBody,
@@ -25,6 +26,7 @@ function id(value: unknown): string {
 export const anamnesator = handle(async (request, ctx) => {
   if (!['owner', 'doctor'].includes(ctx.role))
     throw new HttpError(403, 'Acesso exclusivo da equipe médica.');
+  await assertFeature(ctx, 'anamnesator');
   const url = new URL(request.url);
   if (request.method === 'GET') {
     const consultation = id(url.searchParams.get('consultationId'));
