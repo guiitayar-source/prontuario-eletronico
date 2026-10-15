@@ -15,6 +15,7 @@ import {
 } from '../openai-files.ts';
 import { assertAiQuota, auditAiFileRequest } from './ai-limit.ts';
 import { assertFeature } from './features.ts';
+import { neutralFileName } from '../ai/pseudonymize.ts';
 import { body, check, handle, HttpError, json, writeGuard } from './server.ts';
 
 type SharpInstance = {
@@ -421,7 +422,7 @@ export const aiFiles = handle(async (request, { db, clinic, role, user }) => {
     const result = await askOpenAI({
       bytes: aiBytes,
       mime: aiMime,
-      name: attachment.name,
+      name: neutralFileName(attachment.name),
       model,
       instructions: transcriptionInstructions,
       schemaName: 'clinical_document_transcription',
@@ -475,7 +476,7 @@ export const aiFiles = handle(async (request, { db, clinic, role, user }) => {
   const result = await askOpenAI({
     bytes: aiBytes,
     mime: aiMime,
-    name: attachment.name,
+    name: neutralFileName(attachment.name),
     model,
     instructions: extractionInstructions(definitions),
     schemaName: 'exam_extraction_proposal',
