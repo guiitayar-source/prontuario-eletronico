@@ -54,9 +54,13 @@ function fixture({ failure, changedDuringSave = false, finalized = false, clean 
     current, patient: { id: 'synthetic-patient' }, saved, latest,
     flight: { current: flight }, blocked: { current: blocked }, busy: false, signing: false,
     // Sem aba nova (pop-up bloqueado): exercita o caminho que salva e redireciona esta aba.
-    openBirdIdTab: () => null,
-    fetchBirdIdAuthorizationUrl: async () => 'https://provider.example/authorize',
-    sendTabToBirdId: () => {},
+    openSignatureTab: () => null,
+    signature: { id: 'vidaas', label: 'VIDaaS' },
+    fetchSignatureAuthorizationUrl: async (provider) => {
+      const r = await apiFetch(`/api/digital-signature/birdid/authorize?provider=${provider}`);
+      return (await r.json()).authorizationUrl;
+    },
+    sendTabToProvider: () => {},
     apiFetch, window, sessionStorage: { setItem: (key, value) => storage.set(key, value) },
     setCurrent: () => {}, setRows: () => {}, setFinalizing: () => {}, setBusy: () => {}, setAddendum: () => {},
     setText: (value) => { state.text = value; },
@@ -111,6 +115,7 @@ for (const handler of ['handleSignEvolution', 'handleConnectAndSign']) {
     assert.equal(f.state.signing, false);
     if (handler === 'handleConnectAndSign') {
       assert.equal(f.storage.get('birdid_return_evolution_id'), 'synthetic-evolution');
+      assert.ok(f.calls[1].url.endsWith('?provider=vidaas'));
       assert.equal(f.window.location.href, 'https://provider.example/authorize');
     }
   });

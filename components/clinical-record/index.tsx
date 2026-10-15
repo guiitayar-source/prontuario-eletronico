@@ -74,6 +74,7 @@ export default function ClinicalRecord({
     persist,
     handleSignEvolution,
     handleConnectAndSign,
+    signatureLabel,
     leave,
     create,
     append,
@@ -368,6 +369,7 @@ export default function ClinicalRecord({
                     signing={signing}
                     onSign={() => void handleSignEvolution()}
                     onConnect={() => void handleConnectAndSign()}
+                    signatureLabel={signatureLabel}
                     onShowDetails={() => setModal('assinatura-detalhes')}
                   />
                   {current?.consultation_addenda?.map((a) => (
@@ -422,6 +424,7 @@ export default function ClinicalRecord({
                     onSaveDraft={() => void persist(false)}
                     onSign={() => void handleSignEvolution()}
                     onConnect={() => void handleConnectAndSign()}
+                    signatureLabel={signatureLabel}
                     onFinalizeUnsigned={() => setModal('finalizar')}
                   />
                 </section>

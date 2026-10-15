@@ -19,6 +19,7 @@ export function EvolutionActions({
   onSaveDraft,
   onSign,
   onConnect,
+  signatureLabel,
   onFinalizeUnsigned,
 }: {
   isSigned: boolean;
@@ -37,6 +38,7 @@ export function EvolutionActions({
   onSaveDraft: () => void;
   onSign: () => void;
   onConnect: () => void;
+  signatureLabel: string;
   onFinalizeUnsigned: () => void;
 }) {
   return (
@@ -101,7 +103,7 @@ export function EvolutionActions({
               disabled={busy || signing}
               onClick={onConnect}
             >
-              <KeyRound size={17} /> Conectar Bird ID para assinar
+              <KeyRound size={17} /> Conectar {signatureLabel} para assinar
             </button>
           )}
         </div>
@@ -148,7 +150,7 @@ export function EvolutionActions({
               disabled={!ready || busy || signing || !hasText}
               onClick={onConnect}
             >
-              <KeyRound size={17} /> Conectar Bird ID para assinar
+              <KeyRound size={17} /> Conectar {signatureLabel} para assinar
             </button>
           )}
 

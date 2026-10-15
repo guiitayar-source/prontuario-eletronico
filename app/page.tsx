@@ -8,7 +8,7 @@ import Settings from '@/components/settings';
 import { AppHeader, focusPatientSearch } from '@/components/topbar';
 import { AnamnesatorProvider } from '@/components/anamnesator';
 import type { Patient } from '@/lib/patient-fields';
-import { announceBirdIdResult } from '@/lib/signature/birdid-tab';
+import { announceSignatureResult } from '@/lib/signature/signature-tab';
 
 export default function Home() {
   const [appointmentId, setAppointmentId] = useState<string | undefined>();
@@ -33,9 +33,9 @@ export default function Home() {
 
       // Se a autenticação foi feita em outra aba, avisa a aba original (que fecha esta).
       if (signatureError)
-        announceBirdIdResult({ status: 'error', message: signatureError });
+        announceSignatureResult({ status: 'error', message: signatureError });
       else if (signatureStatus === 'connected')
-        announceBirdIdResult({ status: 'connected' });
+        announceSignatureResult({ status: 'connected' });
 
       if (signatureError) {
         setError(signatureError);

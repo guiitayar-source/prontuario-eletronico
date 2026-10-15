@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { IdCard } from 'lucide-react';
 import { apiFetch } from '@/lib/supabase/http';
 import type { DocumentProfile } from '@/lib/document-fields';
+import { SignatureProviderPicker } from '@/components/signature-provider';
 
 const empty: DocumentProfile = {
   physician_name: '',
@@ -124,10 +125,11 @@ export function ProfessionalProfileCard() {
             <label>
               CPF do certificado digital
               <input
-                value={profile.cpf || 'Definido ao conectar o Bird ID'}
+                value={profile.cpf || 'Definido ao conectar o certificado digital'}
                 readOnly
               />
             </label>
+            <SignatureProviderPicker />
           </fieldset>
           {error && (
             <p role="alert" className="capture-error">

@@ -9,12 +9,14 @@ import {
 import type { Patient } from '@/lib/patient-fields';
 import type { SignatureSessionData } from '@/lib/signature/types';
 import {
-  fetchBirdIdAuthorizationUrl,
-  openBirdIdTab,
-  sendTabToBirdId,
-  useBirdIdResult,
-} from '@/lib/signature/birdid-tab';
+  fetchSignatureAuthorizationUrl,
+  openSignatureTab,
+  sendTabToProvider,
+  useSignatureResult,
+} from '@/lib/signature/signature-tab';
+import { useSignatureProvider } from '@/components/signature-provider';
 export function useDocuments(patient: Patient, enabled = true) {
+  const signature = useSignatureProvider(enabled);
   const [rows, setRows] = useState<ClinicalDocument[]>([]),
     [profile, setProfile] = useState<DocumentProfile>({
       physician_name: '',
@@ -49,29 +51,29 @@ export function useDocuments(patient: Patient, enabled = true) {
   }
 
   // Autenticação feita em outra aba: esta página continua como estava.
-  useBirdIdResult((result) => {
+  useSignatureResult((result) => {
     if (!enabled) return;
     if (result.status === 'connected') {
       void checkSignatureSession();
       setSignatureNotice({
         type: 'success',
-        message: '✓ Certificado digital Bird ID conectado com sucesso para esta sessão!',
+        message: '✓ Certificado digital conectado com sucesso para esta sessão!',
       });
     } else {
       setSignatureNotice({
         type: 'error',
-        message: `Falha na conexão Bird ID: ${result.message}`,
+        message: `Falha na conexão do certificado digital: ${result.message}`,
       });
     }
   });
 
-  async function connectBirdId() {
+  async function connectSignature() {
     // Aba aberta no clique, antes de qualquer await; o documento aberto segue na tela.
-    const tab = openBirdIdTab();
+    const tab = openSignatureTab(signature.label);
     if (tab) {
       try {
         setError('');
-        sendTabToBirdId(tab, await fetchBirdIdAuthorizationUrl());
+        sendTabToProvider(tab, await fetchSignatureAuthorizationUrl(signature.id));
       } catch (e) {
         tab.close();
         setError((e as Error).message);
@@ -89,24 +91,19 @@ export function useDocuments(patient: Patient, enabled = true) {
         if (doc && doc.status !== 'SIGNED')
           sessionStorage.setItem('birdid_return_document_id', doc.id);
       }
-      const r = await apiFetch('/api/digital-signature/birdid/authorize');
-      const data = (await r.json()) as { authorizationUrl?: string; error?: string };
-      if (!r.ok) throw new Error(data.error || 'Falha ao iniciar autenticação Bird ID');
-      if (data.authorizationUrl) {
-        window.location.href = data.authorizationUrl;
-      }
+      window.location.href = await fetchSignatureAuthorizationUrl(signature.id);
     } catch (e) {
       setError((e as Error).message);
     }
   }
 
-  async function disconnectBirdId() {
+  async function disconnectSignature() {
     try {
       await apiFetch('/api/digital-signature/session', { method: 'DELETE' });
       setSignatureSession(null);
       setSignatureNotice({
         type: 'success',
-        message: 'Sessão Bird ID desconectada.',
+        message: 'Certificado digital desconectado.',
       });
     } catch (e) {
       setError((e as Error).message);
@@ -202,7 +199,7 @@ export function useDocuments(patient: Patient, enabled = true) {
         queueMicrotask(() => {
           setSignatureNotice({
             type: 'success',
-            message: '✓ Certificado digital Bird ID conectado com sucesso para esta sessão!',
+            message: '✓ Certificado digital conectado com sucesso para esta sessão!',
           });
         });
         window.history.replaceState({}, '', window.location.pathname);
@@ -210,7 +207,7 @@ export function useDocuments(patient: Patient, enabled = true) {
         queueMicrotask(() => {
           setSignatureNotice({
             type: 'error',
-            message: `Falha na conexão Bird ID: ${sigError}`,
+            message: `Falha na conexão do certificado digital: ${sigError}`,
           });
         });
         window.history.replaceState({}, '', window.location.pathname);
@@ -344,7 +341,7 @@ export function useDocuments(patient: Patient, enabled = true) {
   }
   async function sign(documentId: string) {
     if (!signatureSession) {
-      setError('Conecte sua conta Bird ID antes de assinar o documento.');
+      setError(`Conecte seu ${signature.label} antes de assinar o documento.`);
       return false;
     }
     let currentDoc = draft;
@@ -387,6 +384,7 @@ export function useDocuments(patient: Patient, enabled = true) {
   }
 
   return {
+    signatureLabel: signature.label,
     rows,
     templates,
     saveTemplate,
@@ -403,8 +401,8 @@ export function useDocuments(patient: Patient, enabled = true) {
     signatureSession,
     signatureNotice,
     signingDocId,
-    connectBirdId,
-    disconnectBirdId,
+    connectSignature,
+    disconnectSignature,
     signTestDocument,
     sign,
     load,
