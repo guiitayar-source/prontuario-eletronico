@@ -1,0 +1,11 @@
+[Unit]
+Description=Backup diário do PsyWrite
+
+[Timer]
+OnCalendar=*-*-* 03:00
+# Computador desligado às 3h: roda assim que ligar.
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target
