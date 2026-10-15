@@ -142,6 +142,23 @@ entra nela, e a pessoa convida a própria equipe pela página Equipe. Se a conta
 proprietária de outra clínica, nada é criado. O evento `clinic_provision` fica na auditoria da
 clínica nova.
 
+## Plano da clínica (funções liberadas)
+
+A IA (rascunho de documentos, leitura de laudos e transcrição de anexos) e o Anamnesator só
+aparecem para clínicas que os têm no plano. Clínica nova começa sem nenhum dos dois; as que já
+existiam quando a migração foi aplicada ficaram com ambos. O titular escolhe pelo e-mail do proprietário:
+
+```bash
+node --env-file=.env.local scripts/clinic-plan.mjs                          # lista as clínicas
+node --env-file=.env.local scripts/clinic-plan.mjs <email> ia,anamnesator   # libera as duas
+node --env-file=.env.local scripts/clinic-plan.mjs <email> nenhuma          # tira todas
+```
+
+A mudança vale quando a pessoa recarregar a página. O plano fica em `clinic_features`, que a
+equipe só lê; nem o proprietário consegue alterá-lo. Fora do plano, a tela esconde os botões, as
+rotas recusam (403) e o banco recusa novas solicitações do Anamnesator. O evento
+`clinic_plan_change` fica na auditoria da clínica.
+
 ## Pendências em aberto
 
 Em 01/10/2026 o titular confirmou o MFA resolvido e o backup feito, e liberou o uso com dados reais. Seguem em aberto:

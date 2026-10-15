@@ -52,6 +52,11 @@ Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abe
 Toda rota clínica começa checando `['owner', 'doctor'].includes(role)`. A tabela de permissões em
 `components/team.tsx` descreve isso ao usuário — mantenha as duas coisas em sincronia.
 
+IA e Anamnesator dependem do plano da clínica (`clinic_features`, lista em `lib/plan-features.ts`).
+A rota chama `assertFeature(ctx, 'ia')` depois da checagem de papel, e a tela esconde o controle
+com `useFeature('ia')` (`components/plan.tsx`). Função nova que dependa de plano segue o mesmo
+caminho; o titular escolhe o plano com `scripts/clinic-plan.mjs` (ver `OPERACAO_SEGURA.md`).
+
 ## Regras que não são óbvias
 
 - **Códigos clínicos só de fontes oficiais.** Nunca escreva códigos CID de memória. Os catálogos em
