@@ -61,7 +61,7 @@ export async function GET(request: Request) {
     const message =
       err instanceof Error
         ? err.message
-        : 'Erro desconhecido na autorização Bird ID.';
+        : 'Erro desconhecido na autorização do certificado em nuvem.';
     return Response.redirect(
       `${redirectBase}?signature_error=${encodeURIComponent(message)}`,
       302
