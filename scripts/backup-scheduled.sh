@@ -30,6 +30,12 @@ trap 'unset PSYWRITE_BACKUP_PASSPHRASE PSYWRITE_DB_URL PASSPHRASE' EXIT
 PASSPHRASE="${PSYWRITE_BACKUP_PASSPHRASE:-}"
 [[ ${#PASSPHRASE} -ge 16 && -n "${PSYWRITE_DB_URL:-}" ]] \
   || fail "Defina PSYWRITE_BACKUP_PASSPHRASE (16+) e PSYWRITE_DB_URL em $SECRETS."
+# Mesma checagem do assistente: o motivo aparece aqui, sem expor a senha.
+node --env-file=.env.local --input-type=module -e '
+import { remoteConnection } from "./scripts/backup-connection.mjs";
+try { remoteConnection(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.PSYWRITE_DB_URL); }
+catch (error) { console.error(error.message); process.exit(1); }
+' || fail "PSYWRITE_DB_URL inválida em $SECRETS: use a URI do Session pooler (porta 5432) com a senha do banco no lugar de [YOUR-PASSWORD]."
 
 STARTED=0
 if ! node_modules/.bin/supabase status >/dev/null 2>&1; then
