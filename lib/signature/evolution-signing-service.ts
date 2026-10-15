@@ -21,10 +21,10 @@ import type {
 export class EvolutionSigningService {
   /**
    * Assina digitalmente uma evolução clínica como registro eletrônico nativo (sem gerar PDF).
-   * 1. Valida a sessão ativa do certificado em nuvem Bird ID.
+   * 1. Valida a sessão ativa do certificado em nuvem (Bird ID ou VIDaaS).
    * 2. Bloqueia a evolução em status 'SIGNING' contra concorrência.
    * 3. Gera a representação canônica determinística (schema_version: 1) e calcula o hash SHA-256.
-   * 4. Envia o hash para a API oficial Bird ID solicitando assinatura remota CMS (PKCS#7).
+   * 4. Envia o hash para a API do provedor (Bird ID ou VIDaaS) solicitando assinatura remota CMS (PKCS#7).
    * 5. Armazena a assinatura e os metadados criptográficos em evolution_signatures.
    * 6. Atualiza a evolução para status 'SIGNED' e bloqueia qualquer edição posterior.
    * 7. Conclui o agendamento associado (se houver).
@@ -57,7 +57,7 @@ export class EvolutionSigningService {
     if (sessionErr || !session) {
       throw new HttpError(
         401,
-        'Nenhuma sessão ativa de certificado digital Bird ID. Conecte seu certificado Bird ID para assinar.'
+        'Nenhuma sessão ativa de certificado em nuvem. Conecte seu certificado digital para assinar.'
       );
     }
 
@@ -150,8 +150,8 @@ export class EvolutionSigningService {
         canonicalData as unknown as Record<string, unknown>
       );
 
-      // 6. Solicitar assinatura remota CMS à API Bird ID (HSM)
-      const provider = getSignatureProvider();
+      // 6. Solicitar assinatura remota CMS à API do provedor (HSM)
+      const provider = getSignatureProvider(session.provider);
       const signResult = await provider.signHash({
         accessToken,
         certificateAlias: session.certificate_alias,
@@ -479,6 +479,7 @@ export class EvolutionSigningService {
       isValid,
       evolutionId: params.evolutionId,
       signatureId: sig.id,
+      provider: sig.provider,
       signerName,
       signerCpf: cleanCpf(signerCpf),
       certificateSubject: sig.certificate_subject,

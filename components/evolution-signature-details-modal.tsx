@@ -14,6 +14,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import type { EvolutionVerificationResult } from '@/lib/signature/types';
+import { signatureProviderLabel } from '@/lib/signature/providers';
 import { DialogFrame } from './dialog-frame';
 
 interface EvolutionSignatureDetailsModalProps {
@@ -99,7 +100,10 @@ export function EvolutionSignatureDetailsModal({
         <div>
           <h2 id="signature-dialog-title">Assinatura Digital ICP-Brasil</h2>
           <p className="signature-modal-subtitle">
-            Evolução clínica • Assinada com certificado em nuvem (Bird ID)
+            Evolução clínica • Assinada com certificado em nuvem
+            {verification?.provider
+              ? ` (${signatureProviderLabel(verification.provider)})`
+              : ''}
           </p>
         </div>
       </div>
@@ -254,7 +258,7 @@ export function EvolutionSignatureDetailsModal({
               <div className="detail-row">
                 <span className="detail-label">Provedor Remoto:</span>
                 <span className="detail-value">
-                  Bird ID (Soluti)
+                  {signatureProviderLabel(verification.provider)}
                 </span>
               </div>
               <div className="detail-row">

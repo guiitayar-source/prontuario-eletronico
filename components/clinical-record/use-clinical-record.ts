@@ -9,11 +9,12 @@ import { useSearchGuard } from '../topbar';
 import { useAnamnesator, useAnamnesatorTarget } from '../anamnesator';
 import type { SignatureSessionData } from '@/lib/signature/types';
 import {
-  fetchBirdIdAuthorizationUrl,
-  openBirdIdTab,
-  sendTabToBirdId,
-  useBirdIdResult,
-} from '@/lib/signature/birdid-tab';
+  fetchSignatureAuthorizationUrl,
+  openSignatureTab,
+  sendTabToProvider,
+  useSignatureResult,
+} from '@/lib/signature/signature-tab';
+import { useSignatureProvider } from '@/components/signature-provider';
 import { useConsultationTimer } from './use-consultation-timer';
 import { type RecordEntry } from './types';
 
@@ -51,6 +52,7 @@ export function useClinicalRecord({
   appointmentId?: string;
 }) {
   const medical = ['owner', 'doctor'].includes(useAccess().role);
+  const signature = useSignatureProvider(medical);
   const docs = useDocuments(patient, medical);
   const clinicalContext = useClinicalContext(patient.id, medical);
   const [tab, setTab] = useState(() => {
@@ -125,11 +127,11 @@ export function useClinicalRecord({
     }
   }, [medical]);
   // Autenticação feita em outra aba: esta página (e o Anamnesator) continua como estava.
-  useBirdIdResult((result) => {
+  useSignatureResult((result) => {
     if (!medical) return;
     if (result.status === 'connected') {
       void checkSignatureSession();
-      setStatus('Bird ID conectado — já é possível assinar a evolução.');
+      setStatus(`${signature.label} conectado. Já é possível assinar a evolução.`);
     } else {
       setError(result.message);
     }
@@ -227,7 +229,7 @@ export function useClinicalRecord({
     try {
       if (!(await prepareEvolutionForSignature())) return;
       setError('');
-      setStatus('Assinando evolução com certificado Bird ID…');
+      setStatus('Assinando evolução com o certificado digital…');
       const r = await apiFetch('/api/digital-signature/sign-evolution', {
         method: 'POST',
         headers: {
@@ -259,10 +261,10 @@ export function useClinicalRecord({
   async function handleConnectAndSign() {
     if (!current || busy || signing) return;
     // Aba separada: não recarrega esta página, então nada precisa ser salvo antes.
-    const tab = openBirdIdTab();
+    const tab = openSignatureTab(signature.label);
     if (tab) {
       try {
-        sendTabToBirdId(tab, await fetchBirdIdAuthorizationUrl());
+        sendTabToProvider(tab, await fetchSignatureAuthorizationUrl(signature.id));
       } catch (e) {
         tab.close();
         setError((e as Error).message);
@@ -278,16 +280,7 @@ export function useClinicalRecord({
         sessionStorage.setItem('birdid_return_tab', 'consulta');
         sessionStorage.setItem('birdid_return_evolution_id', current.id);
       }
-      const r = await apiFetch('/api/digital-signature/birdid/authorize');
-      const data = (await r.json()) as {
-        authorizationUrl?: string;
-        error?: string;
-      };
-      if (!r.ok)
-        throw new Error(data.error || 'Falha ao iniciar autorização Bird ID');
-      if (data.authorizationUrl) {
-        window.location.href = data.authorizationUrl;
-      }
+      window.location.href = await fetchSignatureAuthorizationUrl(signature.id);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -391,7 +384,7 @@ export function useClinicalRecord({
     );
     setModal('receita');
   }
-  // Na volta da autenticação Bird ID, reabre o documento que estava sendo assinado.
+  // Na volta da autenticação do certificado, reabre o documento que estava sendo assinado.
   useEffect(() => {
     const id = sessionStorage.getItem('birdid_return_document_id');
     const d = id && docs.rows.find((row) => row.id === id);
@@ -472,6 +465,7 @@ export function useClinicalRecord({
     },
   });
   return {
+    signatureLabel: signature.label,
     medical,
     docs,
     clinicalContext,

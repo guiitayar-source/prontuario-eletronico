@@ -8,6 +8,7 @@ import { Download, ShieldCheck, Key, Lock } from 'lucide-react';
 import type { DocumentsController } from './use-documents';
 import { DocumentAiBox } from './ai-box';
 import { useFeature } from '../plan';
+import { signatureProviderLabel } from '@/lib/signature/providers';
 export function DocumentEditor({
   docs,
   prescription = false,
@@ -101,10 +102,10 @@ export function DocumentEditor({
             <span>
               {docs.signatureSession ? (
                 <>
-                  <strong>Bird ID Conectado:</strong> {docs.signatureSession.cpf} · {docs.signatureSession.certificateAlias || docs.signatureSession.certificateSubject.slice(0, 40)}
+                  <strong>{signatureProviderLabel(docs.signatureSession.provider)} conectado:</strong> {docs.signatureSession.cpf} · {docs.signatureSession.certificateAlias || docs.signatureSession.certificateSubject.slice(0, 40)}
                 </>
               ) : (
-                'Certificado digital Bird ID não conectado nesta sessão.'
+                `Certificado digital ${docs.signatureLabel} não conectado nesta sessão.`
               )}
             </span>
           </div>
@@ -113,7 +114,7 @@ export function DocumentEditor({
               <button
                 type="button"
                 className="text-button"
-                onClick={() => void docs.disconnectBirdId()}
+                onClick={() => void docs.disconnectSignature()}
                 style={{ fontSize: '12px' }}
               >
                 Desconectar
@@ -123,10 +124,10 @@ export function DocumentEditor({
             <button
               type="button"
               className="secondary"
-              onClick={() => void docs.connectBirdId()}
+              onClick={() => void docs.connectSignature()}
               style={{ padding: '4px 12px', fontSize: '12px', height: '30px' }}
             >
-              Conectar Bird ID
+              Conectar {docs.signatureLabel}
             </button>
           )}
         </div>
@@ -301,11 +302,11 @@ export function DocumentEditor({
               }}
               onClick={() => {
                 if (!docs.signatureSession) {
-                  void docs.connectBirdId();
+                  void docs.connectSignature();
                   return;
                 }
                 const confirmed = window.confirm(
-                  'Deseja assinar digitalmente este documento com seu certificado Bird ID ICP-Brasil? Após a assinatura digital, o documento se tornará imutável e terá plena validade jurídica.'
+                  `Deseja assinar digitalmente este documento com seu certificado ${signatureProviderLabel(docs.signatureSession.provider)} ICP-Brasil? Após a assinatura digital, o documento se tornará imutável e terá plena validade jurídica.`
                 );
                 if (confirmed) {
                   void docs.sign(d.id);
@@ -314,10 +315,10 @@ export function DocumentEditor({
             >
               <Lock size={14} />
               {docs.signingDocId === d.id
-                ? 'Assinando com Bird ID…'
+                ? `Assinando com ${signatureProviderLabel(docs.signatureSession?.provider)}…`
                 : docs.signatureSession
-                  ? 'Finalizar e assinar (Bird ID)'
-                  : 'Conectar Bird ID para assinar'}
+                  ? `Finalizar e assinar (${signatureProviderLabel(docs.signatureSession.provider)})`
+                  : `Conectar ${docs.signatureLabel} para assinar`}
             </button>
           </>
         )}

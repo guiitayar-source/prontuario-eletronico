@@ -6,27 +6,29 @@ import type {
   SignatureResult,
 } from './types.ts';
 
-export interface BirdIdConfig {
-  baseUrl?: string;
+export interface PscProviderConfig {
+  /** Nome mostrado nas mensagens de erro (ex.: Bird ID, VIDaaS). */
+  label: string;
+  baseUrl: string;
   clientId: string;
   clientSecret: string;
 }
 
-interface BirdIdTokenResponse {
+interface PscTokenResponse {
   access_token: string;
   expires_in?: number | string;
   token_type?: string;
   authorized_identification?: string;
 }
 
-interface BirdIdDiscoveryResponse {
+interface PscDiscoveryResponse {
   status?: string;
   error?: string;
   error_description?: string;
   certificates?: Array<{ alias?: string; certificate?: string }>;
 }
 
-interface BirdIdSignatureResponse {
+interface PscSignatureResponse {
   status?: string;
   error?: string;
   error_description?: string;
@@ -40,40 +42,26 @@ interface BirdIdSignatureResponse {
   }>;
 }
 
-export const DEFAULT_BIRDID_BASE_URL = 'https://api.birdid.com.br/v0';
-
-export class BirdIdProvider implements DigitalSignatureProvider {
+/**
+ * Cliente da API padrão dos PSCs (DOC-ICP-17.01), usada pelo Bird ID e pelo VIDaaS.
+ * As credenciais vêm de `provider-factory.ts`.
+ */
+export class PscProvider implements DigitalSignatureProvider {
+  private readonly label: string;
   private readonly baseUrl: string;
   private readonly clientId: string;
   private readonly clientSecret: string;
 
-  constructor(config?: Partial<BirdIdConfig>) {
-    this.baseUrl = (
-      config?.baseUrl ||
-      process.env.BIRDID_BASE_URL ||
-      DEFAULT_BIRDID_BASE_URL
-    ).replace(/\/+$/, '');
-    this.clientId = (
-      config?.clientId ||
-      process.env.BIRDID_CLIENT_ID ||
-      ''
-    ).trim();
-    this.clientSecret = (
-      config?.clientSecret ||
-      process.env.BIRDID_CLIENT_SECRET ||
-      ''
-    ).trim();
+  constructor(config: PscProviderConfig) {
+    this.label = config.label;
+    this.baseUrl = config.baseUrl.replace(/\/+$/, '');
+    this.clientId = config.clientId.trim();
+    this.clientSecret = config.clientSecret.trim();
 
-    if (!this.clientId) {
+    if (!this.clientId || !this.clientSecret) {
       throw new HttpError(
         500,
-        'Integração Bird ID não configurada. BIRDID_CLIENT_ID ausente.'
-      );
-    }
-    if (!this.clientSecret) {
-      throw new HttpError(
-        500,
-        'Integração Bird ID não configurada. BIRDID_CLIENT_SECRET ausente.'
+        `Integração ${this.label} não configurada: faltam as credenciais.`
       );
     }
   }
@@ -85,17 +73,10 @@ export class BirdIdProvider implements DigitalSignatureProvider {
     loginHint?: string;
     lifetimeSeconds?: number;
   }): string {
-    if (!this.clientId) {
-      throw new HttpError(
-        500,
-        'Integração Bird ID não configurada. BIRDID_CLIENT_ID ausente.'
-      );
-    }
-
     if (!params.redirectUri) {
       throw new HttpError(
         500,
-        'Integração Bird ID não configurada. BIRDID_REDIRECT_URI ausente.'
+        `Integração ${this.label} não configurada: falta o endereço de retorno.`
       );
     }
 
@@ -167,15 +148,15 @@ export class BirdIdProvider implements DigitalSignatureProvider {
       }
       throw new HttpError(
         response.status,
-        `Falha ao trocar código de autorização Bird ID (${response.status}): ${
+        `Falha ao trocar código de autorização ${this.label} (${response.status}): ${
           errorJson.error_description || errorJson.error || errorText
         }`
       );
     }
 
-    const data = (await response.json()) as BirdIdTokenResponse;
+    const data = (await response.json()) as PscTokenResponse;
     if (!data.access_token) {
-      throw new HttpError(500, 'Bird ID não retornou access_token válido.');
+      throw new HttpError(500, `${this.label} não retornou access_token válido.`);
     }
 
     return {
@@ -202,15 +183,15 @@ export class BirdIdProvider implements DigitalSignatureProvider {
       const errorText = await response.text();
       throw new HttpError(
         response.status,
-        `Falha ao buscar certificados na Bird ID (${response.status}): ${errorText}`
+        `Falha ao buscar certificados no ${this.label} (${response.status}): ${errorText}`
       );
     }
 
-    const data = (await response.json()) as BirdIdDiscoveryResponse;
+    const data = (await response.json()) as PscDiscoveryResponse;
     if (data.status && !['S', 'success', 'OK'].includes(data.status)) {
       throw new HttpError(
         422,
-        `Bird ID retornou status de erro ao buscar certificados: ${
+        `${this.label} retornou status de erro ao buscar certificados: ${
           data.error_description || data.error || JSON.stringify(data)
         }`
       );
@@ -221,7 +202,7 @@ export class BirdIdProvider implements DigitalSignatureProvider {
     if (!Array.isArray(rawList) || rawList.length === 0) {
       throw new HttpError(
         422,
-        'Nenhum certificado ICP-Brasil encontrado na conta Bird ID.'
+        `Nenhum certificado ICP-Brasil encontrado na conta ${this.label}.`
       );
     }
 
@@ -277,13 +258,13 @@ export class BirdIdProvider implements DigitalSignatureProvider {
       }
       throw new HttpError(
         response.status,
-        `Erro na assinatura remota Bird ID (${response.status}): ${
+        `Erro na assinatura remota ${this.label} (${response.status}): ${
           errorJson.error_description || errorJson.error || errorText
         }`
       );
     }
 
-    const data = (await response.json()) as BirdIdSignatureResponse & {
+    const data = (await response.json()) as PscSignatureResponse & {
       message?: string;
       detail?: { code?: number; status?: string; message?: string };
     };
@@ -302,7 +283,7 @@ export class BirdIdProvider implements DigitalSignatureProvider {
     if (!isSuccess) {
       throw new HttpError(
         422,
-        `Bird ID retornou erro na assinatura: ${
+        `${this.label} retornou erro na assinatura: ${
           data.error_description || data.error || data.message || JSON.stringify(data)
         }`
       );
@@ -311,7 +292,7 @@ export class BirdIdProvider implements DigitalSignatureProvider {
     if (!signatureRaw) {
       throw new HttpError(
         500,
-        'Bird ID não retornou o conteúdo da assinatura CMS.'
+        `${this.label} não retornou o conteúdo da assinatura CMS.`
       );
     }
 

@@ -157,6 +157,7 @@ export interface EvolutionVerificationResult {
   isValid: boolean;
   evolutionId: string;
   signatureId?: string;
+  provider?: string;
   signerName: string;
   signerCpf: string | null;
   certificateSubject: string;

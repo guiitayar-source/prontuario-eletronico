@@ -13,6 +13,7 @@ import {
   generatePkce,
 } from './crypto-utils.ts';
 import { getSignatureProvider } from './provider-factory.ts';
+import { signatureProviderLabel, type SignatureProviderId } from './providers.ts';
 import { padesService } from './pades-service.ts';
 import type {
   DigitalSignatureRecord,
@@ -22,16 +23,16 @@ import type {
 
 export class DocumentSigningService {
   /**
-   * Initiates an OAuth 2.0 PKCE flow with the signature provider (Bird ID).
+   * Initiates an OAuth 2.0 PKCE flow with the signature provider (Bird ID or VIDaaS).
    */
   async initiateOAuthSession(params: {
     db: SupabaseClient;
     clinicId: string;
     userId: string;
     redirectUri: string;
-    provider?: string;
+    provider: SignatureProviderId;
   }): Promise<{ authorizationUrl: string; state: string }> {
-    const provider = getSignatureProvider();
+    const provider = getSignatureProvider(params.provider);
     const { codeVerifier, codeChallenge } = generatePkce();
 
     const state = crypto.randomBytes(24).toString('base64url');
@@ -46,7 +47,7 @@ export class DocumentSigningService {
       .insert({
         clinic_id: params.clinicId,
         user_id: params.userId,
-        provider: params.provider || 'birdid',
+        provider: params.provider,
         state_hash: stateHash,
         code_verifier_encrypted: codeVerifierEncrypted,
         redirect_uri: params.redirectUri,
@@ -60,7 +61,7 @@ export class DocumentSigningService {
       );
     }
 
-    // Try to get doctor CPF to use as login_hint for Bird ID
+    // Try to get doctor CPF to use as login_hint for the provider
     const { data: profile } = await admin
       .from('document_profiles')
       .select('cpf')
@@ -121,7 +122,7 @@ export class DocumentSigningService {
     }
 
     const codeVerifier = decryptToken(stateRecord.code_verifier_encrypted);
-    const provider = getSignatureProvider();
+    const provider = getSignatureProvider(stateRecord.provider);
 
     // 1. Exchange authorization code for token
     const tokenResult = await provider.exchangeAuthorizationCode({
@@ -135,7 +136,7 @@ export class DocumentSigningService {
     if (!certs.length) {
       throw new HttpError(
         422,
-        'Nenhum certificado ICP-Brasil encontrado na conta Bird ID.'
+        `Nenhum certificado ICP-Brasil encontrado na conta ${signatureProviderLabel(stateRecord.provider)}.`
       );
     }
     const cert = certs[0];
@@ -333,7 +334,7 @@ export class DocumentSigningService {
 
     if (session) {
       try {
-        const provider = getSignatureProvider();
+        const provider = getSignatureProvider(session.provider);
         if (provider.revokeSession) {
           const token = decryptToken(session.access_token_encrypted);
           await provider.revokeSession(token);
@@ -358,7 +359,7 @@ export class DocumentSigningService {
   }
 
   /**
-   * Signs a clinical document using the authorized Bird ID session.
+   * Signs a clinical document using the authorized cloud certificate session.
    * Produces an ICP-Brasil compliant PAdES PDF and ensures immutability.
    */
   async signClinicalDocument(params: {
@@ -390,7 +391,7 @@ export class DocumentSigningService {
     if (sessionErr || !session) {
       throw new HttpError(
         401,
-        'Nenhuma sessão ativa de certificado digital Bird ID. Conecte sua conta Bird ID para assinar.'
+        'Nenhuma sessão ativa de certificado em nuvem. Conecte seu certificado digital para assinar.'
       );
     }
 
@@ -449,7 +450,7 @@ export class DocumentSigningService {
       );
 
       // 7. Request signature on the document hash from the provider (HSM)
-      const provider = getSignatureProvider();
+      const provider = getSignatureProvider(session.provider);
       const signResult = await provider.signHash({
         accessToken,
         certificateAlias: session.certificate_alias,
@@ -597,7 +598,7 @@ export class DocumentSigningService {
   }
 
   /**
-   * Signs a synthetic test document (no clinical data) to validate end-to-end PAdES signature with real Bird ID.
+   * Signs a synthetic test document (no clinical data) to validate end-to-end PAdES signature with the real provider.
    */
   async signTestDocument(params: {
     clinicId: string;
@@ -630,12 +631,12 @@ export class DocumentSigningService {
     if (!sessionRecord) {
       throw new HttpError(
         401,
-        'Nenhuma sessão ativa de certificado digital Bird ID. Conecte sua conta Bird ID para assinar.'
+        'Nenhuma sessão ativa de certificado em nuvem. Conecte seu certificado digital para assinar.'
       );
     }
 
     const accessToken = decryptToken(sessionRecord.access_token_encrypted);
-    const provider = getSignatureProvider();
+    const provider = getSignatureProvider(sessionRecord.provider);
 
     // 1. Create a clean synthetic test PDF
     const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
@@ -657,7 +658,7 @@ export class DocumentSigningService {
       color: rgb(0.08, 0.2, 0.4),
     });
 
-    page.drawText('Validação Técnica PAdES com Certificado em Nuvem Bird ID', {
+    page.drawText(`Validação Técnica PAdES com Certificado em Nuvem ${signatureProviderLabel(sessionRecord.provider)}`, {
       x: 50,
       y: 755,
       size: 12,
@@ -702,7 +703,7 @@ export class DocumentSigningService {
       }
     );
 
-    // 3. Request remote CMS signature from Bird ID
+    // 3. Request remote CMS signature from the provider
     const signResult = await provider.signHash({
       accessToken,
       certificateAlias: sessionRecord.certificate_alias,

@@ -159,6 +159,20 @@ equipe só lê; nem o proprietário consegue alterá-lo. Fora do plano, a tela e
 rotas recusam (403) e o banco recusa novas solicitações do Anamnesator. O evento
 `clinic_plan_change` fica na auditoria da clínica.
 
+## Assinatura com VIDaaS
+
+O código aceita Bird ID e VIDaaS (Valid). O VIDaaS só aparece depois que as credenciais estiverem
+na Vercel; até lá, nada muda na tela. Para ligar:
+
+1. Pedir à Valid (área de Saúde) o cadastro da aplicação ("canal"): `client_id`, `client_secret`,
+   os endereços de homologação e produção, e registrar como retorno
+   `https://<domínio>/api/digital-signature/birdid/callback`.
+2. Na Vercel, criar `VIDAAS_CLIENT_ID`, `VIDAAS_CLIENT_SECRET`, `VIDAAS_REDIRECT_URI` e, se a Valid
+   indicar outro endereço, `VIDAAS_BASE_URL` (padrão `https://certificado.vidaas.com.br/v0`).
+3. Testar primeiro em homologação, com `npm run dev` e o `.env.local` apontando para ela.
+
+Com os dois configurados, cada médico escolhe o certificado em Ajustes > Meus dados profissionais.
+
 ## Pendências em aberto
 
 Em 01/10/2026 o titular confirmou o MFA resolvido e o backup feito, e liberou o uso com dados reais. Seguem em aberto:

@@ -13,6 +13,7 @@ export function EvolutionStatusBanner({
   signing,
   onSign,
   onConnect,
+  signatureLabel,
   onShowDetails,
 }: {
   current: RecordEntry | null;
@@ -24,6 +25,7 @@ export function EvolutionStatusBanner({
   signing: boolean;
   onSign: () => void;
   onConnect: () => void;
+  signatureLabel: string;
   onShowDetails: () => void;
 }) {
   return (
@@ -88,7 +90,7 @@ export function EvolutionStatusBanner({
                 disabled={busy || signing}
                 onClick={onConnect}
               >
-                <KeyRound size={15} /> Conectar Bird ID para assinar
+                <KeyRound size={15} /> Conectar {signatureLabel} para assinar
               </button>
             )}
           </div>
