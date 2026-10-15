@@ -43,6 +43,7 @@ const ACTION_MAP: Record<
   invite: { label: 'Integrante convidado', variant: 'green' },
   role_change: { label: 'Papel alterado', variant: 'amber' },
   revoke: { label: 'Acesso revogado', variant: 'red' },
+  clinic_plan_change: { label: 'Plano da clínica alterado', variant: 'amber' },
 };
 
 export function Audit() {

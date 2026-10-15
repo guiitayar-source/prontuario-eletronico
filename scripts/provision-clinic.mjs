@@ -24,7 +24,7 @@ export function parseArgs([email = '', clinicName = '', origin = '']) {
   return { email: e, clinicName: name, origin: url.origin };
 }
 
-async function findUser(admin, email) {
+export async function findUser(admin, email) {
   for (let page = 1; ; page++) {
     const r = await admin.auth.admin.listUsers({ page, perPage: 1000 });
     if (r.error) throw new Error('Não foi possível consultar as contas.');
@@ -97,6 +97,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       r.invitationSent
         ? `Clínica criada. Convite enviado para ${input.email}: no primeiro acesso a pessoa define a senha e ativa o MFA.`
         : `Clínica criada e vinculada à conta existente de ${input.email}.`,
+    );
+    console.log(
+      `A clínica começa sem IA e sem Anamnesator. Para liberar: node --env-file=.env.local scripts/clinic-plan.mjs ${input.email} ia,anamnesator`,
     );
   } catch (error) {
     console.error(error.message);
