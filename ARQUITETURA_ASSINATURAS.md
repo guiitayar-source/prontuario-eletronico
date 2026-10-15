@@ -2,7 +2,7 @@
 
 Guia para quem for mexer nas assinaturas ICP-Brasil do PsyWrite. Descreve o que existe, por onde os dados passam, o que é verificado e onde estão os limites.
 
-Há **dois tipos de assinatura**, que compartilham a sessão com o Bird ID e a mesma forma de assinar (o sistema envia só um hash SHA-256 e recebe uma assinatura CMS):
+Há **dois tipos de assinatura**, que compartilham a sessão com o certificado em nuvem (Bird ID ou VIDaaS) e a mesma forma de assinar (o sistema envia só um hash SHA-256 e recebe uma assinatura CMS):
 
 | | Documentos (receitas, atestados…) | Evoluções clínicas |
 |---|---|---|
@@ -19,8 +19,10 @@ Há **dois tipos de assinatura**, que compartilham a sessão com o Bird ID e a m
 ```
 lib/signature/
   types.ts                       Tipos compartilhados e interface do provedor
-  provider-factory.ts            Escolhe o provedor (Bird ID; mock só em NODE_ENV=test)
-  birdid-provider.ts             Cliente da API Bird ID: OAuth, certificados, signHash
+  providers.ts                   Lista de PSCs aceitos (Bird ID, VIDaaS), sem ler o ambiente
+  provider-factory.ts            Cliente do PSC da sessão e PSCs configurados (mock só em NODE_ENV=test)
+  psc-provider.ts                Cliente da API padrão dos PSCs (ITI): OAuth, certificados, signHash
+  signature-tab.ts               Login no PSC em aba separada (tela)
   mock-birdid-provider.ts        Provedor falso para testes (gera CA e certificado próprios)
   crypto-utils.ts                PKCE, AES-256-GCM dos tokens, CPF do certificado, parse X.509
   document-signing-service.ts    Sessão OAuth + assinatura de documentos (PAdES)
@@ -32,7 +34,8 @@ lib/signature/
   icp-brasil-certs.ts            GERADO: raízes fixadas + ACs intermediárias do ITI
 
 app/api/digital-signature/
-  birdid/authorize               Inicia o OAuth (PKCE) e devolve a URL do Bird ID
+  providers                      PSCs com credenciais neste servidor (a tela só oferece estes)
+  birdid/authorize               Inicia o OAuth (PKCE) e devolve a URL do PSC (?provider=vidaas)
   birdid/callback                Recebe o code, cria a sessão de assinatura
   session                        GET: sessão ativa · DELETE: desconectar
   sign                           Assina um documento clínico (PAdES)
@@ -59,19 +62,21 @@ Todas as rotas exigem papel `owner` ou `doctor`. As gravações nas tabelas de a
 
 ---
 
-## 2. Sessão de assinatura (Bird ID)
+## 2. Sessão de assinatura (Bird ID ou VIDaaS)
 
 O médico autoriza uma vez e assina vários documentos durante a sessão (4 horas).
 
+Bird ID e VIDaaS seguem o mesmo padrão de API do ITI e usam o mesmo cliente (`psc-provider.ts`). O médico escolhe o provedor em Ajustes, no próprio navegador; a escolha só aparece quando os dois têm credenciais no servidor. O provedor fica gravado no `state` e na sessão, e cada assinatura volta ao PSC que emitiu o token. A cadeia fixada já inclui as ACs da Valid (por exemplo, AC VALID RFB v5).
+
 1. **authorize**: gera `code_verifier`/`code_challenge` (PKCE S256) e um `state` aleatório. Grava o hash do `state` e o `code_verifier` cifrado em `signature_oauth_states` (expira em 15 min). Usa o CPF do perfil como `login_hint`, quando existe.
-2. O navegador vai ao Bird ID e o médico aprova no celular.
+2. O navegador vai ao PSC escolhido e o médico aprova no celular.
 3. **callback**: confere o `state`, troca o `code` pelo token e busca o certificado.
 4. **Titularidade**: extrai o CPF do certificado (SAN `2.16.76.1.3.1` ou `CN=NOME:CPF`) e compara com `document_profiles.cpf`.
    - Divergente: recusa com 403 e grava `signature_cpf_mismatch` em `audit_events`.
    - Perfil sem CPF: grava o CPF do certificado (fica travado a partir daí).
 5. Grava o token **cifrado com AES-256-GCM** (`SIGNATURE_ENCRYPTION_KEY`) em `signature_sessions`. Existe uma sessão ativa por usuário, clínica e provedor.
 
-A chave privada do médico nunca passa pelo sistema: fica no HSM do Bird ID.
+A chave privada do médico nunca passa pelo sistema: fica no HSM do PSC.
 
 ---
 
@@ -194,7 +199,10 @@ Para atualizar as ACs intermediárias (novas ACs credenciadas), repita os passos
 | `BIRDID_BASE_URL` | API do Bird ID (padrão: produção). |
 | `BIRDID_REDIRECT_URI` | URL do callback registrada no Bird ID. |
 | `SIGNATURE_ENCRYPTION_KEY` | 32 bytes em hexadecimal (64 caracteres). Cifra tokens e `code_verifier`. Trocar invalida as sessões abertas. |
-| `SIGNATURE_PROVIDER` | `birdid` (padrão). `mock` só funciona com `NODE_ENV=test`. |
+| `VIDAAS_CLIENT_ID`, `VIDAAS_CLIENT_SECRET` | Credenciais da aplicação no VIDaaS (Valid). Sem elas, o VIDaaS não aparece na tela. |
+| `VIDAAS_BASE_URL` | API do VIDaaS (padrão: `https://certificado.vidaas.com.br/v0`; confirmar com a Valid). |
+| `VIDAAS_REDIRECT_URI` | URL do callback registrada no VIDaaS (o mesmo `/api/digital-signature/birdid/callback`). |
+| `SIGNATURE_PROVIDER` | Só `mock`, e só com `NODE_ENV=test`. Fora disso, o provedor vem da sessão de cada médico. |
 
 ---
 
@@ -202,6 +210,7 @@ Para atualizar as ACs intermediárias (novas ACs credenciadas), repita os passos
 
 ```sh
 npm run test:signature                      # suíte de assinatura (tests/digital-signature.test.mjs)
+node --test tests/signature-providers.test.mjs  # Bird ID e VIDaaS (VIDaaS simulado)
 npm run verify-signature -- arquivo.pdf     # verifica um PDF assinado
 ```
 
