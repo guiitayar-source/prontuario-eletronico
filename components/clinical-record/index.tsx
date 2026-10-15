@@ -288,17 +288,19 @@ export default function ClinicalRecord({
                         </button>
                       )}
                     </div>
-                    <button onClick={anamnesator.show}>
-                      <Mic size={16} /> Anamnesator
-                      {anamnesator.summary &&
-                      anamnesator.patientId === patient.id ? (
-                        <span className="anamnesator-badge">
-                          {anamnesator.summary}
-                        </span>
-                      ) : (
-                        <ArrowUpRight size={14} />
-                      )}
-                    </button>
+                    {anamnesator && (
+                      <button onClick={anamnesator.show}>
+                        <Mic size={16} /> Anamnesator
+                        {anamnesator.summary &&
+                        anamnesator.patientId === patient.id ? (
+                          <span className="anamnesator-badge">
+                            {anamnesator.summary}
+                          </span>
+                        ) : (
+                          <ArrowUpRight size={14} />
+                        )}
+                      </button>
+                    )}
                   </div>
                   {error && (
                     <div className="capture-error" role="alert">

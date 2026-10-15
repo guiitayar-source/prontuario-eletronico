@@ -4,6 +4,7 @@ import type { Session } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { setClinicId } from '@/lib/supabase/http';
 import { MFAGate } from './mfa';
+import { PlanGate } from './plan';
 import { Check, AlertCircle, Mail } from 'lucide-react';
 
 const Access = createContext({ role: '', clinic: '' });
@@ -493,7 +494,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         userEmail={session.user.email}
         onSignOut={signOut}
       >
-        {children}
+        <PlanGate clinic={access.clinic}>{children}</PlanGate>
       </MFAGate>
     </Access.Provider>
   );

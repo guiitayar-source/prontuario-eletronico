@@ -4,6 +4,7 @@ import { Check } from 'lucide-react';
 import { apiFetch } from '@/lib/supabase/http';
 import { useAccess } from './auth';
 import { NavigationRail } from './navigation-rail';
+import { useFeature } from './plan';
 
 type Member = {
   user_id: string;
@@ -20,10 +21,10 @@ const label = {
 };
 
 // Reflete as checagens de papel da API (lib/supabase/*) e das políticas RLS.
-const permissions: [string, boolean, boolean][] = [
+const permissions = (ai: boolean): [string, boolean, boolean][] => [
   ['Prontuário, evolução e contexto clínico', true, false],
   ['Receitas, atestados e documentos', true, false],
-  ['Exames e leitura por IA', true, false],
+  [ai ? 'Exames e leitura por IA' : 'Exames', true, false],
   ['Agenda', true, true],
   ['Cadastro de pacientes', true, true],
   ['Envio de anexos', true, true],
@@ -49,6 +50,7 @@ export default function Team({
   onSettings?: () => void;
 }) {
   const { role } = useAccess();
+  const ai = useFeature('ia');
   const [members, setMembers] = useState<Member[]>([]);
   const [email, setEmail] = useState('');
   const [newRole, setNewRole] = useState<'doctor' | 'secretary'>('secretary');
@@ -280,7 +282,7 @@ export default function Team({
                       </tr>
                     </thead>
                     <tbody>
-                      {permissions.map(([area, doctor, secretary]) => (
+                      {permissions(ai).map(([area, doctor, secretary]) => (
                         <tr key={area}>
                           <th scope="row">{area}</th>
                           <td>{doctor ? <Check size={15} aria-label="Sim" /> : <span aria-label="Não">—</span>}</td>

@@ -7,6 +7,7 @@ import {
 import { Download, ShieldCheck, Key, Lock } from 'lucide-react';
 import type { DocumentsController } from './use-documents';
 import { DocumentAiBox } from './ai-box';
+import { useFeature } from '../plan';
 export function DocumentEditor({
   docs,
   prescription = false,
@@ -14,6 +15,7 @@ export function DocumentEditor({
   docs: DocumentsController;
   prescription?: boolean;
 }) {
+  const ai = useFeature('ia');
   const d = docs.draft;
   if (!d) return null;
   const isSigned = d.status === 'SIGNED';
@@ -232,7 +234,7 @@ export function DocumentEditor({
               Baixar modelo Word (.docx)
             </a>
           )}
-          {!isSigned && (
+          {ai && !isSigned && (
             <DocumentAiBox
               key={`${d.id}:${d.kind}`}
               document={d}

@@ -14,6 +14,7 @@ import {
   type SessionPatient,
 } from './use-anamnesator-session';
 import { AnamnesatorDock } from './panel';
+import { useFeature } from '../plan';
 
 export type ApplyMode = 'replace' | 'append';
 
@@ -37,6 +38,13 @@ const AnamnesatorContext = createContext<Context | null>(null);
  * continuem ao navegar pelo prontuário, trocar de aba ou ir à agenda.
  */
 export function AnamnesatorProvider({ children }: { children: ReactNode }) {
+  // Fora do plano não há painel nem sessão; o plano é lido antes de a tela montar.
+  const enabled = useFeature('anamnesator');
+  if (!enabled) return children;
+  return <AnamnesatorSessionProvider>{children}</AnamnesatorSessionProvider>;
+}
+
+function AnamnesatorSessionProvider({ children }: { children: ReactNode }) {
   const session = useAnamnesatorSession();
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<AnamnesatorTarget | null>(null);
@@ -59,10 +67,10 @@ export function AnamnesatorProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Abre o painel e lê o resumo da sessão (para o botão do atendimento). */
+/** Abre o painel e lê o resumo da sessão (para o botão do atendimento); nulo fora do plano. */
 export function useAnamnesator() {
   const context = useContext(AnamnesatorContext);
-  if (!context) throw new Error('AnamnesatorProvider ausente.');
+  if (!context) return null;
   return {
     show: context.show,
     summary: context.session.summary,

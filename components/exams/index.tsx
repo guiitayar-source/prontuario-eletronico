@@ -7,6 +7,7 @@ import { ExamDefinitionForm, emptyField } from './exam-definition-form';
 import { ExamProposalsSection } from './exam-proposals-section';
 import { ExamResultForm, type Attachment } from './exam-result-form';
 import { useExams, dateLabel } from './use-exams';
+import { useFeature } from '../plan';
 
 export default function Exams({
   patientId,
@@ -17,6 +18,7 @@ export default function Exams({
   attachments: Attachment[];
   onUploadAttachment?: (file: File) => Promise<string | void>;
 }) {
+  const ai = useFeature('ia');
   const {
     definitions,
     results,
@@ -84,95 +86,98 @@ export default function Exams({
         <>
           {!draft && !custom && (
             <>
-              <section className="exam-ai" aria-labelledby="exam-ai-title">
-                <div>
-                  <h3 id="exam-ai-title">Preencher a partir do laudo</h3>
-                  <p>
-                    A IA prepara sugestões a partir do laudo anexado. Nada entra
-                    no prontuário sem sua revisão e confirmação.
-                  </p>
-                </div>
-                <div className="exam-actions">
-                  {onUploadAttachment && (
-                    <>
-                      <button
-                        type="button"
-                        className="secondary"
-                        disabled={uploading || extracting}
-                        onClick={() => examFileInputRef.current?.click()}
-                      >
-                        <Upload size={16} />
-                        {uploading ? progress : 'Anexar laudos'}
-                      </button>
-                      <input
-                        ref={examFileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,application/pdf"
-                        multiple
-                        hidden
-                        onChange={(e) =>
-                          void handleExamUpload(
-                            Array.from(e.target.files || []),
-                          )
-                        }
-                      />
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    className="primary"
-                    disabled={extracting || uploading || !chosenFiles.length}
-                    onClick={() => void chooseProvider()}
-                  >
-                    {extracting
-                      ? progress
-                      : chosenFiles.length > 1
-                        ? `Ler ${chosenFiles.length} laudos com IA`
-                        : 'Ler com IA'}
-                  </button>
-                </div>
-                {attachments.length ? (
-                  <fieldset
-                    className="exam-ai-files"
-                    disabled={extracting || uploading}
-                  >
-                    <legend>
-                      Laudos para leitura
-                      {attachments.length > 1 && (
+              {ai && (
+                <section className="exam-ai" aria-labelledby="exam-ai-title">
+                  <div>
+                    <h3 id="exam-ai-title">Preencher a partir do laudo</h3>
+                    <p>
+                      A IA prepara sugestões a partir do laudo anexado. Nada
+                      entra no prontuário sem sua revisão e confirmação.
+                    </p>
+                  </div>
+                  <div className="exam-actions">
+                    {onUploadAttachment && (
+                      <>
                         <button
                           type="button"
-                          className="text-button"
-                          onClick={() =>
-                            setSelectedFiles(
-                              chosenFiles.length === attachments.length
-                                ? []
-                                : attachments.map((item) => item.id),
+                          className="secondary"
+                          disabled={uploading || extracting}
+                          onClick={() => examFileInputRef.current?.click()}
+                        >
+                          <Upload size={16} />
+                          {uploading ? progress : 'Anexar laudos'}
+                        </button>
+                        <input
+                          ref={examFileInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,application/pdf"
+                          multiple
+                          hidden
+                          onChange={(e) =>
+                            void handleExamUpload(
+                              Array.from(e.target.files || []),
                             )
                           }
-                        >
-                          {chosenFiles.length === attachments.length
-                            ? 'Desmarcar todos'
-                            : 'Marcar todos'}
-                        </button>
-                      )}
-                    </legend>
-                    {attachments.map((attachment) => (
-                      <label key={attachment.id}>
-                        <input
-                          type="checkbox"
-                          checked={chosenFiles.includes(attachment.id)}
-                          onChange={() => toggleFile(attachment.id)}
                         />
-                        <span>{attachment.name}</span>
-                      </label>
-                    ))}
-                  </fieldset>
-                ) : (
-                  <small>
-                    Anexe um ou mais laudos (PDF ou imagem) para leitura com IA.
-                  </small>
-                )}
-              </section>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={extracting || uploading || !chosenFiles.length}
+                      onClick={() => void chooseProvider()}
+                    >
+                      {extracting
+                        ? progress
+                        : chosenFiles.length > 1
+                          ? `Ler ${chosenFiles.length} laudos com IA`
+                          : 'Ler com IA'}
+                    </button>
+                  </div>
+                  {attachments.length ? (
+                    <fieldset
+                      className="exam-ai-files"
+                      disabled={extracting || uploading}
+                    >
+                      <legend>
+                        Laudos para leitura
+                        {attachments.length > 1 && (
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() =>
+                              setSelectedFiles(
+                                chosenFiles.length === attachments.length
+                                  ? []
+                                  : attachments.map((item) => item.id),
+                              )
+                            }
+                          >
+                            {chosenFiles.length === attachments.length
+                              ? 'Desmarcar todos'
+                              : 'Marcar todos'}
+                          </button>
+                        )}
+                      </legend>
+                      {attachments.map((attachment) => (
+                        <label key={attachment.id}>
+                          <input
+                            type="checkbox"
+                            checked={chosenFiles.includes(attachment.id)}
+                            onChange={() => toggleFile(attachment.id)}
+                          />
+                          <span>{attachment.name}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                  ) : (
+                    <small>
+                      Anexe um ou mais laudos (PDF ou imagem) para leitura com
+                      IA.
+                    </small>
+                  )}
+                </section>
+              )}
               {extractions.map((extraction) => (
                 <ExamProposalsSection
                   key={extraction.attachmentId}
