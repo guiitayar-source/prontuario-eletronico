@@ -4,7 +4,9 @@ Prontuário eletrônico de consultório (psiquiatria). Next.js 16 (App Router, R
 Vercel (`gru1`) + Supabase (Postgres com RLS, Auth com MFA, Storage privado), região São Paulo.
 Interface, mensagens, commits e documentação em **português**.
 
-Estado: protótipo em validação, **sem liberação para dados reais** — ver `OPERACAO_SEGURA.md`.
+Estado: em uso com dados reais desde 01/10/2026; pendências e rotinas em `OPERACAO_SEGURA.md`.
+Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abertas pelo titular com
+`scripts/provision-clinic.mjs` (o cadastro público segue fechado).
 
 ## Comandos
 

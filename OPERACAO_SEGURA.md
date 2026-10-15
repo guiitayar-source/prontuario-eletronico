@@ -101,6 +101,20 @@ Há opção de incorporar anexos até **2 MB somados**, respeitando limite de 3,
 
 Validação: esquema JSON oficial R4 e testes de referências, recursos, permissões e semântica. Isso não equivale à validação completa de todos os invariantes FHIR/FHIRPath ou à homologação com um sistema de destino. Referências: [FHIR R4 downloads](https://hl7.org/fhir/R4/downloads.html), [MedicationRequest](https://hl7.org/fhir/R4/medicationrequest.html), [DocumentReference](https://hl7.org/fhir/R4/documentreference.html).
 
+## Abrir a clínica de um novo médico
+
+O cadastro público está fechado (`auth.enable_signup = false`). Para cada colega, o titular roda:
+
+```bash
+node --env-file=.env.local scripts/provision-clinic.mjs <email> "<nome da clínica>" <origem>
+```
+
+O script cria a clínica, vincula a pessoa como proprietária e envia o convite por e-mail; no
+primeiro acesso ela define a senha e ativa o MFA. Cada clínica é isolada pelo RLS: o titular não
+entra nela, e a pessoa convida a própria equipe pela página Equipe. Se a conta já for
+proprietária de outra clínica, nada é criado. O evento `clinic_provision` fica na auditoria da
+clínica nova.
+
 ## Pendências em aberto
 
 Em 01/10/2026 o titular confirmou o MFA resolvido e o backup feito, e liberou o uso com dados reais. Seguem em aberto:
