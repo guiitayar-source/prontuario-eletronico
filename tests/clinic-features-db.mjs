@@ -35,7 +35,7 @@ try {
  insert into public.consultations(id,clinic_id,patient_id,author_id) values('${visit}','${c}','p','${doctor}');
  `);
   await db.exec(await migration('20261012010000_anamnesator_native.sql'));
-  await db.exec(await migration('20261015120000_clinic_features.sql'));
+  await db.exec(await migration('20261015135205_clinic_features.sql'));
   const as = (user, strong = true) =>
     db.exec(
       `reset role; set role authenticated; set test.uid='${user}'; set test.strong='${strong}';`,

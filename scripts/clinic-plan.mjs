@@ -8,7 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import { pathToFileURL } from 'node:url';
 import { findUser } from './provision-clinic.mjs';
 
-// Mesma lista da restrição em supabase/migrations/20261015120000_clinic_features.sql.
+// Mesma lista da restrição em supabase/migrations/20261015135205_clinic_features.sql.
 export const FEATURES = ['ia', 'anamnesator'];
 
 export function parseFeatures(value = '') {
