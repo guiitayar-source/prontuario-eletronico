@@ -95,6 +95,17 @@ try {
       })
     ).error,
   );
+  // Clínica nova começa sem IA no plano: a rota recusa até o titular liberar.
+  const outsidePlan = await call(doctor);
+  assert.equal(outsidePlan.status, 403);
+  assert.match((await outsidePlan.json()).error, /não faz parte do plano/);
+  assert.ifError(
+    (
+      await admin
+        .from('clinic_features')
+        .insert({ clinic_id: clinic, features: ['ia'] })
+    ).error,
+  );
   const consultationId = crypto.randomUUID();
   const createdConsultation = await doctor.db.rpc('consultation_write', {
     c: clinic,

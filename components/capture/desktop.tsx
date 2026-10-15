@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { categoryNames, formatBytes, type Received } from './client';
 import { useAttachments, type AttachmentsProps } from './use-attachments';
+import { useFeature } from '../plan';
 
 export default function Attachments({
   tab,
@@ -23,6 +24,7 @@ export default function Attachments({
   canCreateDocument = true,
   patient,
 }: AttachmentsProps) {
+  const ai = useFeature('ia');
   const {
     isOwner,
     isDoctor,
@@ -125,7 +127,8 @@ export default function Attachments({
           <option value="report">Relatório externo</option>
           <option value="other">Outro documento</option>
         </select>
-        {tab === 'documentos' &&
+        {ai &&
+          tab === 'documentos' &&
           canCreateDocument &&
           ['report', 'other'].includes(file.category) && (
             <button

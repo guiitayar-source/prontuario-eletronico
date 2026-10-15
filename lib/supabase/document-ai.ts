@@ -4,6 +4,7 @@ import {
   requestOpenAiText,
 } from '../ai/client.ts';
 import { assertAiQuota } from './ai-limit.ts';
+import { assertFeature } from './features.ts';
 import {
   hidePatientNames,
   PATIENT_MARKER,
@@ -109,6 +110,7 @@ export const documentAi = handle(
         403,
         'A geração de documentos é exclusiva da equipe médica.',
       );
+    await assertFeature({ db, clinic }, 'ia');
 
     if (request.method === 'GET') {
       return json({

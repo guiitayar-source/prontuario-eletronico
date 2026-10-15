@@ -14,6 +14,7 @@ import {
   transcriptionSchema,
 } from '../openai-files.ts';
 import { assertAiQuota, auditAiFileRequest } from './ai-limit.ts';
+import { assertFeature } from './features.ts';
 import { neutralFileName } from '../ai/pseudonymize.ts';
 import { body, check, handle, HttpError, json, writeGuard } from './server.ts';
 
@@ -311,6 +312,7 @@ export const aiFiles = handle(async (request, { db, clinic, role, user }) => {
       403,
       'Leitura por IA disponível somente à equipe médica.',
     );
+  await assertFeature({ db, clinic }, 'ia');
   if (request.method === 'GET') return json({ models: availableExamModels() });
   writeGuard(request, 'X-AI-Action');
   const url = new URL(request.url);
