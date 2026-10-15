@@ -161,7 +161,7 @@ try {
       openAiRequest = JSON.parse(init.body);
       return Response.json({
         status: 'completed',
-        output_text: 'Relatório clínico sintético para revisão médica.',
+        output_text: 'Relatório clínico sintético de [PACIENTE] para revisão médica.',
         usage: { input_tokens: 320, output_tokens: 40, total_tokens: 360 },
       });
     }
@@ -184,8 +184,11 @@ try {
   assert.equal(response.status, 200, payload.error);
   assert.equal(
     payload.draft,
-    'Relatório clínico sintético para revisão médica.',
+    'Relatório clínico sintético de Paciente Sintético para revisão médica.',
   );
+  // O nome do paciente não sai do servidor: vai como marcador e volta no rascunho.
+  assert.doesNotMatch(openAiRequest.input, /Paciente Sintético/);
+  assert.match(openAiRequest.input, /Paciente: \[PACIENTE\]/);
   assert.equal(payload.usage.totalTokens, 360);
   assert.equal(openAiRequest.store, false);
   assert.match(openAiRequest.input, /melhora do sono/);
