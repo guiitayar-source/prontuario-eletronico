@@ -53,6 +53,10 @@ function fixture({ failure, changedDuringSave = false, finalized = false, clean 
   const bindings = {
     current, patient: { id: 'synthetic-patient' }, saved, latest,
     flight: { current: flight }, blocked: { current: blocked }, busy: false, signing: false,
+    // Sem aba nova (pop-up bloqueado): exercita o caminho que salva e redireciona esta aba.
+    openBirdIdTab: () => null,
+    fetchBirdIdAuthorizationUrl: async () => 'https://provider.example/authorize',
+    sendTabToBirdId: () => {},
     apiFetch, window, sessionStorage: { setItem: (key, value) => storage.set(key, value) },
     setCurrent: () => {}, setRows: () => {}, setFinalizing: () => {}, setBusy: () => {}, setAddendum: () => {},
     setText: (value) => { state.text = value; },
