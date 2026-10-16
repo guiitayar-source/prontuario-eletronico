@@ -165,10 +165,10 @@ describe('painel de assinantes', () => {
     assert.equal(clinics[0].owner, 'titular@exemplo.com');
     assert.deepEqual(clinics[0].features, ['ia']);
     const tables = new Set(serviceCalls().map((c) => c.path));
-    assert.deepEqual([...tables].sort(), [
-      '/auth/v1/admin/users',
-      '/rest/v1/clinics',
-    ]);
+    assert.deepEqual(
+      [...tables].sort((a, b) => a.localeCompare(b)),
+      ['/auth/v1/admin/users', '/rest/v1/clinics'],
+    );
   });
 
   it('mudar o plano exige o cabeçalho e grava auditoria com o titular como autor', async () => {
