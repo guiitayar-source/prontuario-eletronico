@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
+import { documentKinds, documentTemplate } from '../lib/document-fields.ts';
 const db = new PGlite();
 const clinic = 'aaaaaaaa-0000-4000-8000-000000000001';
 const user = 'bbbbbbbb-0000-4000-8000-000000000001';
@@ -35,4 +36,37 @@ try {
     await assert.rejects(() => write({ ...cleared, document_date: 'invalid' }), /date/);
   }
   console.log('PASS: receitas sem data, reenvio, edição e exigência de data nos demais documentos.');
+
+  const before = (await db.query('select count(*)::int as n from public.clinical_documents')).rows[0].n;
+  for (const file of ['20260920010000_document_ai_templates.sql', '20261016010000_document_referrals.sql'])
+    await db.exec(await readFile(new URL('../supabase/migrations/' + file, import.meta.url), 'utf8'));
+  assert.equal((await db.query('select count(*)::int as n from public.clinical_documents')).rows[0].n, before);
+  assert.ok(documentKinds.includes('Encaminhamento'));
+  assert.match(documentTemplate('Encaminhamento'), /Motivo do encaminhamento/);
+  for (const kind of documentKinds) {
+    const saved = await write({
+      id: crypto.randomUUID(), patient_id: 'patient', kind,
+      text: documentTemplate(kind), physician_name: 'Teste',
+      physician_registration: '', document_date: '2026-10-16', version: 0,
+    });
+    assert.equal(saved.kind, kind);
+    assert.equal((await write({ ...saved, text: 'Texto revisado' })).text, 'Texto revisado');
+    const template = (await db.query(
+      'select public.document_ai_template_write($1,$2,$3::jsonb) as template',
+      [clinic, 'save', JSON.stringify({ id: crypto.randomUUID(), kind, name: 'Modelo teste', instructions: 'Usar apenas as informações fornecidas.' })],
+    )).rows[0].template;
+    assert.equal(template.kind, kind);
+  }
+  const referral = {
+    id: crypto.randomUUID(), patient_id: 'patient', kind: 'Encaminhamento',
+    text: documentTemplate('Encaminhamento'), physician_name: 'Teste',
+    physician_registration: '', document_date: null, version: 0,
+  };
+  await assert.rejects(() => write(referral), /clinical_documents_date_required/);
+  await assert.rejects(() => write({ ...referral, kind: 'Tipo inválido', document_date: '2026-10-16' }), /clinical_documents_kind_check/);
+  await assert.rejects(() => db.query(
+    'select public.document_ai_template_write($1,$2,$3::jsonb)',
+    [clinic, 'save', JSON.stringify({ id: crypto.randomUUID(), kind: 'Tipo inválido', name: 'Inválido', instructions: 'Teste' })],
+  ), /document_ai_templates_kind_check/);
+  console.log('PASS: encaminhamento e tipos existentes podem ser salvos, editados e usados em modelos de IA; migração preserva documentos existentes.');
 } finally { await db.close(); }

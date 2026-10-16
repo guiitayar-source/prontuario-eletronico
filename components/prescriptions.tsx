@@ -42,6 +42,26 @@ export function PrescriptionWorkspace({
   const editable = !!d && d.status !== 'SIGNED' && !docs.busy;
   const patientRows = docs.rows.filter((row) => row.kind === 'Receita');
 
+  async function newPrescription() {
+    if (docs.busy || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      if (docs.dirty && d?.status !== 'SIGNED') {
+        const saved = await docs.save();
+        if (!saved) return;
+      }
+      docs.open(undefined, consultationId, false, documentTemplate('Receita'), 'Receita');
+      setNaming(false);
+      setName('');
+      setMessage('');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function applyTemplate(t: PrescriptionTemplate, append: boolean) {
     if (!d || !editable) return;
     setMessage('');
@@ -115,6 +135,17 @@ export function PrescriptionWorkspace({
       <aside className="prescription-sidebar" aria-label="Receitas do paciente e modelos gerais">
         <section>
           <h3>Receitas deste paciente</h3>
+          <button
+            type="button"
+            className="secondary prescription-new"
+            disabled={docs.busy || busy}
+            onClick={() => void newPrescription()}
+          >
+            <Plus size={15} /> Nova receita
+          </button>
+          <p className="document-template-note">
+            Ao iniciar outra receita, as alterações da atual são salvas como rascunho.
+          </p>
           {!patientRows.length && (
             <p className="muted">
               Nenhuma receita salva. “Salvar rascunho” guarda a receita aqui e

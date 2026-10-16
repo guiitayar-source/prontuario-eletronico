@@ -4,6 +4,7 @@ export const documentKinds = [
   'Relatório',
   'Receita',
   'Pedido de exames',
+  'Encaminhamento',
   'Documento livre',
 ];
 export type ClinicalDocument = {
@@ -56,6 +57,8 @@ export function documentTemplate(kind: string) {
           'Via de administração: Uso oral\n\n1) [Medicamento, forma farmacêutica e concentração] — [Quantidade]\n   Tomar [dose, posologia, horários e duração do tratamento]\n\nOrientações gerais:\n[Instruções de uso, cuidados e retorno]',
         'Pedido de exames':
           'Solicito:\n\n[Exames]\n\nIndicação clínica, quando necessária:\n[Preencher]',
+        Encaminhamento:
+          'Ao(À) [profissional, especialidade ou serviço de destino]\n\nEncaminho o(a) paciente acima identificado(a) para [avaliação, acompanhamento ou outra finalidade].\n\nMotivo do encaminhamento:\n[Descrever]\n\nResumo clínico e informações relevantes:\n[Preencher]\n\nSolicitação ao profissional ou serviço:\n[Descrever]',
         'Documento livre': '',
       } as Record<string, string>
     )[kind] || ''
