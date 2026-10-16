@@ -167,8 +167,8 @@ p {
   max-width: 440px;
   font-size: 13px;
   color: var(--text-subtle);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 4px 10px;
   justify-content: flex-start;
@@ -197,7 +197,7 @@ p {
   background: var(--surface-solid);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow);
   padding: 6px;
 }
 .search-dropdown .search-result {
@@ -251,7 +251,7 @@ main {
   margin-bottom: 20px;
   padding: 20px 24px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(120deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  background: var(--surface-gradient);
   border: 1px solid var(--border);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);

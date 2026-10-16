@@ -213,7 +213,7 @@
   background: var(--surface-solid);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow);
   padding: 4px;
 }
 .cid-option {

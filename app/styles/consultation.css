@@ -273,7 +273,7 @@
 
 .editor-insert-timer-btn:hover {
   text-decoration: underline;
-  background: rgba(59, 99, 78, 0.08);
+  background: var(--accent-soft);
 }
 
 .patient-tabs {
@@ -383,7 +383,7 @@
   margin-top: 11px;
 }
 .editor-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+  background: var(--surface-gradient);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -440,7 +440,7 @@
   outline-offset: -3px;
 }
 #evolution:read-only {
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--inset);
 }
 .editor-meta {
   display: flex;
@@ -462,5 +462,5 @@
   justify-content: space-between;
   gap: 12px;
   border-top: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.12);
+  background: var(--inset);
 }

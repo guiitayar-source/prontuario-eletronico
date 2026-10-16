@@ -169,7 +169,7 @@
   gap: 15px;
   position: sticky;
   bottom: 0;
-  background: rgba(12, 21, 19, 0.75);
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-top: 1px solid var(--border);

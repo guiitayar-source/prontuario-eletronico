@@ -54,7 +54,7 @@
   gap: 16px;
   height: 46px;
   padding: 0 20px;
-  background: rgba(12, 21, 19, 0.55);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--border);
@@ -86,7 +86,7 @@
 }
 
 .account-sep {
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--border-strong);
   font-size: 12px;
   user-select: none;
 }
@@ -115,8 +115,8 @@
   font-size: 12.5px;
   font-weight: 500;
   color: var(--text-subtle);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -125,9 +125,9 @@
 }
 
 .header-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--surface-3);
   color: var(--text-strong);
-  border-color: rgba(255, 255, 255, 0.24);
+  border-color: var(--border-strong);
 }
 
 .header-btn:active {
@@ -141,13 +141,13 @@
 
 .header-btn.btn-signout {
   background: transparent;
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--border);
   color: var(--text-subtle);
 }
 
 .header-btn.btn-signout:hover {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.38);
+  background: var(--danger-soft);
+  border-color: var(--danger-border);
   color: var(--danger);
 }
 
@@ -158,13 +158,13 @@
   background: var(--accent);
   display: inline-block;
   margin-left: 2px;
-  box-shadow: 0 0 6px #34d399aa;
+  box-shadow: 0 0 6px rgba(var(--accent-rgb), 0.65);
 }
 
 .header-divider {
   width: 1px;
   height: 18px;
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--border-strong);
   margin: 0 4px;
 }
 

@@ -1,7 +1,7 @@
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(4, 10, 9, 0.6);
+  background: var(--backdrop);
   z-index: 30;
   display: grid;
   place-items: center;
@@ -9,7 +9,7 @@
   backdrop-filter: blur(3px);
 }
 .native-modal { margin: auto; border: 0; color: inherit; }
-.native-modal::backdrop { background: rgba(4, 10, 9, 0.6); backdrop-filter: blur(3px); }
+.native-modal::backdrop { background: var(--backdrop); backdrop-filter: blur(3px); }
 .native-modal .auth-card { padding: 0; border: 0; box-shadow: none; max-width: 100%; }
 .modal {
   width: 100%;
@@ -20,7 +20,7 @@
   border: 1px solid var(--border-strong);
   padding: 32px;
   border-radius: var(--radius-lg);
-  box-shadow: 0 25px 90px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
   position: relative;
 }
 .close {
@@ -322,7 +322,7 @@
   background: var(--surface-solid);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: 0 25px 90px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
 }
 .anamnesator-dock > header { display: flex; align-items: flex-start; gap: 12px; color: var(--accent); }
 .anamnesator-dock > header > svg { margin-top: 3px; flex: none; }

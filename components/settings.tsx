@@ -4,12 +4,18 @@ import {
   Check,
   Sparkles,
   Sliders,
+  SunMoon,
+  Moon,
+  Sun,
+  Monitor,
 } from 'lucide-react';
-import { useTheme, THEMES, type ThemeName } from '@/lib/theme';
+import { useTheme, THEMES, MODES, type ThemeName, type ThemeMode } from '@/lib/theme';
 import { NavigationRail } from './navigation-rail';
 import { useAccess } from './auth';
 import { ProfessionalProfileCard } from './professional-profile';
 import { PlatformPanel } from './platform';
+
+const MODE_ICONS: Record<ThemeMode, typeof Moon> = { dark: Moon, light: Sun, system: Monitor };
 
 export default function Settings({
   onPatients,
@@ -20,7 +26,7 @@ export default function Settings({
   onAgenda: () => void;
   onTeam: () => void;
 }) {
-  const { theme, setTheme, gradient, setGradient } = useTheme();
+  const { theme, setTheme, gradient, setGradient, mode, setMode, resolvedMode } = useTheme();
   const medical = ['owner', 'doctor'].includes(useAccess().role);
 
   return (
@@ -54,6 +60,42 @@ export default function Settings({
               <PlatformPanel />
               {medical && <ProfessionalProfileCard />}
 
+              {/* Card: Modo claro/escuro */}
+              <section className="settings-card">
+                <div className="settings-card-header">
+                  <div className="settings-header-icon">
+                    <SunMoon size={20} />
+                  </div>
+                  <div>
+                    <h2>Modo</h2>
+                    <p>
+                      Fundo escuro ou claro, com a mesma cor de destaque. No automático, segue o
+                      claro/escuro do sistema.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mode-switcher" role="radiogroup" aria-label="Modo">
+                  {MODES.map((m) => {
+                    const Icon = MODE_ICONS[m.id];
+                    const isSelected = mode === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        className={`mode-option ${isSelected ? 'selected' : ''}`}
+                        onClick={() => setMode(m.id)}
+                      >
+                        <Icon size={16} aria-hidden />
+                        {m.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
               {/* Card 1: Seleção de Paleta */}
               <section className="settings-card">
                 <div className="settings-card-header">
@@ -71,6 +113,7 @@ export default function Settings({
                 <div className="theme-grid">
                   {THEMES.map((t) => {
                     const isSelected = theme === t.id;
+                    const accent = resolvedMode === 'light' ? t.accentLight : t.accent;
                     return (
                       <button
                         key={t.id}
@@ -90,14 +133,14 @@ export default function Settings({
                           aria-hidden
                         >
                           <span className="theme-preview-rail">
-                            <span style={{ background: t.accent }} />
+                            <span style={{ background: accent }} />
                           </span>
                           <span className="theme-preview-card">
                             <span className="theme-preview-line" />
                             <span className="theme-preview-line short" />
                             <span
                               className="theme-preview-btn"
-                              style={{ background: t.accent }}
+                              style={{ background: accent }}
                             />
                           </span>
                         </div>
@@ -137,7 +180,7 @@ export default function Settings({
                   <div className="gradient-toggle-desc">
                     <strong>Degradê no fundo</strong>
                     <p>
-                      Com o degradê desligado, o fundo fica escuro e liso, com menos distração.
+                      Com o degradê desligado, o fundo fica liso, com menos distração.
                     </p>
                   </div>
 

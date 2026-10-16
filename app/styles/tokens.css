@@ -1,14 +1,22 @@
 /* ==========================================================================
-   Tokens do tema "Vidro Noturno"
-   Fundo escuro com degradê, superfícies translúcidas e uma cor de destaque.
-   A cor de destaque vem de [data-theme]; o degradê de [data-gradient].
+   Tokens do tema "Vidro Noturno" (escuro) e "Vidro Diurno" (claro)
+   Fundo com degradê, superfícies translúcidas e uma cor de destaque.
+   A cor de destaque vem de [data-theme]; o modo de [data-mode]; o degradê
+   de [data-gradient]. Todos ficam no <html>.
+   Cada tema define dois pares de cor: --tone-* (tom pastel, usado no escuro
+   e no degradê) e --ink-* (o mesmo tom mais fechado, legível no claro).
    ========================================================================== */
 :root {
   color-scheme: dark;
 
-  --accent-rgb: 127, 214, 168;
-  --accent-2-rgb: 79, 163, 199;
+  --tone-rgb: 127, 214, 168;
+  --tone-2-rgb: 79, 163, 199;
+  --ink-rgb: 35, 128, 90;
+  --ink-2-rgb: 43, 122, 160;
   --glow-3-rgb: 90, 70, 140;
+
+  --accent-rgb: var(--tone-rgb);
+  --accent-2-rgb: var(--tone-2-rgb);
   --accent: rgb(var(--accent-rgb));
   --accent-hover: color-mix(in srgb, var(--accent) 85%, white);
   --accent-soft: rgba(var(--accent-rgb), 0.14);
@@ -18,18 +26,24 @@
 
   --bg: #0c1513;
   --bg-mesh:
-    radial-gradient(at 5% 5%, rgba(var(--accent-rgb), 0.28) 0px, transparent 45%),
-    radial-gradient(at 95% 10%, rgba(var(--accent-2-rgb), 0.3) 0px, transparent 45%),
+    radial-gradient(at 5% 5%, rgba(var(--tone-rgb), 0.28) 0px, transparent 45%),
+    radial-gradient(at 95% 10%, rgba(var(--tone-2-rgb), 0.3) 0px, transparent 45%),
     radial-gradient(at 60% 100%, rgba(var(--glow-3-rgb), 0.3) 0px, transparent 50%);
 
   --surface: rgba(255, 255, 255, 0.05);
   --surface-2: rgba(255, 255, 255, 0.08);
   --surface-3: rgba(255, 255, 255, 0.12);
   --surface-solid: #15201d;
+  /* Painel de destaque (cabeçalho do paciente, editor) */
+  --surface-gradient: linear-gradient(120deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  /* Área rebaixada (somente leitura, rodapé de ações) */
+  --inset: rgba(0, 0, 0, 0.1);
   --glass-blur: blur(18px);
   --border: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.16);
   --shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 25px 90px rgba(0, 0, 0, 0.5);
+  --backdrop: rgba(4, 10, 9, 0.6);
 
   --text: #e3ece8;
   --text-strong: #f4f8f6;
@@ -80,22 +94,75 @@
 }
 
 [data-theme='ceu'] {
-  --accent-rgb: 124, 196, 232;
-  --accent-2-rgb: 120, 140, 240;
+  --tone-rgb: 124, 196, 232;
+  --tone-2-rgb: 120, 140, 240;
+  --ink-rgb: 31, 116, 168;
+  --ink-2-rgb: 74, 91, 208;
   --glow-3-rgb: 40, 110, 130;
   --on-accent: #0b1320;
 }
 [data-theme='lavanda'] {
-  --accent-rgb: 199, 179, 240;
-  --accent-2-rgb: 157, 188, 255;
+  --tone-rgb: 199, 179, 240;
+  --tone-2-rgb: 157, 188, 255;
+  --ink-rgb: 108, 79, 192;
+  --ink-2-rgb: 74, 111, 208;
   --glow-3-rgb: 150, 80, 150;
   --on-accent: #130f1f;
 }
 [data-theme='ambar'] {
-  --accent-rgb: 232, 194, 124;
-  --accent-2-rgb: 226, 140, 110;
+  --tone-rgb: 232, 194, 124;
+  --tone-2-rgb: 226, 140, 110;
+  --ink-rgb: 154, 100, 16;
+  --ink-2-rgb: 176, 85, 58;
   --glow-3-rgb: 60, 100, 90;
   --on-accent: #1a1409;
+}
+
+/* Modo claro ("Vidro Diurno"): mesmo tema, fundo claro e destaque mais fechado.
+   Vem depois dos temas para vencer o --on-accent deles. */
+[data-mode='light'] {
+  color-scheme: light;
+
+  --accent-rgb: var(--ink-rgb);
+  --accent-2-rgb: var(--ink-2-rgb);
+  --accent-hover: color-mix(in srgb, var(--accent) 85%, black);
+  --accent-soft: rgba(var(--accent-rgb), 0.12);
+  --accent-border: rgba(var(--accent-rgb), 0.32);
+  --on-accent: #ffffff;
+
+  --bg: color-mix(in srgb, rgb(var(--tone-rgb)) 7%, #f5f7f6);
+  --bg-mesh:
+    radial-gradient(at 5% 5%, rgba(var(--tone-rgb), 0.38) 0px, transparent 45%),
+    radial-gradient(at 95% 10%, rgba(var(--tone-2-rgb), 0.32) 0px, transparent 45%),
+    radial-gradient(at 60% 100%, rgba(var(--glow-3-rgb), 0.14) 0px, transparent 50%);
+
+  --surface: rgba(255, 255, 255, 0.62);
+  --surface-2: rgba(28, 48, 42, 0.05);
+  --surface-3: rgba(28, 48, 42, 0.09);
+  --surface-solid: #ffffff;
+  --surface-gradient: linear-gradient(120deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.55));
+  --inset: rgba(28, 48, 42, 0.04);
+  --border: rgba(28, 48, 42, 0.12);
+  --border-strong: rgba(28, 48, 42, 0.2);
+  --shadow: 0 10px 30px rgba(28, 48, 42, 0.08);
+  --shadow-lg: 0 25px 70px rgba(28, 48, 42, 0.18);
+  --backdrop: rgba(20, 32, 28, 0.32);
+
+  --text: #1c2925;
+  --text-strong: #0e1815;
+  --text-muted: #46564f;
+  --text-subtle: #66756f;
+
+  --danger: #c23b30;
+  --danger-soft: rgba(194, 59, 48, 0.1);
+  --danger-border: rgba(194, 59, 48, 0.32);
+  --warning: #9a5a00;
+  --warning-soft: rgba(200, 120, 20, 0.12);
+  --warning-border: rgba(200, 120, 20, 0.35);
+  --info: #2f5fbf;
+  --info-soft: rgba(47, 95, 191, 0.1);
+  --info-border: rgba(47, 95, 191, 0.3);
+  --success: #1f7a52;
 }
 
 :root {
