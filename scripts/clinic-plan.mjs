@@ -41,45 +41,69 @@ export async function setClinicPlan(admin, { email, features }) {
         ? 'Esta conta é proprietária de mais de uma clínica. Nada foi alterado.'
         : 'Esta conta não é proprietária de nenhuma clínica.',
     );
-  const clinicId = owned.data[0].clinic_id;
-  const saved = await admin
-    .from('clinic_features')
-    .upsert({
-      clinic_id: clinicId,
-      features,
-      updated_at: new Date().toISOString(),
-    });
+  return setClinicFeatures(admin, {
+    clinicId: owned.data[0].clinic_id,
+    features,
+    actorId: user.id,
+    via: 'scripts/clinic-plan.mjs',
+  });
+}
+
+/** Grava o plano de uma clínica e registra na auditoria dela. Usado também pelo painel. */
+export async function setClinicFeatures(
+  admin,
+  { clinicId, features, actorId, via },
+) {
+  const saved = await admin.from('clinic_features').upsert({
+    clinic_id: clinicId,
+    features,
+    updated_at: new Date().toISOString(),
+  });
   if (saved.error) throw new Error('Não foi possível gravar o plano.');
   await admin.from('audit_events').insert({
     clinic_id: clinicId,
-    actor_id: user.id,
+    actor_id: actorId,
     action: 'clinic_plan_change',
     entity_type: 'clinic_features',
     entity_id: clinicId,
-    context: { features, via: 'scripts/clinic-plan.mjs' },
+    context: { features, via },
   });
   return { clinicId, features };
 }
 
+/**
+ * Clínicas com proprietário, equipe e plano. Só dados da conta: nada de pacientes ou prontuário.
+ */
 export async function listClinicPlans(admin) {
   const clinics = await admin
     .from('clinics')
-    .select('id,name,clinic_features(features),clinic_members(user_id,role)');
+    .select(
+      'id,name,created_at,clinic_features(features),clinic_members(user_id,role)',
+    )
+    .order('created_at');
   if (clinics.error) throw new Error('Não foi possível listar as clínicas.');
-  const emails = new Map();
+  const users = new Map();
   for (let page = 1; ; page++) {
     const r = await admin.auth.admin.listUsers({ page, perPage: 1000 });
     if (r.error) throw new Error('Não foi possível consultar as contas.');
-    for (const u of r.data.users) emails.set(u.id, u.email);
+    for (const u of r.data.users) users.set(u.id, u);
     if (r.data.users.length < 1000) break;
   }
   return clinics.data.map((c) => {
     // Relação um-para-um: o PostgREST devolve objeto; versões antigas, lista.
     const plan = [c.clinic_features].flat()[0];
     const owner = c.clinic_members.find((m) => m.role === 'owner');
+    const ownerUser = owner && users.get(owner.user_id);
+    const count = (role) =>
+      c.clinic_members.filter((m) => m.role === role).length;
     return {
+      id: c.id,
       name: c.name,
-      owner: (owner && emails.get(owner.user_id)) || '(sem proprietário)',
+      createdAt: c.created_at ?? null,
+      owner: ownerUser?.email || '(sem proprietário)',
+      ownerLastSignIn: ownerUser?.last_sign_in_at ?? null,
+      doctors: count('owner') + count('doctor'),
+      secretaries: count('secretary'),
       features: plan?.features ?? [],
     };
   });

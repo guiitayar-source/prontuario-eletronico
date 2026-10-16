@@ -18,6 +18,9 @@ function fakeAdmin({ users = [], owned = [], clinics = [] } = {}) {
       eq() {
         return q;
       },
+      order() {
+        return q;
+      },
       upsert(row) {
         log.upserts.push(row);
         return Promise.resolve({ error: null });
@@ -80,24 +83,43 @@ test('não altera nada sem uma única clínica do proprietário', async () => {
   }
 });
 
-test('lista clínicas com proprietário e funções', async () => {
+test('lista clínicas com proprietário, equipe e funções', async () => {
   const admin = fakeAdmin({
-    users: [owner],
+    users: [{ ...owner, last_sign_in_at: '2026-10-15T12:00:00Z' }],
     clinics: [
       {
+        id: 'c1',
         name: 'Consultório Ana',
+        created_at: '2026-10-01T00:00:00Z',
         clinic_features: { features: ['ia', 'anamnesator'] },
-        clinic_members: [{ user_id: 'u1', role: 'owner' }],
+        clinic_members: [
+          { user_id: 'u1', role: 'owner' },
+          { user_id: 'u2', role: 'secretary' },
+        ],
       },
-      { name: 'Nova', clinic_features: null, clinic_members: [] },
+      { id: 'c2', name: 'Nova', clinic_features: null, clinic_members: [] },
     ],
   });
   assert.deepEqual(await listClinicPlans(admin), [
     {
+      id: 'c1',
       name: 'Consultório Ana',
+      createdAt: '2026-10-01T00:00:00Z',
       owner: 'ana@exemplo.com',
+      ownerLastSignIn: '2026-10-15T12:00:00Z',
+      doctors: 1,
+      secretaries: 1,
       features: ['ia', 'anamnesator'],
     },
-    { name: 'Nova', owner: '(sem proprietário)', features: [] },
+    {
+      id: 'c2',
+      name: 'Nova',
+      createdAt: null,
+      owner: '(sem proprietário)',
+      ownerLastSignIn: null,
+      doctors: 0,
+      secretaries: 0,
+      features: [],
+    },
   ]);
 });
