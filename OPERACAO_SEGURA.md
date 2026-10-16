@@ -142,6 +142,18 @@ entra nela, e a pessoa convida a própria equipe pela página Equipe. Se a conta
 proprietária de outra clínica, nada é criado. O evento `clinic_provision` fica na auditoria da
 clínica nova.
 
+## Painel de assinantes
+
+Em Ajustes, o titular da plataforma vê a área **Assinantes**: as clínicas com proprietário, equipe,
+data de criação e último acesso, as funções do plano de cada uma (marcar e desmarcar) e um
+formulário para abrir clínica nova e enviar o convite. Faz o mesmo que os dois scripts abaixo, sem
+terminal. Não mostra pacientes nem prontuários.
+
+Só aparece para as contas cujo id está em `PSYWRITE_ADMIN_USER_IDS` (ids de `auth.users`
+separados por vírgula, configurados na Vercel), e só com o segundo fator confirmado. Para as demais
+contas, a rota `/api/platform` responde 404. As mudanças de plano ficam na auditoria da clínica
+alterada, com o titular como autor.
+
 ## Plano da clínica (funções liberadas)
 
 A IA (rascunho de documentos, leitura de laudos e transcrição de anexos) e o Anamnesator só

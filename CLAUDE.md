@@ -55,7 +55,8 @@ Toda rota clínica começa checando `['owner', 'doctor'].includes(role)`. A tabe
 IA e Anamnesator dependem do plano da clínica (`clinic_features`, lista em `lib/plan-features.ts`).
 A rota chama `assertFeature(ctx, 'ia')` depois da checagem de papel, e a tela esconde o controle
 com `useFeature('ia')` (`components/plan.tsx`). Função nova que dependa de plano segue o mesmo
-caminho; o titular escolhe o plano com `scripts/clinic-plan.mjs` (ver `OPERACAO_SEGURA.md`).
+caminho; o titular escolhe o plano no painel de assinantes (Ajustes, `lib/supabase/platform.ts`,
+só para `PSYWRITE_ADMIN_USER_IDS`) ou com `scripts/clinic-plan.mjs` (ver `OPERACAO_SEGURA.md`).
 
 ## Regras que não são óbvias
 
