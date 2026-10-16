@@ -9,6 +9,7 @@ import { useTheme, THEMES, type ThemeName } from '@/lib/theme';
 import { NavigationRail } from './navigation-rail';
 import { useAccess } from './auth';
 import { ProfessionalProfileCard } from './professional-profile';
+import { PlatformPanel } from './platform';
 
 export default function Settings({
   onPatients,
@@ -50,6 +51,7 @@ export default function Settings({
             </div>
 
             <div className="settings-content">
+              <PlatformPanel />
               {medical && <ProfessionalProfileCard />}
 
               {/* Card 1: Seleção de Paleta */}
