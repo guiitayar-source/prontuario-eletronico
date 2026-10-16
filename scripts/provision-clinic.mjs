@@ -33,7 +33,10 @@ export async function findUser(admin, email) {
   }
 }
 
-export async function provisionClinic(admin, { email, clinicName, origin }) {
+export async function provisionClinic(
+  admin,
+  { email, clinicName, origin, via = 'scripts/provision-clinic.mjs' },
+) {
   let user = await findUser(admin, email);
   if (user) {
     const owned = await admin
@@ -78,7 +81,7 @@ export async function provisionClinic(admin, { email, clinicName, origin }) {
     action: 'clinic_provision',
     entity_type: 'clinics',
     entity_id: clinicId,
-    context: { invitation_sent: invitationSent, via: 'scripts/provision-clinic.mjs' },
+    context: { invitation_sent: invitationSent, via },
   });
   return { clinicId, userId: user.id, invitationSent };
 }
