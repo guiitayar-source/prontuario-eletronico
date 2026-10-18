@@ -25,7 +25,11 @@ import { date, type RecordEntry } from './types';
 import { EvolutionStatusBanner } from './status-banner';
 import { EvolutionActions } from './actions';
 import { RecordSidebar } from './sidebar';
-import { FinalizeDialog, AddendumDialog } from './dialogs';
+import {
+  FinalizeDialog,
+  AddendumDialog,
+  SignatureProviderDialog,
+} from './dialogs';
 import { DialogFrame } from '../dialog-frame';
 import { useClinicalRecord } from './use-clinical-record';
 
@@ -368,7 +372,7 @@ export default function ClinicalRecord({
                     busy={busy}
                     signing={signing}
                     onSign={() => void handleSignEvolution()}
-                    onConnect={() => void handleConnectAndSign()}
+                    onConnect={() => setModal('escolher-provedor-assinatura')}
                     signatureLabel={signatureLabel}
                     onShowDetails={() => setModal('assinatura-detalhes')}
                   />
@@ -423,7 +427,7 @@ export default function ClinicalRecord({
                     onAddendum={() => setModal('reiniciar')}
                     onSaveDraft={() => void persist(false)}
                     onSign={() => void handleSignEvolution()}
-                    onConnect={() => void handleConnectAndSign()}
+                    onConnect={() => setModal('escolher-provedor-assinatura')}
                     signatureLabel={signatureLabel}
                     onFinalizeUnsigned={() => setModal('finalizar')}
                   />
@@ -472,6 +476,14 @@ export default function ClinicalRecord({
             />
           ) : modal === 'finalizar' ? (
             <FinalizeDialog timer={timer} busy={busy} onConfirm={finish} />
+          ) : modal === 'escolher-provedor-assinatura' ? (
+            <SignatureProviderDialog
+              busy={busy || signing}
+              onSelectProvider={(provider) => {
+                setModal('');
+                void handleConnectAndSign(provider);
+              }}
+            />
           ) : modal === 'reiniciar' ? (
             <AddendumDialog
               value={addendum}

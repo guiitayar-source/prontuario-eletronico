@@ -90,7 +90,7 @@ export function EvolutionStatusBanner({
                 disabled={busy || signing}
                 onClick={onConnect}
               >
-                <KeyRound size={15} /> Conectar {signatureLabel} para assinar
+                <KeyRound size={15} /> Conectar certificado para assinar
               </button>
             )}
           </div>

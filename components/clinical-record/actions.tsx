@@ -103,7 +103,7 @@ export function EvolutionActions({
               disabled={busy || signing}
               onClick={onConnect}
             >
-              <KeyRound size={17} /> Conectar {signatureLabel} para assinar
+              <KeyRound size={17} /> Conectar certificado para assinar
             </button>
           )}
         </div>
@@ -150,7 +150,7 @@ export function EvolutionActions({
               disabled={!ready || busy || signing || !hasText}
               onClick={onConnect}
             >
-              <KeyRound size={17} /> Conectar {signatureLabel} para assinar
+              <KeyRound size={17} /> Conectar certificado para assinar
             </button>
           )}
 

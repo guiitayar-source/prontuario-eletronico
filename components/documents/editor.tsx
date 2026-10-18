@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import {
   documentKinds,
   documentTemplate,
@@ -17,6 +18,7 @@ export function DocumentEditor({
   prescription?: boolean;
 }) {
   const ai = useFeature('ia');
+  const [choosingProvider, setChoosingProvider] = useState(false);
   const d = docs.draft;
   if (!d) return null;
   const isSigned = d.status === 'SIGNED';
@@ -105,7 +107,7 @@ export function DocumentEditor({
                   <strong>{signatureProviderLabel(docs.signatureSession.provider)} conectado:</strong> {docs.signatureSession.cpf} · {docs.signatureSession.certificateAlias || docs.signatureSession.certificateSubject.slice(0, 40)}
                 </>
               ) : (
-                `Certificado digital ${docs.signatureLabel} não conectado nesta sessão.`
+                'Certificado digital ICP-Brasil não conectado nesta sessão.'
               )}
             </span>
           </div>
@@ -121,14 +123,26 @@ export function DocumentEditor({
               </button>
             </div>
           ) : (
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => void docs.connectSignature()}
-              style={{ padding: '4px 12px', fontSize: '12px', height: '30px' }}
-            >
-              Conectar {docs.signatureLabel}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void docs.connectSignature('birdid')}
+                style={{ padding: '4px 10px', fontSize: '12px', height: '30px' }}
+                title="Conectar certificado em nuvem Bird ID (Soluti)"
+              >
+                Bird ID
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void docs.connectSignature('vidaas')}
+                style={{ padding: '4px 10px', fontSize: '12px', height: '30px' }}
+                title="Conectar certificado em nuvem VIDaaS (Valid)"
+              >
+                VIDaaS
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -290,36 +304,80 @@ export function DocumentEditor({
             >
               Prévia / PDF
             </button>
-            <button
-              type="button"
-              className="primary"
-              disabled={docs.busy || docs.signingDocId === d.id || !d.text.trim()}
-              style={{
-                backgroundColor: docs.signatureSession ? 'var(--success)' : undefined,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-              onClick={() => {
-                if (!docs.signatureSession) {
-                  void docs.connectSignature();
-                  return;
-                }
-                const confirmed = window.confirm(
-                  `Deseja assinar digitalmente este documento com seu certificado ${signatureProviderLabel(docs.signatureSession.provider)} ICP-Brasil? Após a assinatura digital, o documento se tornará imutável e terá plena validade jurídica.`
-                );
-                if (confirmed) {
-                  void docs.sign(d.id);
-                }
-              }}
-            >
-              <Lock size={14} />
-              {docs.signingDocId === d.id
-                ? `Assinando com ${signatureProviderLabel(docs.signatureSession?.provider)}…`
-                : docs.signatureSession
-                  ? `Finalizar e assinar (${signatureProviderLabel(docs.signatureSession.provider)})`
-                  : `Conectar ${docs.signatureLabel} para assinar`}
-            </button>
+            {!docs.signatureSession && choosingProvider ? (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Escolher certificado:
+                </span>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={docs.busy}
+                  onClick={() => {
+                    setChoosingProvider(false);
+                    void docs.connectSignature('birdid');
+                  }}
+                >
+                  Bird ID (Soluti)
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={docs.busy}
+                  onClick={() => {
+                    setChoosingProvider(false);
+                    void docs.connectSignature('vidaas');
+                  }}
+                >
+                  VIDaaS (Valid)
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setChoosingProvider(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="primary"
+                disabled={docs.busy || docs.signingDocId === d.id || !d.text.trim()}
+                style={{
+                  backgroundColor: docs.signatureSession ? 'var(--success)' : undefined,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onClick={() => {
+                  if (!docs.signatureSession) {
+                    setChoosingProvider(true);
+                    return;
+                  }
+                  const confirmed = window.confirm(
+                    `Deseja assinar digitalmente este documento com seu certificado ${signatureProviderLabel(docs.signatureSession.provider)} ICP-Brasil? Após a assinatura digital, o documento se tornará imutável e terá plena validade jurídica.`
+                  );
+                  if (confirmed) {
+                    void docs.sign(d.id);
+                  }
+                }}
+              >
+                <Lock size={14} />
+                {docs.signingDocId === d.id
+                  ? `Assinando com ${signatureProviderLabel(docs.signatureSession?.provider)}…`
+                  : docs.signatureSession
+                    ? `Finalizar e assinar (${signatureProviderLabel(docs.signatureSession.provider)})`
+                    : 'Conectar certificado para assinar'}
+              </button>
+            )}
           </>
         )}
       </div>

@@ -258,13 +258,23 @@ export function useClinicalRecord({
       setSigning(false);
     }
   }
-  async function handleConnectAndSign() {
+  async function handleConnectAndSign(requestedProvider?: 'birdid' | 'vidaas') {
     if (!current || busy || signing) return;
+    const providerId = requestedProvider || signature.id;
+    const providerLabel =
+      providerId === 'vidaas'
+        ? 'VIDaaS'
+        : providerId === 'birdid'
+          ? 'Bird ID'
+          : signature.label;
+    if (requestedProvider && signature.choose) {
+      signature.choose(requestedProvider);
+    }
     // Aba separada: não recarrega esta página, então nada precisa ser salvo antes.
-    const tab = openSignatureTab(signature.label);
+    const tab = openSignatureTab(providerLabel);
     if (tab) {
       try {
-        sendTabToProvider(tab, await fetchSignatureAuthorizationUrl(signature.id));
+        sendTabToProvider(tab, await fetchSignatureAuthorizationUrl(providerId));
       } catch (e) {
         tab.close();
         setError((e as Error).message);
@@ -280,7 +290,7 @@ export function useClinicalRecord({
         sessionStorage.setItem('birdid_return_tab', 'consulta');
         sessionStorage.setItem('birdid_return_evolution_id', current.id);
       }
-      window.location.href = await fetchSignatureAuthorizationUrl(signature.id);
+      window.location.href = await fetchSignatureAuthorizationUrl(providerId);
     } catch (e) {
       setError((e as Error).message);
     } finally {

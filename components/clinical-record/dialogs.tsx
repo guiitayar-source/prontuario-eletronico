@@ -1,4 +1,6 @@
 'use client';
+import { ShieldCheck, Key } from 'lucide-react';
+import type { SignatureProviderId } from '@/lib/signature/providers';
 import type { useConsultationTimer } from './use-consultation-timer';
 
 /** Confirmação de finalização sem assinatura digital. */
@@ -70,6 +72,119 @@ export function AddendumDialog({
       >
         Registrar adendo
       </button>
+    </>
+  );
+}
+
+/** Seleção do provedor de certificado em nuvem ICP-Brasil (Bird ID ou VIDaaS). */
+export function SignatureProviderDialog({
+  busy,
+  onSelectProvider,
+}: {
+  busy: boolean;
+  onSelectProvider: (provider: SignatureProviderId) => void;
+}) {
+  return (
+    <>
+      <h2 id="dialog-title">Escolha seu certificado digital ICP-Brasil</h2>
+      <p>
+        Selecione qual aplicativo de certificado em nuvem você utiliza no celular
+        para autorizar a sessão de assinatura (válida por 4 horas):
+      </p>
+      <div
+        style={{
+          display: 'grid',
+          gap: '12px',
+          marginTop: '14px',
+          marginBottom: '8px',
+        }}
+      >
+        <button
+          type="button"
+          className="secondary"
+          disabled={busy}
+          onClick={() => onSelectProvider('birdid')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '14px 16px',
+            height: 'auto',
+            textAlign: 'left',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <ShieldCheck size={20} color="var(--accent)" />
+            <span>
+              <strong style={{ display: 'block', fontSize: '14px' }}>
+                Bird ID (Soluti)
+              </strong>
+              <span
+                style={{
+                  display: 'block',
+                  fontSize: '12px',
+                  color: 'var(--text-muted)',
+                  fontWeight: 400,
+                }}
+              >
+                Certificado em nuvem Soluti / Vault ID (push ou OTP)
+              </span>
+            </span>
+          </span>
+          <span
+            style={{
+              fontSize: '12px',
+              fontWeight: 600,
+              color: 'var(--accent)',
+            }}
+          >
+            Conectar →
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className="secondary"
+          disabled={busy}
+          onClick={() => onSelectProvider('vidaas')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '14px 16px',
+            height: 'auto',
+            textAlign: 'left',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Key size={20} color="var(--info)" />
+            <span>
+              <strong style={{ display: 'block', fontSize: '14px' }}>
+                VIDaaS (Valid)
+              </strong>
+              <span
+                style={{
+                  display: 'block',
+                  fontSize: '12px',
+                  color: 'var(--text-muted)',
+                  fontWeight: 400,
+                }}
+              >
+                Certificado em nuvem Valid Certificadora (push ou QR/OTP)
+              </span>
+            </span>
+          </span>
+          <span
+            style={{
+              fontSize: '12px',
+              fontWeight: 600,
+              color: 'var(--info)',
+            }}
+          >
+            Conectar →
+          </span>
+        </button>
+      </div>
     </>
   );
 }

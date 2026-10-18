@@ -67,13 +67,23 @@ export function useDocuments(patient: Patient, enabled = true) {
     }
   });
 
-  async function connectSignature() {
+  async function connectSignature(requestedProvider?: 'birdid' | 'vidaas') {
+    const providerId = requestedProvider || signature.id;
+    const providerLabel =
+      providerId === 'vidaas'
+        ? 'VIDaaS'
+        : providerId === 'birdid'
+          ? 'Bird ID'
+          : signature.label;
+    if (requestedProvider) {
+      signature.choose(requestedProvider);
+    }
     // Aba aberta no clique, antes de qualquer await; o documento aberto segue na tela.
-    const tab = openSignatureTab(signature.label);
+    const tab = openSignatureTab(providerLabel);
     if (tab) {
       try {
         setError('');
-        sendTabToProvider(tab, await fetchSignatureAuthorizationUrl(signature.id));
+        sendTabToProvider(tab, await fetchSignatureAuthorizationUrl(providerId));
       } catch (e) {
         tab.close();
         setError((e as Error).message);
@@ -91,7 +101,7 @@ export function useDocuments(patient: Patient, enabled = true) {
         if (doc && doc.status !== 'SIGNED')
           sessionStorage.setItem('birdid_return_document_id', doc.id);
       }
-      window.location.href = await fetchSignatureAuthorizationUrl(signature.id);
+      window.location.href = await fetchSignatureAuthorizationUrl(providerId);
     } catch (e) {
       setError((e as Error).message);
     }
