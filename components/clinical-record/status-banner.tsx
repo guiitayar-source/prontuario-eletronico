@@ -13,7 +13,6 @@ export function EvolutionStatusBanner({
   signing,
   onSign,
   onConnect,
-  signatureLabel,
   onShowDetails,
 }: {
   current: RecordEntry | null;

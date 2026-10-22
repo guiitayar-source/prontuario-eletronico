@@ -7,7 +7,6 @@ import { apiFetch } from '@/lib/supabase/http';
 import { type Patient } from '@/lib/patient-fields';
 import { useSearchGuard } from '../topbar';
 import { useAnamnesator, useAnamnesatorTarget } from '../anamnesator';
-import type { SignatureSessionData } from '@/lib/signature/types';
 import {
   fetchSignatureAuthorizationUrl,
   openSignatureTab,
@@ -15,6 +14,7 @@ import {
   useSignatureResult,
 } from '@/lib/signature/signature-tab';
 import { useSignatureProvider } from '@/components/signature-provider';
+import { useSignatureSession } from '@/components/use-signature-session';
 import { useConsultationTimer } from './use-consultation-timer';
 import { type RecordEntry } from './types';
 
@@ -53,6 +53,8 @@ export function useClinicalRecord({
 }) {
   const medical = ['owner', 'doctor'].includes(useAccess().role);
   const signature = useSignatureProvider(medical);
+  const signatureState = useSignatureSession(medical);
+  const signatureSession = signatureState.session;
   const docs = useDocuments(patient, medical);
   const clinicalContext = useClinicalContext(patient.id, medical);
   const [tab, setTab] = useState(() => {
@@ -75,8 +77,6 @@ export function useClinicalRecord({
     [panel, setPanel] = useState(true),
     [addendum, setAddendum] = useState(''),
     [dirtyRegistration, setDirtyRegistration] = useState(false),
-    [signatureSession, setSignatureSession] =
-      useState<SignatureSessionData | null>(null),
     [signing, setSigning] = useState(false);
   const saved = useRef(''),
     latest = useRef(''),
@@ -107,30 +107,11 @@ export function useClinicalRecord({
     setRows(result.consultations);
     return result.consultations as RecordEntry[];
   }
-  async function checkSignatureSession() {
-    try {
-      const r = await apiFetch('/api/digital-signature/session');
-      if (r.ok) {
-        const data = (await r.json()) as {
-          active: boolean;
-          session: SignatureSessionData | null;
-        };
-        setSignatureSession(data.active ? data.session : null);
-      }
-    } catch {
-      // Ignore background check failure
-    }
-  }
-  useEffect(() => {
-    if (medical) {
-      void checkSignatureSession();
-    }
-  }, [medical]);
   // Autenticação feita em outra aba: esta página (e o Anamnesator) continua como estava.
   useSignatureResult((result) => {
     if (!medical) return;
     if (result.status === 'connected') {
-      void checkSignatureSession();
+      void signatureState.check();
       setStatus(`${signature.label} conectado. Já é possível assinar a evolução.`);
     } else {
       setError(result.message);
@@ -243,6 +224,8 @@ export function useClinicalRecord({
         success?: boolean;
       };
       if (!r.ok) {
+        // 401: a validação do certificado expirou; a tela passa a oferecer "revalidar".
+        if (r.status === 401) signatureState.markExpired();
         throw new Error(
           data.error || 'Falha ao assinar evolução digitalmente.',
         );
@@ -496,6 +479,7 @@ export function useClinicalRecord({
     setAddendum,
     setDirtyRegistration,
     signatureSession,
+    signatureExpired: signatureState.expired,
     signing,
     latest,
     blocked,

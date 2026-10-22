@@ -19,7 +19,6 @@ export function EvolutionActions({
   onSaveDraft,
   onSign,
   onConnect,
-  signatureLabel,
   onFinalizeUnsigned,
 }: {
   isSigned: boolean;

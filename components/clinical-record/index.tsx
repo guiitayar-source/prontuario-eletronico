@@ -32,6 +32,8 @@ import {
 } from './dialogs';
 import { DialogFrame } from '../dialog-frame';
 import { useClinicalRecord } from './use-clinical-record';
+import { SignatureExpiredNotice } from '../signature-provider';
+import { isSignatureProviderId } from '@/lib/signature/providers';
 
 export default function ClinicalRecord({
   patient,
@@ -69,6 +71,7 @@ export default function ClinicalRecord({
     setAddendum,
     setDirtyRegistration,
     signatureSession,
+    signatureExpired,
     signing,
     latest,
     blocked,
@@ -98,6 +101,11 @@ export default function ClinicalRecord({
     finish,
     anamnesator,
   } = useClinicalRecord({ patient, appointmentId });
+  // Validação expirada: volta direto ao mesmo provedor, sem perguntar de novo qual usar.
+  const connectSignature = () =>
+    isSignatureProviderId(signatureExpired)
+      ? void handleConnectAndSign(signatureExpired)
+      : setModal('escolher-provedor-assinatura');
   return (
     <div className="app-shell">
       <NavigationRail
@@ -363,6 +371,13 @@ export default function ClinicalRecord({
                     }
                     spellCheck
                   />
+                  {signatureExpired && current && !isSigned && (
+                    <SignatureExpiredNotice
+                      provider={signatureExpired}
+                      busy={busy || signing}
+                      onRevalidate={connectSignature}
+                    />
+                  )}
                   <EvolutionStatusBanner
                     current={current}
                     isSigned={isSigned}
@@ -372,7 +387,7 @@ export default function ClinicalRecord({
                     busy={busy}
                     signing={signing}
                     onSign={() => void handleSignEvolution()}
-                    onConnect={() => setModal('escolher-provedor-assinatura')}
+                    onConnect={connectSignature}
                     signatureLabel={signatureLabel}
                     onShowDetails={() => setModal('assinatura-detalhes')}
                   />
@@ -427,7 +442,7 @@ export default function ClinicalRecord({
                     onAddendum={() => setModal('reiniciar')}
                     onSaveDraft={() => void persist(false)}
                     onSign={() => void handleSignEvolution()}
-                    onConnect={() => setModal('escolher-provedor-assinatura')}
+                    onConnect={connectSignature}
                     signatureLabel={signatureLabel}
                     onFinalizeUnsigned={() => setModal('finalizar')}
                   />
