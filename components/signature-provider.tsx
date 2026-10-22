@@ -92,3 +92,27 @@ export function SignatureProviderPicker() {
     </label>
   );
 }
+
+/** Aviso de validação expirada com a página aberta: revalida sem recarregar. */
+export function SignatureExpiredNotice({
+  provider,
+  busy,
+  onRevalidate,
+}: {
+  provider: string;
+  busy?: boolean;
+  onRevalidate: () => void;
+}) {
+  const label = signatureProviderLabel(provider);
+  return (
+    <div className="capture-error" role="alert">
+      <span>
+        A validação do {label} expirou. Revalide o certificado para assinar;
+        o que está nesta tela continua aqui.
+      </span>
+      <button type="button" disabled={busy} onClick={onRevalidate}>
+        Revalidar {label}
+      </button>
+    </div>
+  );
+}

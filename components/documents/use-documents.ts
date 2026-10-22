@@ -7,7 +7,6 @@ import {
   type PrescriptionTemplate,
 } from '@/lib/document-fields';
 import type { Patient } from '@/lib/patient-fields';
-import type { SignatureSessionData } from '@/lib/signature/types';
 import {
   fetchSignatureAuthorizationUrl,
   openSignatureTab,
@@ -15,8 +14,11 @@ import {
   useSignatureResult,
 } from '@/lib/signature/signature-tab';
 import { useSignatureProvider } from '@/components/signature-provider';
+import { useSignatureSession } from '@/components/use-signature-session';
 export function useDocuments(patient: Patient, enabled = true) {
   const signature = useSignatureProvider(enabled);
+  const signatureState = useSignatureSession(enabled);
+  const signatureSession = signatureState.session;
   const [rows, setRows] = useState<ClinicalDocument[]>([]),
     [profile, setProfile] = useState<DocumentProfile>({
       physician_name: '',
@@ -32,29 +34,16 @@ export function useDocuments(patient: Patient, enabled = true) {
     [busy, setBusy] = useState(false),
     [saved, setSaved] = useState(''),
     [preview, setPreview] = useState(''),
-    [signatureSession, setSignatureSession] = useState<SignatureSessionData | null>(null),
     [signatureNotice, setSignatureNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null),
     [signingDocId, setSigningDocId] = useState<string | null>(null);
   const previewRef = useRef(''),
     saving = useRef(false);
 
-  async function checkSignatureSession() {
-    try {
-      const r = await apiFetch('/api/digital-signature/session');
-      if (r.ok) {
-        const data = (await r.json()) as { active: boolean; session: SignatureSessionData | null };
-        setSignatureSession(data.active ? data.session : null);
-      }
-    } catch {
-      // Ignore background check failure
-    }
-  }
-
   // Autenticação feita em outra aba: esta página continua como estava.
   useSignatureResult((result) => {
     if (!enabled) return;
     if (result.status === 'connected') {
-      void checkSignatureSession();
+      void signatureState.check();
       setSignatureNotice({
         type: 'success',
         message: '✓ Certificado digital conectado com sucesso para esta sessão!',
@@ -110,7 +99,7 @@ export function useDocuments(patient: Patient, enabled = true) {
   async function disconnectSignature() {
     try {
       await apiFetch('/api/digital-signature/session', { method: 'DELETE' });
-      setSignatureSession(null);
+      signatureState.clear();
       setSignatureNotice({
         type: 'success',
         message: 'Certificado digital desconectado.',
@@ -223,7 +212,6 @@ export function useDocuments(patient: Patient, enabled = true) {
         window.history.replaceState({}, '', window.location.pathname);
       }
     }
-    void checkSignatureSession();
   }, []);
 
   useEffect(() => {
@@ -372,7 +360,11 @@ export function useDocuments(patient: Patient, enabled = true) {
         body: JSON.stringify({ documentId }),
       });
       const data = (await res.json()) as { error?: string; signedPdfPath?: string };
-      if (!res.ok) throw new Error(data.error || 'Falha ao assinar documento');
+      if (!res.ok) {
+        // 401: a validação do certificado expirou; a tela passa a oferecer "revalidar".
+        if (res.status === 401) signatureState.markExpired();
+        throw new Error(data.error || 'Falha ao assinar documento');
+      }
 
       setSignatureNotice({
         type: 'success',
@@ -409,6 +401,7 @@ export function useDocuments(patient: Patient, enabled = true) {
     dirty,
     preview,
     signatureSession,
+    signatureExpired: signatureState.expired,
     signatureNotice,
     signingDocId,
     connectSignature,

@@ -9,7 +9,10 @@ import { Download, ShieldCheck, Key, Lock } from 'lucide-react';
 import type { DocumentsController } from './use-documents';
 import { DocumentAiBox } from './ai-box';
 import { useFeature } from '../plan';
-import { signatureProviderLabel } from '@/lib/signature/providers';
+import {
+  isSignatureProviderId,
+  signatureProviderLabel,
+} from '@/lib/signature/providers';
 export function DocumentEditor({
   docs,
   prescription = false,
@@ -19,6 +22,10 @@ export function DocumentEditor({
 }) {
   const ai = useFeature('ia');
   const [choosingProvider, setChoosingProvider] = useState(false);
+  // Validação expirada com a página aberta: revalida direto no mesmo provedor.
+  const expiredProvider = isSignatureProviderId(docs.signatureExpired)
+    ? docs.signatureExpired
+    : undefined;
   const d = docs.draft;
   if (!d) return null;
   const isSigned = d.status === 'SIGNED';
@@ -106,6 +113,8 @@ export function DocumentEditor({
                 <>
                   <strong>{signatureProviderLabel(docs.signatureSession.provider)} conectado:</strong> {docs.signatureSession.cpf} · {docs.signatureSession.certificateAlias || docs.signatureSession.certificateSubject.slice(0, 40)}
                 </>
+              ) : docs.signatureExpired ? (
+                `A validação do ${signatureProviderLabel(docs.signatureExpired)} expirou. Revalide para assinar; o documento continua aqui.`
               ) : (
                 'Certificado digital ICP-Brasil não conectado nesta sessão.'
               )}
@@ -122,6 +131,15 @@ export function DocumentEditor({
                 Desconectar
               </button>
             </div>
+          ) : expiredProvider ? (
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void docs.connectSignature(expiredProvider)}
+              style={{ padding: '4px 10px', fontSize: '12px', height: '30px' }}
+            >
+              Revalidar {signatureProviderLabel(expiredProvider)}
+            </button>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <button
@@ -359,7 +377,8 @@ export function DocumentEditor({
                 }}
                 onClick={() => {
                   if (!docs.signatureSession) {
-                    setChoosingProvider(true);
+                    if (expiredProvider) void docs.connectSignature(expiredProvider);
+                    else setChoosingProvider(true);
                     return;
                   }
                   const confirmed = window.confirm(
@@ -375,7 +394,9 @@ export function DocumentEditor({
                   ? `Assinando com ${signatureProviderLabel(docs.signatureSession?.provider)}…`
                   : docs.signatureSession
                     ? `Finalizar e assinar (${signatureProviderLabel(docs.signatureSession.provider)})`
-                    : 'Conectar certificado para assinar'}
+                    : expiredProvider
+                      ? `Revalidar ${signatureProviderLabel(expiredProvider)} para assinar`
+                      : 'Conectar certificado para assinar'}
               </button>
             )}
           </>
