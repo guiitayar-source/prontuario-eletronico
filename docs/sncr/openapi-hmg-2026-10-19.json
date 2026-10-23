@@ -1,0 +1,432 @@
+{
+  "openapi" : "3.0.1",
+  "info" : {
+    "title" : "sncr-api",
+    "description" : "Feito com Arquitetura Spring Boot da Anvisa",
+    "contact" : {
+      "name" : "Contato",
+      "email" : "arquitetura@anvisa.gov.br"
+    },
+    "version" : "1.2.1"
+  },
+  "servers" : [ {
+    "url" : "https://api-gateway.hmg.apps.anvisa.gov.br/api-sncr",
+    "description" : "Generated server url"
+  } ],
+  "security" : [ {
+    "Keycloak" : [ "*" ]
+  } ],
+  "tags" : [ {
+    "name" : "2. Receita de Controle Especial / Receita Sujeita a Retenção",
+    "description" : "Criação do bloco de numeração para receitas de controle especial e receitas sujeitas a retenção."
+  }, {
+    "name" : "1. Notificação de Receita",
+    "description" : "Disponibilização de números para notificações de receita autorizadas pela Vigilância Sanitária."
+  } ],
+  "paths" : {
+    "/api/v1/numeracoes/receita-especial-retencao" : {
+      "post" : {
+        "tags" : [ "2. Receita de Controle Especial / Receita Sujeita a Retenção" ],
+        "summary" : "Geração automática de numeração para Receita Branca",
+        "description" : "Gera numeração para receitas brancas dos tipos permitidos, garantindo que não haja duplicidade para o mesmo contexto de geração.",
+        "operationId" : "criar",
+        "parameters" : [ {
+          "name" : "X-Jws-Integradora",
+          "in" : "header",
+          "description" : "JWS destacado assinado com e-CNPJ",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReceitaRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "Nenhuma numeração de receita disponível."
+          },
+          "403" : {
+            "description" : "Forbidden",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Parâmetros inválidos ou regra de negócio não atendida.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponseDTO"
+                },
+                "examples" : {
+                  "TipoInvalido" : {
+                    "description" : "TipoInvalido",
+                    "value" : {
+                      "codigo" : "ERRO_VALIDACAO",
+                      "mensagem" : "Tipo da receita inválido. Valores permitidos: [RCE, RET]"
+                    }
+                  },
+                  "PrescritorNaoEncontrado" : {
+                    "description" : "PrescritorNaoEncontrado",
+                    "value" : {
+                      "codigo" : "ERRO_VALIDACAO",
+                      "mensagem" : "Prescritor não encontrado para o documento 123456 e UF RJ"
+                    }
+                  },
+                  "LimiteAtingido" : {
+                    "description" : "LimiteAtingido",
+                    "value" : {
+                      "codigo" : "ERRO_NEGOCIO",
+                      "mensagem" : "Usuário atingiu o limite máximo de receita para esta instituição e tipo de receita no mês atual."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Not Found",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Erro interno ao processar a solicitação.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponseDTO"
+                },
+                "example" : {
+                  "codigo" : "ERRO_INTERNO",
+                  "mensagem" : "Ocorreu um erro inesperado. Por favor, tente novamente."
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "Numeração de receita gerada com sucesso.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/GerarResponse"
+                },
+                "example" : {
+                  "inicio" : "2602.6-53.0000001",
+                  "fim" : "2602.6-53.0000999",
+                  "quantidade" : 1000,
+                  "mensagem" : "Numeração gerada com sucesso."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/numeracoes/notificacao-receita" : {
+      "post" : {
+        "tags" : [ "1. Notificação de Receita" ],
+        "summary" : "Disponibilizar numeração de receita ao prescritor",
+        "description" : "Verifica se há numeração de receita disponível para o prescritor informado.\nRetorna bloco de numerações e alerta caso o saldo esteja baixo.\n",
+        "operationId" : "disponibilizarNumeracaoReceita",
+        "parameters" : [ {
+          "name" : "X-Jws-Integradora",
+          "in" : "header",
+          "description" : "JWS destacado assinado com e-CNPJ",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DisponibilizarNumeracaoReceitaRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "Nenhuma numeração de receita disponível."
+          },
+          "403" : {
+            "description" : "Forbidden",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Parâmetros inválidos ou prescritor não encontrado.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                },
+                "examples" : {
+                  "PrescritorNãoEncontrado" : {
+                    "description" : "PrescritorNãoEncontrado",
+                    "value" : [ {
+                      "error" : "Parâmetros inválidos",
+                      "mensagem" : "Prescritor não encontrado com os parâmetros informados. Documento: 123456, Conselho: CRM, UF: RJ"
+                    } ]
+                  },
+                  "ReceitaNãoEncontrada" : {
+                    "description" : "ReceitaNãoEncontrada",
+                    "value" : [ {
+                      "error" : "Parâmetros inválidos",
+                      "mensagem" : "Receita não encontrada com a sigla informada: NRA"
+                    } ]
+                  }
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Not Found",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Unauthorized",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Internal Server Error",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "Numeração de receita disponibilizada com sucesso.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/NumeracaoReceitaDisponibilizadaResponse"
+                },
+                "example" : {
+                  "numeracoesReceita" : "[2411.1-00.0000001, 2411.1-00.0000002]",
+                  "saldoReceitas" : 49,
+                  "mensagem" : "Saldo inferior a 50 receitas disponíveis."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "GerarResponse" : {
+        "type" : "object",
+        "properties" : {
+          "inicio" : {
+            "type" : "string"
+          },
+          "fim" : {
+            "type" : "string"
+          },
+          "quantidade" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "mensagem" : {
+            "type" : "string"
+          }
+        },
+        "description" : "Resposta da geração automática de numeração de Receita Branca"
+      },
+      "ErrorResponseDTO" : {
+        "type" : "object",
+        "properties" : {
+          "codigo" : {
+            "type" : "string"
+          },
+          "mensagem" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ReceitaRequest" : {
+        "required" : [ "cnpj", "conselho", "documento", "tipo", "uf" ],
+        "type" : "object",
+        "properties" : {
+          "conselho" : {
+            "type" : "string",
+            "description" : "Conselho do prescritor",
+            "example" : "CRM"
+          },
+          "tipo" : {
+            "type" : "string",
+            "description" : "Tipo de receita (ex: RCE ou RET)",
+            "example" : "RCE"
+          },
+          "documento" : {
+            "type" : "string",
+            "description" : "Informe número do documento",
+            "example" : "11111"
+          },
+          "uf" : {
+            "type" : "string",
+            "description" : "Sigla do estado que será gerada a receita",
+            "example" : "RJ"
+          },
+          "cnpj" : {
+            "type" : "string",
+            "description" : "CNPJ da instituição",
+            "example" : "11111111111111"
+          }
+        },
+        "description" : "Parâmetros para geração automática de numeração de Receita Branca"
+      },
+      "NumeracaoReceitaDisponibilizadaResponse" : {
+        "type" : "object",
+        "properties" : {
+          "numeracoesReceita" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "saldoReceitas" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "mensagem" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ErrorObject" : {
+        "type" : "object",
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "uri" : {
+            "type" : "string",
+            "format" : "uri"
+          },
+          "httpstatusCode" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "ErrorResponse" : {
+        "type" : "object",
+        "properties" : {
+          "errorObject" : {
+            "$ref" : "#/components/schemas/ErrorObject"
+          }
+        }
+      },
+      "DisponibilizarNumeracaoReceitaRequest" : {
+        "required" : [ "conselho", "documento", "quantidade", "receita", "uf" ],
+        "type" : "object",
+        "properties" : {
+          "receita" : {
+            "type" : "string",
+            "description" : "Enum de tipo de receita NRA, NRB, NRB2, NRR, NRT",
+            "example" : "NRA"
+          },
+          "conselho" : {
+            "type" : "string",
+            "description" : "Conselho ao qual o prescritor é vinculado.",
+            "example" : "CRM"
+          },
+          "uf" : {
+            "type" : "string",
+            "description" : "UF do conselho.",
+            "example" : "RJ"
+          },
+          "documento" : {
+            "type" : "string",
+            "description" : "Número de identificação do prescritor no conselho.",
+            "example" : "123456"
+          },
+          "quantidade" : {
+            "maximum" : 50,
+            "minimum" : 10,
+            "type" : "integer",
+            "description" : "Quantidade de receitas a serem disponibilizadas.",
+            "format" : "int32",
+            "example" : 25,
+            "default" : 50
+          }
+        }
+      }
+    },
+    "securitySchemes" : {
+      "Keycloak" : {
+        "type" : "oauth2",
+        "description" : "Keycloak OAuth2 - GOVBR & Client Credentials",
+        "name" : "Keycloak",
+        "in" : "cookie",
+        "flows" : {
+          "implicit" : {
+            "authorizationUrl" : "https://acesso.dev.apps.anvisa.gov.br/auth/realms/externo/protocol/openid-connect/auth?nonce=31087d78-6d10-4264-8b20-8b3022983cfc&kc_idp_hint=govbr",
+            "tokenUrl" : "https://acesso.dev.apps.anvisa.gov.br/auth/realms/externo/protocol/openid-connect/token",
+            "refreshUrl" : "https://acesso.dev.apps.anvisa.gov.br/auth/realms/externo/protocol/openid-connect/token",
+            "scopes" : { }
+          },
+          "clientCredentials" : {
+            "tokenUrl" : "https://acesso.dev.apps.anvisa.gov.br/auth/realms/externo/protocol/openid-connect/token",
+            "scopes" : { }
+          }
+        }
+      }
+    }
+  }
+}
