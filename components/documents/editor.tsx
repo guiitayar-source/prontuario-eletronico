@@ -13,6 +13,9 @@ import {
   isSignatureProviderId,
   signatureProviderLabel,
 } from '@/lib/signature/providers';
+import { prescriptionCategories, prescriptionSigningBlock, type PrescriptionCategory } from '@/lib/sncr/policy';
+import { RcePanel } from './rce-panel';
+import { rceStateLabels } from '@/lib/sncr/rce';
 export function DocumentEditor({
   docs,
   prescription = false,
@@ -29,17 +32,24 @@ export function DocumentEditor({
   const d = docs.draft;
   if (!d) return null;
   const isSigned = d.status === 'SIGNED';
+  const isSigning = d.status === 'SIGNING';
+  const isRecipe = d.kind === 'Receita';
+  const rceLocked = !!d.rce_emission;
+  const category = d.prescription_category || 'RCE';
+  const signingBlock = isRecipe ? prescriptionSigningBlock(category) : null;
   const noun = prescription ? 'receita' : 'documento';
 
   function update(fields: Partial<ClinicalDocument>) {
-    if (isSigned) return;
+    if (isSigned || isSigning || rceLocked) return;
     docs.setDraft({ ...d!, ...fields });
   }
 
   return (
     <>
       <h2 id="dialog-title">
-        {isSigned
+        {rceLocked
+          ? d.rce_emission!.state === 'SIGNED' ? 'RCE de teste assinada' : 'RCE de teste em preparação'
+          : isSigned
           ? prescription
             ? 'Receita assinada digitalmente'
             : 'Documento assinado digitalmente'
@@ -49,6 +59,22 @@ export function DocumentEditor({
               ? 'Nova receita'
               : 'Novo documento'}
       </h2>
+
+      {isRecipe && (
+        <p role="status" className="muted">
+          {rceLocked
+            ? rceStateLabels[d.rce_emission!.state]
+            : isSigned
+            ? 'Assinatura digital registrada. Este documento não possui confirmação de integração ao SNCR.'
+            : isSigning
+              ? 'Assinatura em andamento. Aguarde a conclusão antes de entregar a receita.'
+              : d.status === 'SIGNATURE_FAILED'
+                ? 'Falha na assinatura. O conteúdo foi preservado para revisão.'
+              : 'Rascunho. Salvar no prontuário ou gerar um PDF para assinatura manual não emite uma receita eletrônica.'}
+          {!rceLocked && ' A emissão integrada em produção ainda está indisponível.'}
+        </p>
+      )}
+      {isRecipe && !isSigned && signingBlock && <p role="status">{signingBlock}</p>}
 
       {docs.signatureNotice && (
         <output
@@ -85,7 +111,7 @@ export function DocumentEditor({
         >
           <strong>✓ Assinado Digitalmente • ICP-Brasil (PAdES)</strong>
           <p style={{ margin: '4px 0 0 0' }}>
-            Este documento possui assinatura digital válida e seu conteúdo é imutável. Para realizar alterações, duplique-o como um novo rascunho.
+            A assinatura digital foi registrada e o conteúdo está bloqueado para edição. Para realizar alterações, duplique-o como um novo rascunho.
           </p>
         </div>
       ) : (
@@ -170,7 +196,7 @@ export function DocumentEditor({
           {docs.error} Seu texto foi mantido para revisão.
         </div>
       )}
-      <fieldset disabled={docs.busy || isSigned} style={{ border: 0, padding: 0 }}>
+      <fieldset disabled={docs.busy || isSigned || isSigning || rceLocked} style={{ border: 0, padding: 0 }}>
         {!prescription && (
           <>
             <label htmlFor="doctype">Tipo de documento</label>
@@ -192,6 +218,14 @@ export function DocumentEditor({
               ))}
             </select>
           </>
+        )}
+        {isRecipe && (
+          <label>
+            Tipo de receituário
+            <select value={category} onChange={(e) => update({ prescription_category: e.target.value as PrescriptionCategory })}>
+              {Object.entries(prescriptionCategories).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </label>
         )}
         <label>
           Paciente
@@ -247,7 +281,7 @@ export function DocumentEditor({
               Preparar modelo
             </button>
           )}
-          {d.kind === 'Receita' && (
+          {d.kind === 'Receita' && category === 'RCE' && (
             <a
               href="/templates/Receituario-padrao.docx"
               download="Receituario-padrao.docx"
@@ -284,6 +318,8 @@ export function DocumentEditor({
           onChange={(e) => update({ text: e.target.value })}
         />
       </fieldset>
+      {isRecipe && category === 'RCE' && !isSigned && <RcePanel key={d.id} docs={docs} />}
+      {rceLocked && <button type="button" className="secondary" onClick={() => docs.open(d, undefined, true)}>Duplicar como novo rascunho</button>}
       <div className="editor-actions">
         {isSigned ? (
           <>
@@ -309,7 +345,7 @@ export function DocumentEditor({
             <button
               type="button"
               className="secondary"
-              disabled={docs.busy}
+              disabled={docs.busy || isSigning || rceLocked}
               onClick={() => void docs.save()}
             >
               Salvar rascunho
@@ -317,10 +353,10 @@ export function DocumentEditor({
             <button
               type="button"
               className="secondary"
-              disabled={docs.busy || !d.text.trim()}
+              disabled={docs.busy || isSigning || rceLocked || !d.text.trim() || (isRecipe && category !== 'RCE')}
               onClick={() => void docs.pdf()}
             >
-              Prévia / PDF
+              {isRecipe ? 'PDF para impressão e assinatura manual' : 'Prévia / PDF'}
             </button>
             {!docs.signatureSession && choosingProvider ? (
               <div
@@ -368,7 +404,7 @@ export function DocumentEditor({
               <button
                 type="button"
                 className="primary"
-                disabled={docs.busy || docs.signingDocId === d.id || !d.text.trim()}
+                disabled={docs.busy || isSigning || rceLocked || !!signingBlock || docs.signingDocId === d.id || !d.text.trim()}
                 style={{
                   backgroundColor: docs.signatureSession ? 'var(--success)' : undefined,
                   display: 'inline-flex',
@@ -382,7 +418,7 @@ export function DocumentEditor({
                     return;
                   }
                   const confirmed = window.confirm(
-                    `Deseja assinar digitalmente este documento com seu certificado ${signatureProviderLabel(docs.signatureSession.provider)} ICP-Brasil? Após a assinatura digital, o documento se tornará imutável e terá plena validade jurídica.`
+                    `Revise o conteúdo antes de assinar com seu certificado ${signatureProviderLabel(docs.signatureSession.provider)} ICP-Brasil. Após a assinatura, o documento ficará bloqueado para edição.${isRecipe ? ' Esta receita será assinada pelo fluxo de transição, sem integração com o SNCR.' : ''}`
                   );
                   if (confirmed) {
                     void docs.sign(d.id);
@@ -426,8 +462,8 @@ export function DocumentEditor({
         <>
           <p>
             {isSigned
-              ? 'PDF oficial com assinatura digital ICP-Brasil.'
-              : 'Prévia da versão salva. Use o visualizador para imprimir.'}
+              ? 'Arquivo original com assinatura digital ICP-Brasil.'
+              : isRecipe ? 'PDF sem assinatura digital. Para a via física, imprima, revise os campos obrigatórios e assine manualmente.' : 'Prévia da versão salva. Use o visualizador para imprimir.'}
           </p>
           <iframe
             title="Prévia do documento em PDF"

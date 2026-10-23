@@ -1,3 +1,5 @@
+import type { PrescriptionCategory } from './sncr/policy.ts';
+import type { RceFields } from './sncr/rce.ts';
 export const documentKinds = [
   'Declaração de comparecimento',
   'Atestado',
@@ -28,6 +30,9 @@ export type ClinicalDocument = {
   letterhead_phone?: string;
   status?: 'DRAFT' | 'FINALIZED' | 'SIGNING' | 'SIGNED' | 'SIGNATURE_FAILED' | 'SUPERSEDED';
   signed_pdf_path?: string | null;
+  prescription_category?: PrescriptionCategory | null;
+  rce_fields?: RceFields | null;
+  rce_emission?: { id: string; state: string; number: string; environment: 'hmg' } | null;
 };
 export type DocumentProfile = {
   physician_name: string;
