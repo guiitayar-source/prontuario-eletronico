@@ -342,7 +342,8 @@ async function prescriptionPdf(
     let textY = height - 295.0;
     const lines = bodyText.split('\n');
     for (const rawLine of lines) {
-      if (textY < height - 460.0) break; // stay within prescription box
+      if (rawLine.trim() && textY < height - 460.0)
+        throw new Error('O texto da receita excede a área disponível no PDF. Revise o conteúdo ou divida em novas receitas antes de imprimir ou assinar.');
       const isHeader =
         rawLine.trim().endsWith(':') ||
         rawLine.trim().toLowerCase().startsWith('orienta');
@@ -357,11 +358,14 @@ async function prescriptionPdf(
       // Word wrapping
       let currentChunk = '';
       for (const word of rawLine.split(' ')) {
+        if (f.widthOfTextAtSize(word, sz) > contentWidth)
+          throw new Error('Uma palavra da receita excede a largura do PDF. Revise o texto antes de imprimir ou assinar.');
         const testChunk = currentChunk ? currentChunk + ' ' + word : word;
         if (f.widthOfTextAtSize(testChunk, sz) <= contentWidth) {
           currentChunk = testChunk;
         } else {
           if (currentChunk) {
+            if (textY < height - 460.0) throw new Error('O texto da receita excede a área disponível no PDF. Revise o conteúdo ou divida em novas receitas antes de imprimir ou assinar.');
             page.drawText(currentChunk, {
               x: left,
               y: textY,
@@ -375,6 +379,7 @@ async function prescriptionPdf(
         }
       }
       if (currentChunk) {
+        if (textY < height - 460.0) throw new Error('O texto da receita excede a área disponível no PDF. Revise o conteúdo ou divida em novas receitas antes de imprimir ou assinar.');
         page.drawText(currentChunk, {
           x: left,
           y: textY,
@@ -647,8 +652,11 @@ export async function documentPdf(
           'O PDF contém um caractere não suportado. Remova emojis ou símbolos incomuns e tente novamente.',
         );
 
-  // If this is a prescription, use the official Receituário de controle especial template
+  // Existing two-copy RCE layout, preserved for printing/legacy transition.
+  // This is not the standardized electronic SNCR model.
   if (d.kind === 'Receita') {
+    if (d.prescription_category && d.prescription_category !== 'RCE')
+      throw new Error('O PDF atual é exclusivo de Receita de Controle Especial. Utilize o modelo adequado para a categoria selecionada.');
     await prescriptionPdf(pdf, d, font, bold);
     pdf.setTitle('Receituário de controle especial');
     pdf.setCreator('PsyWrite');

@@ -31,7 +31,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: 'standalone',
   poweredByHeader: false,
-  outputFileTracingIncludes: { '/api/documents': ['./assets/fonts/*.ttf'] },
+  outputFileTracingIncludes: { '/api/documents': ['./assets/fonts/*.ttf'], '/api/sncr/rce': ['./assets/sncr/*.pdf'] },
   experimental,
   // `npm run build` runs `tsc --noEmit` first. Avoid Next's duplicate typecheck
   // worker, which loses compiler output under the managed Node runtime.

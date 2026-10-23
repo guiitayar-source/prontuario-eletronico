@@ -250,6 +250,7 @@ export function useDocuments(patient: Patient, enabled = true) {
                 updated_at: undefined,
                 status: undefined,
                 signed_pdf_path: null,
+                rce_emission: null,
                 document_date: today,
                 consultation_id: consultationId || null,
                 physician_name: profile.physician_name,
@@ -262,6 +263,7 @@ export function useDocuments(patient: Patient, enabled = true) {
           patient_id: patient.id,
           consultation_id: consultationId || null,
           kind,
+          prescription_category: kind === 'Receita' ? 'RCE' : null,
           patient_name: patient.social_name || patient.name,
           physician_name: profile.physician_name,
           physician_registration: profile.physician_registration,
@@ -284,7 +286,7 @@ export function useDocuments(patient: Patient, enabled = true) {
     clearPreview();
     return true;
   }
-  async function save() {
+  async function save(overrides: Partial<ClinicalDocument> = {}) {
     if (!draft || saving.current) return null;
     saving.current = true;
     setBusy(true);
@@ -296,7 +298,7 @@ export function useDocuments(patient: Patient, enabled = true) {
           'Content-Type': 'application/json',
           'X-Document-Action': '1',
         },
-        body: JSON.stringify(draft),
+        body: JSON.stringify({ ...draft, ...overrides }),
       });
       const result = (await r.json()) as {
         document: ClinicalDocument;
@@ -392,6 +394,15 @@ export function useDocuments(patient: Patient, enabled = true) {
     saveTemplate,
     deleteTemplate,
     draft,
+    markRceEmission: (documentId: string, emission: ClinicalDocument['rce_emission']) => {
+      clearPreview();
+      setDraft(current => current?.id === documentId ? { ...current, rce_emission: emission } : current);
+      setSaved(current => {
+        if (!current) return current;
+        const value = JSON.parse(current) as ClinicalDocument;
+        return value.id === documentId ? JSON.stringify({ ...value, rce_emission: emission }) : current;
+      });
+    },
     setDraft: (d: ClinicalDocument) => {
       clearPreview();
       setDraft(d);

@@ -153,6 +153,8 @@ npm run build
 
 ## 📚 Documentação Complementar
 
+- [SNCR.md](docs/SNCR.md): regras verificadas em 19/10/2026, fluxo completo da RCE de treinamento, bancada local (`npm run test:sncr:lab`), testes simulados e passos para a comunicação real. Produção permanece bloqueada; não há homologação formal da Anvisa para o software.
+
 - [EXAMES.md](./EXAMES.md): Detalhes técnicos, modelos de IA suportados, validações clínicas e catálogo de exames.
 - [ARQUITETURA_ASSINATURAS.md](./ARQUITETURA_ASSINATURAS.md): Como as assinaturas ICP-Brasil funcionam, o que é verificado, limites e como fazer manutenção (novas raízes, schema canônico, provedores).
 - [OPERACAO_SEGURA.md](./OPERACAO_SEGURA.md): Protocolos de MFA, backup criptografado, controles de acesso e diretrizes de auditoria.

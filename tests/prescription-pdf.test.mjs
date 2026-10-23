@@ -67,6 +67,10 @@ const docReceitaCustom = {
 const customPdfBytes = await documentPdf(docReceitaCustom);
 const customPdfDoc = await PDFDocument.load(customPdfBytes);
 assert.equal(customPdfDoc.getPageCount(), 2, 'Custom prescription must also have 2 pages');
+await assert.rejects(() => documentPdf({ ...docReceitaCustom, text: 'LINHA SINTÉTICA\n'.repeat(100) }), /excede a área/, 'must not silently truncate prescription content');
+await assert.rejects(() => documentPdf({ ...docReceitaCustom, text: 'palavra'.repeat(200) }), /excede a largura/);
+for (const prescription_category of ['RET','NRA','NRB','NRB2','NRR','NRT'])
+  await assert.rejects(() => documentPdf({ ...docReceitaCustom, prescription_category }), /exclusivo de Receita de Controle Especial/);
 
 for (const document_date of ['', null]) {
   const undated = await documentPdf({ ...docReceita, document_date });

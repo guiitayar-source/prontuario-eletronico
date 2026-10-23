@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { prescriptionSigningBlock } from '../sncr/policy.ts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { adminClient } from '@/lib/supabase/admin';
 import { HttpError } from '@/lib/supabase/server';
@@ -417,12 +418,25 @@ export class DocumentSigningService {
     }
 
     const doc = docRecord as ClinicalDocument;
+    if (doc.author_id !== params.userId)
+      throw new HttpError(403, 'Apenas o autor pode emitir e assinar este documento.');
+    if (doc.kind === 'Receita') {
+      const block = prescriptionSigningBlock(doc.prescription_category || 'RCE');
+      if (block) throw new HttpError(409, block);
+    }
 
     // 3. Mark status as SIGNING
-    await admin
+    const claim = await admin
       .from('clinical_documents')
       .update({ status: 'SIGNING' })
-      .eq('id', params.documentId);
+      .eq('id', params.documentId)
+      .eq('clinic_id', params.clinicId)
+      .eq('author_id', params.userId)
+      .eq('version', doc.version)
+      .in('status', ['DRAFT', 'SIGNATURE_FAILED'])
+      .select('id').maybeSingle();
+    if (claim.error || !claim.data)
+      throw new HttpError(409, 'Documento alterado ou com assinatura em andamento. Reabra-o antes de assinar.');
 
     try {
       // 4. Endereço do paciente (receitas) e timbre do autor
@@ -480,12 +494,12 @@ export class DocumentSigningService {
       }
 
       // 10. Upload signed PDF to Storage
-      const storagePath = `${params.clinicId}/signatures/${params.documentId}_v${doc.version}_signed.pdf`;
+      const storagePath = `${params.clinicId}/signatures/${params.documentId}_v${doc.version}_${signedPdfHash}_signed.pdf`;
       const uploadRes = await admin.storage
         .from('clinical-files')
         .upload(storagePath, signedPdfBuffer, {
           contentType: 'application/pdf',
-          upsert: true,
+          upsert: false,
         });
 
       if (uploadRes.error) {
@@ -580,7 +594,9 @@ export class DocumentSigningService {
       await admin
         .from('clinical_documents')
         .update({ status: 'SIGNATURE_FAILED' })
-        .eq('id', params.documentId);
+        .eq('id', params.documentId)
+        .eq('clinic_id', params.clinicId)
+        .eq('status', 'SIGNING');
 
       await admin.from('audit_events').insert({
         clinic_id: params.clinicId,
