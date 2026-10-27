@@ -86,6 +86,27 @@ async function prescriptionPdf(
   const viaAdmin = clean(parsed.viaAdmin);
   const bodyText = parsed.bodyText;
 
+  // Não permita que dados de identificação sejam cortados ou saiam da página.
+  const requireFits = (value: string, face: PDFFont, size: number, max: number, field: string) => {
+    if (value.includes('\n') || face.widthOfTextAtSize(value, size) > max)
+      throw new Error(`O campo ${field} é longo demais para o PDF. Revise o conteúdo antes de emitir.`);
+  };
+  const usefulWidth = 595.3 - 2 * 51.1;
+  requireFits(clinicName, bold, 9, usefulWidth, 'timbre');
+  requireFits(physicianName, bold, 18, usefulWidth, 'nome do prescritor');
+  requireFits(physicianReg, bold, 10, usefulWidth, 'registro do prescritor');
+  requireFits(d.patient_name || '', font, 10, 340 - 14 - bold.widthOfTextAtSize('Paciente: ', 10), 'nome do paciente');
+  requireFits(cpfFormatted, font, 9.5, usefulWidth - 340 - bold.widthOfTextAtSize('CPF: ', 9.5), 'CPF do paciente');
+  requireFits(d.patient_address || '', font, 9.5, usefulWidth - bold.widthOfTextAtSize('Endereço: ', 10), 'endereço do paciente');
+  requireFits(d.patient_city || '', font, 9, 260 - bold.widthOfTextAtSize('Cidade: ', 9), 'cidade do paciente');
+  requireFits(d.patient_state || '', font, 9, 40, 'UF do paciente');
+  requireFits(viaAdmin, font, 10, usefulWidth - bold.widthOfTextAtSize('Via de administração: ', 10), 'via de administração');
+  requireFits(clinicPhone, font, 9, usefulWidth, 'telefone');
+  if (sncrNumber) requireFits(`Nº SNCR (Anvisa): ${sncrNumber}`, bold, 9.5, usefulWidth - 160, 'número SNCR');
+  const addressLines = wrapText(clinicAddress, font, 9, usefulWidth);
+  if (clinicAddress.includes('\n') || addressLines.length > 2 || addressLines.some((line) => font.widthOfTextAtSize(line, 9) > usefulWidth))
+    throw new Error('O endereço do consultório é longo demais para o rodapé do PDF.');
+
   const vias = modality.twoCopies
     ? ['1ª via - Farmácia', '2ª via - Paciente']
     : ['Via do Paciente'];
@@ -157,7 +178,6 @@ async function prescriptionPdf(
     const pLabel = 'Paciente: ';
     const pLabelW = bold.widthOfTextAtSize(pLabel, 10);
     const cpfX = left + 340;
-    const patientMaxW = cpfX - 14 - (left + pLabelW);
     page.drawText(pLabel, {
       x: left,
       y: height - 180.0,
@@ -166,10 +186,7 @@ async function prescriptionPdf(
       color: rgb(0, 0, 0),
     });
     if (d.patient_name) {
-      let pName = d.patient_name;
-      while (pName.length > 1 && font.widthOfTextAtSize(pName, 10) > patientMaxW) {
-        pName = pName.slice(0, -1).trimEnd();
-      }
+      const pName = d.patient_name;
       page.drawText(pName, {
         x: left + pLabelW,
         y: height - 180.0,
@@ -402,12 +419,28 @@ async function prescriptionPdf(
       });
     }
 
-    // Prescription body lines (wrapping long lines)
+    // O conteúdo continua em páginas próprias, mantendo as áreas reservadas
+    // para rodapé e para o carimbo PAdES em todas as páginas.
     let textY = height - 295.0;
-    const minBodyY = modality.buyerSupplierBoxes ? height - 460.0 : height - 620.0;
+    let minBodyY = modality.buyerSupplierBoxes ? height - 460.0 : height - 620.0;
+    let bodyPage = page;
+    const continuePage = () => {
+      bodyPage = pdf.addPage([width, height]);
+      bodyPage.drawText(physicianName, { x: left, y: height - 55, size: 14, font: bold });
+      bodyPage.drawText(physicianReg, { x: left, y: height - 75, size: 10, font: bold });
+      bodyPage.drawText(`${viaTitle} — continuação`, { x: left, y: height - 100, size: 10, font: bold });
+      bodyPage.drawText(`Paciente: ${d.patient_name}`, { x: left, y: height - 120, size: 10, font });
+      if (sncrNumber) bodyPage.drawText(`Nº SNCR (Anvisa): ${sncrNumber}`, { x: left, y: height - 140, size: 9.5, font: bold });
+      textY = height - 165;
+      minBodyY = 155;
+    };
+    const drawBodyLine = (text: string, face: PDFFont, advance: number) => {
+      if (textY < minBodyY) continuePage();
+      if (text) bodyPage.drawText(text, { x: left, y: textY, size: 9.5, font: face, color: rgb(0.05, 0.05, 0.05) });
+      textY -= advance;
+    };
     const lines = bodyText.split('\n');
     for (const rawLine of lines) {
-      if (textY < minBodyY) break; // stay within prescription box
       const isHeader =
         rawLine.trim().endsWith(':') ||
         rawLine.trim().toLowerCase().startsWith('orienta');
@@ -415,40 +448,28 @@ async function prescriptionPdf(
       const sz = 9.5;
 
       if (!rawLine.trim()) {
-        textY -= 8;
+        drawBodyLine('', f, 8);
         continue;
       }
 
-      // Word wrapping
-      let currentChunk = '';
-      for (const word of rawLine.split(' ')) {
-        const testChunk = currentChunk ? currentChunk + ' ' + word : word;
-        if (f.widthOfTextAtSize(testChunk, sz) <= contentWidth) {
-          currentChunk = testChunk;
-        } else {
-          if (currentChunk) {
-            page.drawText(currentChunk, {
-              x: left,
-              y: textY,
-              size: sz,
-              font: f,
-              color: rgb(0.05, 0.05, 0.05),
-            });
-            textY -= 13.5;
+      let chunk = '';
+      for (const char of rawLine) {
+        if (f.widthOfTextAtSize(chunk + char, sz) > contentWidth) {
+          if (!chunk) throw new Error('Não foi possível acomodar o conteúdo da prescrição no PDF.');
+          const split = chunk.lastIndexOf(' ');
+          if (split > 0) {
+            drawBodyLine(chunk.slice(0, split + 1), f, 13.5);
+            chunk = chunk.slice(split + 1);
+          } else {
+            drawBodyLine(chunk, f, 13.5);
+            chunk = '';
           }
-          currentChunk = word;
         }
+        chunk += char;
+        if (f.widthOfTextAtSize(chunk, sz) > contentWidth)
+          throw new Error('Não foi possível acomodar o conteúdo da prescrição no PDF.');
       }
-      if (currentChunk) {
-        page.drawText(currentChunk, {
-          x: left,
-          y: textY,
-          size: sz,
-          font: f,
-          color: rgb(0.05, 0.05, 0.05),
-        });
-        textY -= 14.5;
-      }
+      drawBodyLine(chunk, f, 14.5);
     }
 
     // 5. Prescriber Signature block
@@ -657,7 +678,6 @@ async function prescriptionPdf(
 
     // 7. Footer (Consultório address and phone). O endereço quebra em linhas
     // para caber na largura útil; a última linha fica em y=40, acima do telefone.
-    const addressLines = wrapText(clinicAddress, font, 9, width - 2 * left);
     addressLines.forEach((line, i) => {
       const lineW = font.widthOfTextAtSize(line, 9);
       page.drawText(line, {

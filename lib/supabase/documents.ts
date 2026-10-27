@@ -10,6 +10,7 @@ import { adminClient } from './admin.ts';
 import { documentKinds, type ClinicalDocument } from '../document-fields.ts';
 import { documentPdf } from '../document-pdf.ts';
 import { withPdfData } from './document-pdf-data.ts';
+import { createHash } from 'node:crypto';
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -60,25 +61,45 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
       if (!d) throw new HttpError(404, 'Documento não encontrado.');
       const doc = d as ClinicalDocument;
 
-      // If document is signed and storage path exists, serve official signed PDF
-      if (doc.status === 'SIGNED' && doc.signed_pdf_path) {
-        let fileData = null;
-        const bucket = db.storage.from('clinical-files');
-        const { data, error } = await bucket.download(doc.signed_pdf_path);
-        if (!error && data) {
-          fileData = data;
-        } else {
-          const { data: adminData } = await adminClient()
-            .storage.from('clinical-files')
-            .download(doc.signed_pdf_path);
-          if (adminData) {
-            fileData = adminData;
-          }
-        }
+      // Um documento assinado só pode ser entregue a partir do arquivo original.
+      if (doc.status === 'SIGNED') {
+        const unavailable = () => new HttpError(503, 'Não foi possível recuperar o documento assinado original.');
+        if (!doc.signed_pdf_path) throw unavailable();
 
-        if (fileData) {
-          const arrayBuf = await fileData.arrayBuffer();
-          return new Response(new Uint8Array(arrayBuf), {
+        try {
+          // Registros antigos podem não ter metadados de assinatura. Quando há
+          // hash para esta versão e caminho, confira os bytes antes de entregá-los.
+          const { data: signature, error: signatureError } = await db
+            .from('digital_signatures')
+            .select('signed_pdf_hash,signed_pdf_storage_path')
+            .eq('clinic_id', clinic)
+            .eq('document_id', doc.id)
+            .eq('document_version', doc.version)
+            .eq('status', 'SIGNED')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (signatureError || (signature && signature.signed_pdf_storage_path !== doc.signed_pdf_path)) throw unavailable();
+
+          let fileData = null;
+          try {
+            const result = await db.storage.from('clinical-files').download(doc.signed_pdf_path);
+            if (!result.error) fileData = result.data;
+          } catch { /* Tenta o acesso de servidor usado pelo fluxo existente. */ }
+          if (!fileData) {
+            const result = await adminClient().storage.from('clinical-files').download(doc.signed_pdf_path);
+            if (!result.error) fileData = result.data;
+          }
+          if (!fileData) throw unavailable();
+          const bytes = new Uint8Array(await fileData.arrayBuffer());
+          const storedHash = signature?.signed_pdf_hash;
+          if (storedHash != null && (
+            typeof storedHash !== 'string' ||
+            !/^[a-f0-9]{64}$/i.test(storedHash) ||
+            createHash('sha256').update(bytes).digest('hex') !== storedHash.toLowerCase()
+          )) throw unavailable();
+
+          return new Response(bytes, {
             headers: {
               'Content-Type': 'application/pdf',
               'Content-Disposition': 'inline; filename="documento_assinado.pdf"',
@@ -86,13 +107,15 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
               'X-Content-Type-Options': 'nosniff',
             },
           });
+        } catch {
+          throw unavailable();
         }
       }
 
       await withPdfData(adminClient(), clinic, doc);
       let bytes;
       try {
-        bytes = await documentPdf(doc, { isDraft: doc.status !== 'SIGNED' });
+        bytes = await documentPdf(doc, { isDraft: true });
       } catch (e) {
         throw new HttpError(422, (e as Error).message);
       }
