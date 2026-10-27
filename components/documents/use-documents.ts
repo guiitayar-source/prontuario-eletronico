@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/supabase/http';
 import {
+  buildPrescriptionText,
   documentKinds,
+  parsePrescriptionText,
   type ClinicalDocument,
   type DocumentProfile,
+  type PrescriptionModality,
   type PrescriptionTemplate,
 } from '@/lib/document-fields';
+import type { SncrBatchSummary } from '@/lib/sncr/client';
 import type { Patient } from '@/lib/patient-fields';
 import {
   fetchSignatureAuthorizationUrl,
@@ -29,6 +33,7 @@ export function useDocuments(patient: Patient, enabled = true) {
       cpf: null,
     }),
     [templates, setTemplates] = useState<PrescriptionTemplate[]>([]),
+    [sncrBatches, setSncrBatches] = useState<SncrBatchSummary[]>([]),
     [draft, setDraft] = useState<ClinicalDocument | null>(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
@@ -142,6 +147,19 @@ export function useDocuments(patient: Patient, enabled = true) {
     }
   }
 
+  async function loadSncrBatches() {
+    try {
+      const r = await apiFetch('/api/digital-signature/sncr');
+      if (!r.ok) return;
+      const data = (await r.json()) as { batches?: SncrBatchSummary[] };
+      if (Array.isArray(data.batches)) {
+        setSncrBatches(data.batches);
+      }
+    } catch {
+      // Falha silenciosa ao carregar resumo de lotes SNCR
+    }
+  }
+
   async function load() {
     const r = await apiFetch(
       '/api/documents?patientId=' + encodeURIComponent(patient.id),
@@ -156,6 +174,7 @@ export function useDocuments(patient: Patient, enabled = true) {
     setRows(data.documents);
     setTemplates(data.templates || []);
     if (data.profile) setProfile(data.profile);
+    void loadSncrBatches();
   }
   async function templateAction(
     action: 'save-template' | 'delete-template',
@@ -254,6 +273,19 @@ export function useDocuments(patient: Patient, enabled = true) {
                 consultation_id: consultationId || null,
                 physician_name: profile.physician_name,
                 physician_registration: profile.physician_registration,
+                ...(d.kind === 'Receita'
+                  ? {
+                      text: (() => {
+                        const rx = parsePrescriptionText(d.text);
+                        return buildPrescriptionText({
+                          modality: rx.modality,
+                          sncrNumber: '',
+                          viaAdmin: rx.viaAdmin,
+                          bodyText: rx.bodyText,
+                        });
+                      })(),
+                    }
+                  : {}),
               }
             : {}),
         }
@@ -372,7 +404,15 @@ export function useDocuments(patient: Patient, enabled = true) {
       });
       await load();
       if (draft && draft.id === documentId) {
-        setDraft({ ...draft, status: 'SIGNED', signed_pdf_path: data.signedPdfPath });
+        const today = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Sao_Paulo',
+        }).format(new Date());
+        setDraft({
+          ...draft,
+          status: 'SIGNED',
+          document_date: draft.document_date || today,
+          signed_pdf_path: data.signedPdfPath,
+        });
         await pdf();
       }
       return true;
@@ -385,12 +425,160 @@ export function useDocuments(patient: Patient, enabled = true) {
     }
   }
 
+  async function requestSncrNumber() {
+    if (!draft || draft.kind !== 'Receita' || draft.status === 'SIGNED') return;
+    const rxMeta = parsePrescriptionText(draft.text);
+    setBusy(true);
+    setError('');
+    try {
+      const res = await apiFetch('/api/digital-signature/sncr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Signature-Action': '1',
+        },
+        body: JSON.stringify({
+          modality: rxMeta.modality,
+          physicianRegistration: draft.physician_registration,
+        }),
+      });
+      const data = (await res.json()) as {
+        number?: string;
+        source?: 'batch' | 'api' | 'pool';
+        remainingInPool?: number;
+        saldoReceitas?: number;
+        batches?: SncrBatchSummary[];
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.number) {
+        throw new Error(data.error || 'Falha ao obter número no SNCR da Anvisa.');
+      }
+      if (Array.isArray(data.batches)) {
+        setSncrBatches(data.batches);
+      }
+      clearPreview();
+      setDraft({
+        ...draft,
+        text: buildPrescriptionText({
+          modality: rxMeta.modality,
+          sncrNumber: data.number,
+          viaAdmin: rxMeta.viaAdmin,
+          bodyText: rxMeta.bodyText,
+        }),
+      });
+      const remaining =
+        data.remainingInPool !== undefined
+          ? data.remainingInPool
+          : data.saldoReceitas;
+      setSignatureNotice({
+        type: 'success',
+        message:
+          data.source === 'batch'
+            ? `✓ Número SNCR aplicado do seu lote: ${data.number}${
+                remaining !== undefined ? ` (${remaining} restantes no lote)` : ''
+              }`
+            : `✓ Número SNCR obtido na Anvisa: ${data.number}${
+                remaining !== undefined ? ` (saldo: ${remaining})` : ''
+              }`,
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function registerSncrBatch(input: {
+    modality: PrescriptionModality;
+    label?: string;
+    inicio?: string;
+    fim?: string;
+    rawList?: string;
+  }) {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await apiFetch('/api/digital-signature/sncr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Signature-Action': '1',
+        },
+        body: JSON.stringify({
+          action: 'register-batch',
+          ...input,
+        }),
+      });
+      const data = (await res.json()) as {
+        batch?: SncrBatchSummary;
+        batches?: SncrBatchSummary[];
+        error?: string;
+      };
+      if (!res.ok || !data.batch) {
+        throw new Error(data.error || 'Falha ao salvar lote SNCR.');
+      }
+      if (Array.isArray(data.batches)) {
+        setSncrBatches(data.batches);
+      }
+      setSignatureNotice({
+        type: 'success',
+        message: `✓ Lote SNCR salvo (${data.batch.total} números · ${data.batch.remaining} disponíveis).`,
+      });
+      return data.batch;
+    } catch (e) {
+      setError((e as Error).message);
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteSncrBatch(batchId: string) {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await apiFetch('/api/digital-signature/sncr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Signature-Action': '1',
+        },
+        body: JSON.stringify({
+          action: 'delete-batch',
+          batchId,
+        }),
+      });
+      const data = (await res.json()) as {
+        batches?: SncrBatchSummary[];
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao remover lote SNCR.');
+      }
+      if (Array.isArray(data.batches)) {
+        setSncrBatches(data.batches);
+      }
+      return true;
+    } catch (e) {
+      setError((e as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return {
     signatureLabel: signature.label,
+    patientCpf: patient.cpf || '',
+    patientHasAddress: Boolean(patient.street && patient.city && patient.state),
     rows,
     templates,
+    sncrBatches,
     saveTemplate,
     deleteTemplate,
+    registerSncrBatch,
+    deleteSncrBatch,
     draft,
     setDraft: (d: ClinicalDocument) => {
       clearPreview();
@@ -407,6 +595,7 @@ export function useDocuments(patient: Patient, enabled = true) {
     connectSignature,
     disconnectSignature,
     signTestDocument,
+    requestSncrNumber,
     sign,
     load,
     open,

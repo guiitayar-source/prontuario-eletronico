@@ -1,11 +1,15 @@
 'use client';
 import { useState } from 'react';
 import {
+  buildPrescriptionText,
   documentKinds,
   documentTemplate,
+  parsePrescriptionText,
+  prescriptionModalities,
   type ClinicalDocument,
+  type PrescriptionModality,
 } from '@/lib/document-fields';
-import { Download, ShieldCheck, Key, Lock } from 'lucide-react';
+import { Download, ShieldCheck, Key, Lock, Layers, Trash2 } from 'lucide-react';
 import type { DocumentsController } from './use-documents';
 import { DocumentAiBox } from './ai-box';
 import { useFeature } from '../plan';
@@ -22,6 +26,11 @@ export function DocumentEditor({
 }) {
   const ai = useFeature('ia');
   const [choosingProvider, setChoosingProvider] = useState(false);
+  const [showSncrBatches, setShowSncrBatches] = useState(false);
+  const [batchLabel, setBatchLabel] = useState('');
+  const [batchInicio, setBatchInicio] = useState('');
+  const [batchFim, setBatchFim] = useState('');
+  const [batchRawList, setBatchRawList] = useState('');
   // Validação expirada com a página aberta: revalida direto no mesmo provedor.
   const expiredProvider = isSignatureProviderId(docs.signatureExpired)
     ? docs.signatureExpired
@@ -197,8 +206,348 @@ export function DocumentEditor({
           Paciente
           <input value={d.patient_name} readOnly />
         </label>
+        {d.kind === 'Receita' && (
+          <p className="document-template-note" style={{ marginTop: '-4px', marginBottom: '10px' }}>
+            {docs.patientCpf
+              ? `CPF do paciente incluído no PDF (${docs.patientCpf}).`
+              : 'Sem CPF no cadastro do paciente (exigido pela RDC Anvisa nº 1.000/2025 para receitas controladas).'}{' '}
+            {docs.patientHasAddress
+              ? 'Endereço cadastrado.'
+              : 'Sem endereço completo no cadastro.'}
+          </p>
+        )}
+        {d.kind === 'Receita' && (() => {
+          const rxMeta = parsePrescriptionText(d.text);
+          const modalityCfg =
+            prescriptionModalities.find((m) => m.id === rxMeta.modality) ||
+            prescriptionModalities[0];
+          return (
+            <>
+              <label htmlFor="prescription-modality">
+                Modalidade da receita (Anvisa)
+                <select
+                  id="prescription-modality"
+                  value={rxMeta.modality}
+                  disabled={isSigned}
+                  onChange={(e) => {
+                    const nextModality = e.target.value as PrescriptionModality;
+                    update({
+                      text: buildPrescriptionText({
+                        modality: nextModality,
+                        sncrNumber:
+                          nextModality === 'simples' ? '' : rxMeta.sncrNumber,
+                        viaAdmin: rxMeta.viaAdmin,
+                        bodyText: rxMeta.bodyText,
+                      }),
+                    });
+                  }}
+                >
+                  {prescriptionModalities.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {rxMeta.modality !== 'simples' && (() => {
+                const modalityBatches = (docs.sncrBatches || []).filter(
+                  (b) => b.modality === rxMeta.modality,
+                );
+                const totalRemaining = modalityBatches.reduce(
+                  (acc, b) => acc + b.remaining,
+                  0,
+                );
+                const totalNumbers = modalityBatches.reduce(
+                  (acc, b) => acc + b.total,
+                  0,
+                );
+                const firstAvailable =
+                  modalityBatches.find((b) => b.nextNumber)?.nextNumber || null;
+
+                return (
+                  <div style={{ marginBottom: '12px' }}>
+                    <label htmlFor="prescription-sncr">
+                      {modalityCfg.requiresSncrWhenSigned
+                        ? 'Número SNCR — Anvisa (obrigatório para assinar digitalmente)'
+                        : 'Número SNCR — Anvisa (RDC 1.000/2025 — puxado do seu lote ou informado)'}
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '8px',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <input
+                          id="prescription-sncr"
+                          maxLength={60}
+                          placeholder={
+                            firstAvailable
+                              ? `Próximo do lote: ${firstAvailable}`
+                              : 'Ex.: 2602.6-53.0000001'
+                          }
+                          value={rxMeta.sncrNumber}
+                          readOnly={isSigned}
+                          style={{ flex: 1, minWidth: '180px' }}
+                          onChange={(e) =>
+                            update({
+                              text: buildPrescriptionText({
+                                modality: rxMeta.modality,
+                                sncrNumber: e.target.value,
+                                viaAdmin: rxMeta.viaAdmin,
+                                bodyText: rxMeta.bodyText,
+                              }),
+                            })
+                          }
+                        />
+                        {!isSigned && (
+                          <>
+                            <button
+                              type="button"
+                              className="secondary"
+                              disabled={docs.busy}
+                              onClick={() => void docs.requestSncrNumber()}
+                              title="Puxar o próximo número livre do seu lote SNCR (ou solicitar na API da Anvisa)"
+                              style={{ whiteSpace: 'nowrap' }}
+                            >
+                              {totalRemaining > 0
+                                ? `Usar nº do lote (${totalRemaining})`
+                                : 'Gerar nº no SNCR'}
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              disabled={docs.busy}
+                              onClick={() => setShowSncrBatches((v) => !v)}
+                              title="Cadastrar ou gerenciar lotes de numeração SNCR obtidos no site da Anvisa (sem precisar de e-CNPJ)"
+                              style={{
+                                whiteSpace: 'nowrap',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                              }}
+                            >
+                              <Layers size={14} />
+                              Lotes SNCR
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </label>
+                    <p
+                      className="document-template-note"
+                      style={{ marginTop: '4px', marginBottom: '4px' }}
+                    >
+                      {modalityBatches.length > 0 ? (
+                        <>
+                          <strong>Estoque ({modalityCfg.label}):</strong>{' '}
+                          {totalRemaining} disponíveis de {totalNumbers}
+                          {firstAvailable ? ` · Próximo: ${firstAvailable}` : ' · Lote esgotado'}
+                          {totalRemaining > 0 && !rxMeta.sncrNumber
+                            ? ' (se deixar em branco, o próximo número será preenchido automaticamente ao assinar).'
+                            : ''}
+                        </>
+                      ) : (
+                        <>
+                          Nenhum lote cadastrado para {modalityCfg.label}. Clique em{' '}
+                          <strong>Lotes SNCR</strong> para salvar sua faixa de números obtida no
+                          site da Anvisa (sem precisar de e-CNPJ).
+                        </>
+                      )}
+                    </p>
+                    {showSncrBatches && !isSigned && (
+                      <div
+                        style={{
+                          padding: '12px 14px',
+                          backgroundColor: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '6px',
+                          marginTop: '8px',
+                          fontSize: '13px',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '8px',
+                          }}
+                        >
+                          <strong>
+                            Estoque de Lotes SNCR — {modalityCfg.label}
+                          </strong>
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() => setShowSncrBatches(false)}
+                          >
+                            Fechar
+                          </button>
+                        </div>
+                        <p
+                          className="document-template-note"
+                          style={{ marginTop: 0, marginBottom: '10px' }}
+                        >
+                          Pegue um lote de números no portal{' '}
+                          <a
+                            href="https://sncr.anvisa.gov.br"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            sncr.anvisa.gov.br
+                          </a>{' '}
+                          e salve a faixa abaixo. O PsyWrite puxará o próximo número livre
+                          automaticamente a cada receita, sem precisar de e-CNPJ.
+                        </p>
+
+                        {modalityBatches.length > 0 && (
+                          <ul
+                            className="prescription-list"
+                            style={{ marginBottom: '12px' }}
+                          >
+                            {modalityBatches.map((b) => (
+                              <li
+                                key={b.id}
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                }}
+                              >
+                                <div>
+                                  <strong>{b.label}</strong>
+                                  <span
+                                    className="prescription-summary"
+                                    style={{ display: 'block' }}
+                                  >
+                                    Restantes: <strong>{b.remaining}</strong> de{' '}
+                                    {b.total} (usados: {b.used})
+                                    {b.nextNumber
+                                      ? ` · Próximo: ${b.nextNumber}`
+                                      : ' · Esgotado'}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="text-button danger"
+                                  disabled={docs.busy}
+                                  title={`Remover lote ${b.label}`}
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        `Remover o lote SNCR "${b.label}"?`,
+                                      )
+                                    ) {
+                                      void docs.deleteSncrBatch(b.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns:
+                              'repeat(auto-fit, minmax(180px, 1fr))',
+                            gap: '8px',
+                            marginBottom: '8px',
+                          }}
+                        >
+                          <label style={{ margin: 0 }}>
+                            Nº inicial da faixa
+                            <input
+                              placeholder="Ex.: 2602.6-53.0000001"
+                              value={batchInicio}
+                              onChange={(e) => setBatchInicio(e.target.value)}
+                            />
+                          </label>
+                          <label style={{ margin: 0 }}>
+                            Nº final da faixa
+                            <input
+                              placeholder="Ex.: 2602.6-53.0000100"
+                              value={batchFim}
+                              onChange={(e) => setBatchFim(e.target.value)}
+                            />
+                          </label>
+                          <label style={{ margin: 0 }}>
+                            Identificação (opcional)
+                            <input
+                              placeholder="Ex.: Lote C1 Out/2026"
+                              maxLength={80}
+                              value={batchLabel}
+                              onChange={(e) => setBatchLabel(e.target.value)}
+                            />
+                          </label>
+                        </div>
+
+                        <label style={{ marginBottom: '8px' }}>
+                          Ou cole uma lista de números (separados por vírgula ou
+                          linha)
+                          <textarea
+                            rows={2}
+                            placeholder="Opcional se você já preencheu o Nº inicial e Nº final acima"
+                            value={batchRawList}
+                            onChange={(e) => setBatchRawList(e.target.value)}
+                            style={{ minHeight: '52px' }}
+                          />
+                        </label>
+
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={
+                              docs.busy ||
+                              (!batchInicio.trim() && !batchRawList.trim())
+                            }
+                            onClick={async () => {
+                              const created = await docs.registerSncrBatch({
+                                modality: rxMeta.modality,
+                                label: batchLabel,
+                                inicio: batchInicio,
+                                fim: batchFim,
+                                rawList: batchRawList,
+                              });
+                              if (created) {
+                                setBatchLabel('');
+                                setBatchInicio('');
+                                setBatchFim('');
+                                setBatchRawList('');
+                                if (!rxMeta.sncrNumber && created.nextNumber) {
+                                  update({
+                                    text: buildPrescriptionText({
+                                      modality: rxMeta.modality,
+                                      sncrNumber: created.nextNumber,
+                                      viaAdmin: rxMeta.viaAdmin,
+                                      bodyText: rxMeta.bodyText,
+                                    }),
+                                  });
+                                }
+                              }
+                            }}
+                          >
+                            Salvar lote SNCR
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </>
+          );
+        })()}
         <label>
-          {d.kind === 'Receita' ? 'Data (opcional)' : 'Data'}
+          {d.kind === 'Receita'
+            ? 'Data (opcional na impressão; preenchida ao assinar digitalmente)'
+            : 'Data'}
           <input
             type="date"
             value={d.document_date || ''}

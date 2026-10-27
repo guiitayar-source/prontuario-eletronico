@@ -7,6 +7,177 @@ export const documentKinds = [
   'Encaminhamento',
   'Documento livre',
 ];
+
+export type PrescriptionModality =
+  | 'controle_especial'
+  | 'retencao'
+  | 'notificacao_b'
+  | 'notificacao_a'
+  | 'simples';
+
+export const prescriptionModalities: {
+  id: PrescriptionModality;
+  label: string;
+  pdfTitle: string;
+  twoCopies: boolean;
+  buyerSupplierBoxes: boolean;
+  requiresSncrWhenSigned: boolean;
+}[] = [
+  {
+    id: 'controle_especial',
+    label: 'Receituário de controle especial (Listas C1/C5 — 2 vias)',
+    pdfTitle: 'Receituário de controle especial',
+    twoCopies: true,
+    buyerSupplierBoxes: true,
+    requiresSncrWhenSigned: false,
+  },
+  {
+    id: 'retencao',
+    label: 'Receita sujeita a retenção (Antimicrobiano / GLP-1 — 2 vias)',
+    pdfTitle: 'Receituário sujeito a retenção',
+    twoCopies: true,
+    buyerSupplierBoxes: true,
+    requiresSncrWhenSigned: false,
+  },
+  {
+    id: 'notificacao_b',
+    label: 'Notificação de Receita B / B2 (Psicotrópicos — SNCR digital)',
+    pdfTitle: 'Notificação de Receita B — Controle Especial',
+    twoCopies: true,
+    buyerSupplierBoxes: true,
+    requiresSncrWhenSigned: true,
+  },
+  {
+    id: 'notificacao_a',
+    label: 'Notificação de Receita A (Entorpecentes/Psicotrópicos — SNCR digital)',
+    pdfTitle: 'Notificação de Receita A — Controle Especial',
+    twoCopies: true,
+    buyerSupplierBoxes: true,
+    requiresSncrWhenSigned: true,
+  },
+  {
+    id: 'simples',
+    label: 'Receita simples (Sem retenção — 1 via)',
+    pdfTitle: 'Receituário',
+    twoCopies: false,
+    buyerSupplierBoxes: false,
+    requiresSncrWhenSigned: false,
+  },
+];
+
+export type ParsedPrescriptionMetadata = {
+  modality: PrescriptionModality;
+  sncrNumber: string;
+  viaAdmin: string;
+  bodyText: string;
+};
+
+const MODALITY_BY_HEADER: Record<string, PrescriptionModality> = {
+  'controle especial': 'controle_especial',
+  'receituario de controle especial': 'controle_especial',
+  'receituário de controle especial': 'controle_especial',
+  controle_especial: 'controle_especial',
+  retencao: 'retencao',
+  'retenção': 'retencao',
+  'receita sujeita a retencao': 'retencao',
+  'receita sujeita a retenção': 'retencao',
+  'receituario sujeito a retencao': 'retencao',
+  'receituário sujeito a retenção': 'retencao',
+  notificacao_b: 'notificacao_b',
+  'notificação de receita b': 'notificacao_b',
+  'notificacao de receita b': 'notificacao_b',
+  'notificação b': 'notificacao_b',
+  notificacao_a: 'notificacao_a',
+  'notificação de receita a': 'notificacao_a',
+  'notificacao de receita a': 'notificacao_a',
+  'notificação a': 'notificacao_a',
+  simples: 'simples',
+  'receita simples': 'simples',
+  receituario: 'simples',
+  'receituário': 'simples',
+};
+
+const MODALITY_HEADER_VALUE: Record<PrescriptionModality, string> = {
+  controle_especial: 'Controle especial',
+  retencao: 'Retenção',
+  notificacao_b: 'Notificação de Receita B',
+  notificacao_a: 'Notificação de Receita A',
+  simples: 'Receita simples',
+};
+
+/**
+ * Extrai metadados opcionais (Modalidade, SNCR e Via de administração) das linhas
+ * iniciais do texto da receita, mantendo total compatibilidade com receitas existentes.
+ */
+export function parsePrescriptionText(rawText: string): ParsedPrescriptionMetadata {
+  const normalized = (rawText || '').replace(/\r\n?/g, '\n');
+  const lines = normalized.split('\n');
+  let modality: PrescriptionModality = 'controle_especial';
+  let sncrNumber = '';
+  let viaAdmin = 'Uso oral';
+  let idx = 0;
+
+  while (idx < lines.length) {
+    const trimmed = lines[idx].trim();
+    if (!trimmed) {
+      idx++;
+      continue;
+    }
+    const modMatch = trimmed.match(/^modalidade:\s*(.+)$/i);
+    if (modMatch) {
+      const key = modMatch[1].trim().toLowerCase();
+      if (MODALITY_BY_HEADER[key]) {
+        modality = MODALITY_BY_HEADER[key];
+      }
+      idx++;
+      continue;
+    }
+    const sncrMatch = trimmed.match(/^(?:n[º°o]?\s*)?sncr:\s*(.+)$/i);
+    if (sncrMatch) {
+      sncrNumber = sncrMatch[1].trim();
+      idx++;
+      continue;
+    }
+    const viaMatch = trimmed.match(/^via\s+de\s+administra[cç][aã]o:\s*(.+)$/i);
+    if (viaMatch) {
+      viaAdmin = viaMatch[1].trim();
+      idx++;
+      continue;
+    }
+    break;
+  }
+
+  const bodyText = lines.slice(idx).join('\n').trim();
+  return { modality, sncrNumber, viaAdmin, bodyText };
+}
+
+/**
+ * Reconstrói o texto da receita preservando exatamente o formato padrão quando
+ * a modalidade é 'controle_especial' e não há número SNCR.
+ */
+export function buildPrescriptionText(params: {
+  modality?: PrescriptionModality;
+  sncrNumber?: string;
+  viaAdmin?: string;
+  bodyText: string;
+}): string {
+  const modality = params.modality || 'controle_especial';
+  const sncr = (params.sncrNumber || '').trim();
+  const via = (params.viaAdmin ?? 'Uso oral').trim() || 'Uso oral';
+  const headers: string[] = [];
+
+  if (modality !== 'controle_especial') {
+    headers.push(`Modalidade: ${MODALITY_HEADER_VALUE[modality]}`);
+  }
+  if (sncr) {
+    headers.push(`SNCR: ${sncr}`);
+  }
+  headers.push(`Via de administração: ${via}`);
+
+  const body = (params.bodyText || '').trim();
+  return body ? `${headers.join('\n')}\n\n${body}` : `${headers.join('\n')}\n\n`;
+}
+
 export type ClinicalDocument = {
   id: string;
   patient_id: string;
@@ -20,9 +191,12 @@ export type ClinicalDocument = {
   version: number;
   updated_at?: string;
   author_id?: string;
+  patient_cpf?: string;
   patient_address?: string;
   patient_city?: string;
   patient_state?: string;
+  sncr_number?: string;
+  prescription_modality?: PrescriptionModality;
   letterhead_title?: string;
   letterhead_address?: string;
   letterhead_phone?: string;

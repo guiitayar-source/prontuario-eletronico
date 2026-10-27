@@ -1,9 +1,21 @@
 import { PDFDocument, rgb, type PDFFont } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFile } from 'node:fs/promises';
-import type { ClinicalDocument } from './document-fields.ts';
+import {
+  parsePrescriptionText,
+  prescriptionModalities,
+  type ClinicalDocument,
+} from './document-fields.ts';
 
 const clean = (s: string) => s.replace(/\r\n?/g, '\n').replace(/\t/g, '    ');
+
+function formatPatientCpf(raw?: string) {
+  const digits = (raw || '').replace(/\D/g, '');
+  if (digits.length === 11) {
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+  }
+  return (raw || '').trim();
+}
 
 /**
  * Quebra um texto em linhas que caibam em maxWidth. Prefere dividir em duas linhas
@@ -63,17 +75,20 @@ async function prescriptionPdf(
   const dateFormatted = d.document_date
     ? d.document_date.split('-').reverse().join('/')
     : '';
+  const cpfFormatted = clean(formatPatientCpf(d.patient_cpf));
 
-  // Extract via de administração if explicitly present in text
-  let viaAdmin = 'Uso oral';
-  let bodyText = clean(d.text).trim();
-  const viaMatch = bodyText.match(/^via\s+de\s+administra[cç][aã]o:\s*([^\n]+)/i);
-  if (viaMatch) {
-    viaAdmin = viaMatch[1].trim();
-    bodyText = bodyText.slice(viaMatch[0].length).trim();
-  }
+  const parsed = parsePrescriptionText(clean(d.text));
+  const modalityId = d.prescription_modality || parsed.modality;
+  const modality =
+    prescriptionModalities.find((m) => m.id === modalityId) ||
+    prescriptionModalities[0];
+  const sncrNumber = clean((d.sncr_number ?? parsed.sncrNumber).trim());
+  const viaAdmin = clean(parsed.viaAdmin);
+  const bodyText = parsed.bodyText;
 
-  const vias = ['1ª via - Farmácia', '2ª via - Paciente'];
+  const vias = modality.twoCopies
+    ? ['1ª via - Farmácia', '2ª via - Paciente']
+    : ['Via do Paciente'];
 
   for (const viaTitle of vias) {
     const page = pdf.addPage([595.3, 841.89]);
@@ -108,8 +123,8 @@ async function prescriptionPdf(
       color: rgb(0, 0, 0),
     });
 
-    // 2. Title & Via
-    page.drawText('Receituário de controle especial', {
+    // 2. Title, Via & SNCR (RDC Anvisa nº 1.000/2025)
+    page.drawText(modality.pdfTitle, {
       x: left,
       y: height - 132.0,
       size: 17,
@@ -125,10 +140,24 @@ async function prescriptionPdf(
       color: rgb(0, 0, 0),
     });
 
+    if (sncrNumber) {
+      const sncrLabel = `Nº SNCR (Anvisa): ${sncrNumber}`;
+      const sncrW = bold.widthOfTextAtSize(sncrLabel, 9.5);
+      page.drawText(sncrLabel, {
+        x: Math.max(left + 160, right - sncrW),
+        y: height - 150.0,
+        size: 9.5,
+        font: bold,
+        color: rgb(0.08, 0.2, 0.4),
+      });
+    }
+
     // 3. Patient Information
-    // Line 1: Paciente
+    // Line 1: Paciente + CPF (exigido pela RDC Anvisa nº 1.000/2025)
     const pLabel = 'Paciente: ';
     const pLabelW = bold.widthOfTextAtSize(pLabel, 10);
+    const cpfX = left + 340;
+    const patientMaxW = cpfX - 14 - (left + pLabelW);
     page.drawText(pLabel, {
       x: left,
       y: height - 180.0,
@@ -137,25 +166,60 @@ async function prescriptionPdf(
       color: rgb(0, 0, 0),
     });
     if (d.patient_name) {
-      page.drawText(d.patient_name, {
+      let pName = d.patient_name;
+      while (pName.length > 1 && font.widthOfTextAtSize(pName, 10) > patientMaxW) {
+        pName = pName.slice(0, -1).trimEnd();
+      }
+      page.drawText(pName, {
         x: left + pLabelW,
         y: height - 180.0,
         size: 10,
         font: font,
         color: rgb(0, 0, 0),
       });
-      page.drawLine({
-        start: {
-          x: left + pLabelW + font.widthOfTextAtSize(d.patient_name, 10) + 4,
-          y: height - 182,
-        },
-        end: { x: right, y: height - 182 },
-        thickness: 0.5,
-        color: rgb(0.2, 0.2, 0.2),
-      });
+      const lineStart = left + pLabelW + font.widthOfTextAtSize(pName, 10) + 4;
+      if (lineStart < cpfX - 10) {
+        page.drawLine({
+          start: { x: lineStart, y: height - 182 },
+          end: { x: cpfX - 10, y: height - 182 },
+          thickness: 0.5,
+          color: rgb(0.2, 0.2, 0.2),
+        });
+      }
     } else {
       page.drawLine({
         start: { x: left + pLabelW, y: height - 182 },
+        end: { x: cpfX - 10, y: height - 182 },
+        thickness: 0.5,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+    }
+
+    const cpfLabel = 'CPF: ';
+    const cpfLabelW = bold.widthOfTextAtSize(cpfLabel, 9.5);
+    page.drawText(cpfLabel, {
+      x: cpfX,
+      y: height - 180.0,
+      size: 9.5,
+      font: bold,
+      color: rgb(0, 0, 0),
+    });
+    if (cpfFormatted) {
+      page.drawText(cpfFormatted, {
+        x: cpfX + cpfLabelW,
+        y: height - 180.0,
+        size: 9.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
+    }
+    const cpfLineStart =
+      cpfX +
+      cpfLabelW +
+      (cpfFormatted ? font.widthOfTextAtSize(cpfFormatted, 9.5) + 4 : 0);
+    if (cpfLineStart < right) {
+      page.drawLine({
+        start: { x: cpfLineStart, y: height - 182 },
         end: { x: right, y: height - 182 },
         thickness: 0.5,
         color: rgb(0.2, 0.2, 0.2),
@@ -340,9 +404,10 @@ async function prescriptionPdf(
 
     // Prescription body lines (wrapping long lines)
     let textY = height - 295.0;
+    const minBodyY = modality.buyerSupplierBoxes ? height - 460.0 : height - 620.0;
     const lines = bodyText.split('\n');
     for (const rawLine of lines) {
-      if (textY < height - 460.0) break; // stay within prescription box
+      if (textY < minBodyY) break; // stay within prescription box
       const isHeader =
         rawLine.trim().endsWith(':') ||
         rawLine.trim().toLowerCase().startsWith('orienta');
@@ -387,7 +452,7 @@ async function prescriptionPdf(
     }
 
     // 5. Prescriber Signature block
-    const sigLineY = height - 475.0;
+    const sigLineY = modality.buyerSupplierBoxes ? height - 475.0 : height - 640.0;
     const sigW = 250;
     const sigX = (width - sigW) / 2;
     page.drawLine({
@@ -406,187 +471,189 @@ async function prescriptionPdf(
       color: rgb(0, 0, 0),
     });
 
-    // 6. Dual Boxes: Comprador e Fornecedor
-    const boxTop = height - 515.0;
-    const boxHeight = 150.0;
-    const boxBottom = boxTop - boxHeight;
-    const colMid = left + contentWidth / 2;
+    // 6. Dual Boxes: Comprador e Fornecedor (apenas para receitas com retenção/controle)
+    if (modality.buyerSupplierBoxes) {
+      const boxTop = height - 515.0;
+      const boxHeight = 150.0;
+      const boxBottom = boxTop - boxHeight;
+      const colMid = left + contentWidth / 2;
 
-    // Outer border
-    page.drawRectangle({
-      x: left,
-      y: boxBottom,
-      width: contentWidth,
-      height: boxHeight,
-      borderColor: rgb(0.75, 0.75, 0.75),
-      borderWidth: 0.5,
-      color: rgb(1, 1, 1),
-    });
+      // Outer border
+      page.drawRectangle({
+        x: left,
+        y: boxBottom,
+        width: contentWidth,
+        height: boxHeight,
+        borderColor: rgb(0.75, 0.75, 0.75),
+        borderWidth: 0.5,
+        color: rgb(1, 1, 1),
+      });
 
-    // Middle separator
-    page.drawLine({
-      start: { x: colMid, y: boxTop },
-      end: { x: colMid, y: boxBottom },
-      thickness: 0.5,
-      color: rgb(0.75, 0.75, 0.75),
-    });
+      // Middle separator
+      page.drawLine({
+        start: { x: colMid, y: boxTop },
+        end: { x: colMid, y: boxBottom },
+        thickness: 0.5,
+        color: rgb(0.75, 0.75, 0.75),
+      });
 
-    // Column 1: IDENTIFICAÇÃO DO COMPRADOR
-    const cLeft = left + 10;
-    const cRight = colMid - 10;
-    page.drawText('IDENTIFICAÇÃO DO COMPRADOR', {
-      x: cLeft,
-      y: boxTop - 16,
-      size: 9,
-      font: bold,
-      color: rgb(0, 0, 0),
-    });
+      // Column 1: IDENTIFICAÇÃO DO COMPRADOR
+      const cLeft = left + 10;
+      const cRight = colMid - 10;
+      page.drawText('IDENTIFICAÇÃO DO COMPRADOR', {
+        x: cLeft,
+        y: boxTop - 16,
+        size: 9,
+        font: bold,
+        color: rgb(0, 0, 0),
+      });
 
-    page.drawText('Nome: ', {
-      x: cLeft,
-      y: boxTop - 36,
-      size: 8.5,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
-    page.drawLine({
-      start: { x: cLeft + 35, y: boxTop - 38 },
-      end: { x: cRight, y: boxTop - 38 },
-      thickness: 0.5,
-      color: rgb(0.4, 0.4, 0.4),
-    });
+      page.drawText('Nome: ', {
+        x: cLeft,
+        y: boxTop - 36,
+        size: 8.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
+      page.drawLine({
+        start: { x: cLeft + 35, y: boxTop - 38 },
+        end: { x: cRight, y: boxTop - 38 },
+        thickness: 0.5,
+        color: rgb(0.4, 0.4, 0.4),
+      });
 
-    page.drawText('RG: ', {
-      x: cLeft,
-      y: boxTop - 56,
-      size: 8.5,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
-    page.drawLine({
-      start: { x: cLeft + 22, y: boxTop - 58 },
-      end: { x: cLeft + 110, y: boxTop - 58 },
-      thickness: 0.5,
-      color: rgb(0.4, 0.4, 0.4),
-    });
+      page.drawText('RG: ', {
+        x: cLeft,
+        y: boxTop - 56,
+        size: 8.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
+      page.drawLine({
+        start: { x: cLeft + 22, y: boxTop - 58 },
+        end: { x: cLeft + 110, y: boxTop - 58 },
+        thickness: 0.5,
+        color: rgb(0.4, 0.4, 0.4),
+      });
 
-    page.drawText('Órgão emissor: ', {
-      x: cLeft + 116,
-      y: boxTop - 56,
-      size: 8.5,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
-    page.drawLine({
-      start: { x: cLeft + 185, y: boxTop - 58 },
-      end: { x: cRight, y: boxTop - 58 },
-      thickness: 0.5,
-      color: rgb(0.4, 0.4, 0.4),
-    });
+      page.drawText('Órgão emissor: ', {
+        x: cLeft + 116,
+        y: boxTop - 56,
+        size: 8.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
+      page.drawLine({
+        start: { x: cLeft + 185, y: boxTop - 58 },
+        end: { x: cRight, y: boxTop - 58 },
+        thickness: 0.5,
+        color: rgb(0.4, 0.4, 0.4),
+      });
 
-    page.drawText('Endereço: ', {
-      x: cLeft,
-      y: boxTop - 76,
-      size: 8.5,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
-    page.drawLine({
-      start: { x: cLeft + 50, y: boxTop - 78 },
-      end: { x: cRight, y: boxTop - 78 },
-      thickness: 0.5,
-      color: rgb(0.4, 0.4, 0.4),
-    });
-    page.drawLine({
-      start: { x: cLeft, y: boxTop - 96 },
-      end: { x: cRight, y: boxTop - 96 },
-      thickness: 0.5,
-      color: rgb(0.4, 0.4, 0.4),
-    });
+      page.drawText('Endereço: ', {
+        x: cLeft,
+        y: boxTop - 76,
+        size: 8.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
+      page.drawLine({
+        start: { x: cLeft + 50, y: boxTop - 78 },
+        end: { x: cRight, y: boxTop - 78 },
+        thickness: 0.5,
+        color: rgb(0.4, 0.4, 0.4),
+      });
+      page.drawLine({
+        start: { x: cLeft, y: boxTop - 96 },
+        end: { x: cRight, y: boxTop - 96 },
+        thickness: 0.5,
+        color: rgb(0.4, 0.4, 0.4),
+      });
 
-    page.drawText('Cidade: ', {
-      x: cLeft,
-      y: boxTop - 116,
-      size: 8.5,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
-    page.drawLine({
-      start: { x: cLeft + 40, y: boxTop - 118 },
-      end: { x: cLeft + 155, y: boxTop - 118 },
-      thickness: 0.5,
-      color: rgb(0.4, 0.4, 0.4),
-    });
+      page.drawText('Cidade: ', {
+        x: cLeft,
+        y: boxTop - 116,
+        size: 8.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
+      page.drawLine({
+        start: { x: cLeft + 40, y: boxTop - 118 },
+        end: { x: cLeft + 155, y: boxTop - 118 },
+        thickness: 0.5,
+        color: rgb(0.4, 0.4, 0.4),
+      });
 
-    page.drawText('UF: ', {
-      x: cLeft + 162,
-      y: boxTop - 116,
-      size: 8.5,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
-    page.drawLine({
-      start: { x: cLeft + 182, y: boxTop - 118 },
-      end: { x: cRight, y: boxTop - 118 },
-      thickness: 0.5,
-      color: rgb(0.4, 0.4, 0.4),
-    });
+      page.drawText('UF: ', {
+        x: cLeft + 162,
+        y: boxTop - 116,
+        size: 8.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
+      page.drawLine({
+        start: { x: cLeft + 182, y: boxTop - 118 },
+        end: { x: cRight, y: boxTop - 118 },
+        thickness: 0.5,
+        color: rgb(0.4, 0.4, 0.4),
+      });
 
-    page.drawText('Telefone: (____) ', {
-      x: cLeft,
-      y: boxTop - 136,
-      size: 8.5,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
-    page.drawLine({
-      start: { x: cLeft + 75, y: boxTop - 138 },
-      end: { x: cRight, y: boxTop - 138 },
-      thickness: 0.5,
-      color: rgb(0.4, 0.4, 0.4),
-    });
+      page.drawText('Telefone: (____) ', {
+        x: cLeft,
+        y: boxTop - 136,
+        size: 8.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
+      page.drawLine({
+        start: { x: cLeft + 75, y: boxTop - 138 },
+        end: { x: cRight, y: boxTop - 138 },
+        thickness: 0.5,
+        color: rgb(0.4, 0.4, 0.4),
+      });
 
-    // Column 2: IDENTIFICAÇÃO DO FORNECEDOR
-    const fLeft = colMid + 10;
-    const fRight = right - 10;
-    page.drawText('IDENTIFICAÇÃO DO FORNECEDOR', {
-      x: fLeft,
-      y: boxTop - 16,
-      size: 9,
-      font: bold,
-      color: rgb(0, 0, 0),
-    });
+      // Column 2: IDENTIFICAÇÃO DO FORNECEDOR
+      const fLeft = colMid + 10;
+      const fRight = right - 10;
+      page.drawText('IDENTIFICAÇÃO DO FORNECEDOR', {
+        x: fLeft,
+        y: boxTop - 16,
+        size: 9,
+        font: bold,
+        color: rgb(0, 0, 0),
+      });
 
-    page.drawText('Estabelecimento / carimbo', {
-      x: fLeft,
-      y: boxTop - 36,
-      size: 8.5,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
+      page.drawText('Estabelecimento / carimbo', {
+        x: fLeft,
+        y: boxTop - 36,
+        size: 8.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
 
-    const pharmSigY = boxTop - 96;
-    page.drawLine({
-      start: { x: fLeft, y: pharmSigY },
-      end: { x: fRight, y: pharmSigY },
-      thickness: 0.5,
-      color: rgb(0.4, 0.4, 0.4),
-    });
-    page.drawText('Assinatura do farmacêutico', {
-      x: fLeft,
-      y: pharmSigY - 12,
-      size: 8.5,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
+      const pharmSigY = boxTop - 96;
+      page.drawLine({
+        start: { x: fLeft, y: pharmSigY },
+        end: { x: fRight, y: pharmSigY },
+        thickness: 0.5,
+        color: rgb(0.4, 0.4, 0.4),
+      });
+      page.drawText('Assinatura do farmacêutico', {
+        x: fLeft,
+        y: pharmSigY - 12,
+        size: 8.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
 
-    page.drawText('Data: ______/______/____________', {
-      x: fLeft,
-      y: boxTop - 136,
-      size: 8.5,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
+      page.drawText('Data: ______/______/____________', {
+        x: fLeft,
+        y: boxTop - 136,
+        size: 8.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
+    }
 
     // 7. Footer (Consultório address and phone). O endereço quebra em linhas
     // para caber na largura útil; a última linha fica em y=40, acima do telefone.
@@ -632,9 +699,11 @@ export async function documentPdf(
     d.physician_name,
     d.physician_registration,
     d.text,
+    d.patient_cpf || '',
     d.patient_address || '',
     d.patient_city || '',
     d.patient_state || '',
+    d.sncr_number || '',
     d.letterhead_title || '',
     d.letterhead_address || '',
     d.letterhead_phone || '',
@@ -647,10 +716,15 @@ export async function documentPdf(
           'O PDF contém um caractere não suportado. Remova emojis ou símbolos incomuns e tente novamente.',
         );
 
-  // If this is a prescription, use the official Receituário de controle especial template
+  // If this is a prescription, use the official Receituário template
   if (d.kind === 'Receita') {
+    const parsed = parsePrescriptionText(clean(d.text));
+    const modalityId = d.prescription_modality || parsed.modality;
+    const modality =
+      prescriptionModalities.find((m) => m.id === modalityId) ||
+      prescriptionModalities[0];
     await prescriptionPdf(pdf, d, font, bold);
-    pdf.setTitle('Receituário de controle especial');
+    pdf.setTitle(modality.pdfTitle);
     pdf.setCreator('PsyWrite');
     return pdf.save();
   }

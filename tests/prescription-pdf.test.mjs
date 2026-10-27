@@ -4,7 +4,11 @@ import path from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { documentPdf, wrapText } from '../lib/document-pdf.ts';
 import { StandardFonts } from 'pdf-lib';
-import { documentTemplate } from '../lib/document-fields.ts';
+import {
+  buildPrescriptionText,
+  documentTemplate,
+  parsePrescriptionText,
+} from '../lib/document-fields.ts';
 
 // 1. Check template files exist in public/templates/
 const publicDir = path.resolve('public/templates');
@@ -105,4 +109,46 @@ assert.deepEqual(wrapText('', helv, 9, maxWidth), []);
 const longPdf = await documentPdf({ ...docReceita, letterhead_address: longAddress });
 assert.ok(longPdf.length > 0, 'receita com endereço longo é gerada');
 
-console.log('PASS: Receituário padrão gera 2 vias (Farmácia/Paciente) A4, com endereço, templates e download ok.');
+// 6. ANVISA RDC 1.000/2025: Modalidades, SNCR e CPF do paciente
+const parsedDefault = parsePrescriptionText(defaultTpl);
+assert.equal(parsedDefault.modality, 'controle_especial');
+assert.equal(parsedDefault.sncrNumber, '');
+assert.equal(parsedDefault.viaAdmin, 'Uso oral');
+
+const builtNotifB = buildPrescriptionText({
+  modality: 'notificacao_b',
+  sncrNumber: 'BR-SNCR-2026-998877',
+  viaAdmin: 'Uso oral',
+  bodyText: '1) Clonazepam 2mg — 1 caixa\n   Tomar 1 comprimido ao deitar.',
+});
+const parsedNotifB = parsePrescriptionText(builtNotifB);
+assert.equal(parsedNotifB.modality, 'notificacao_b');
+assert.equal(parsedNotifB.sncrNumber, 'BR-SNCR-2026-998877');
+assert.equal(parsedNotifB.viaAdmin, 'Uso oral');
+assert.match(parsedNotifB.bodyText, /Clonazepam 2mg/);
+
+const notifBPdfBytes = await documentPdf({
+  ...docReceita,
+  patient_cpf: '12345678901',
+  text: builtNotifB,
+});
+const notifBPdfDoc = await PDFDocument.load(notifBPdfBytes);
+assert.equal(notifBPdfDoc.getPageCount(), 2, 'Notificação B gera 2 vias (Farmácia e Paciente)');
+assert.equal(notifBPdfDoc.getTitle(), 'Notificação de Receita B — Controle Especial');
+
+// Receita simples gera apenas 1 página (sem quadros de comprador/fornecedor)
+const builtSimples = buildPrescriptionText({
+  modality: 'simples',
+  viaAdmin: 'Uso oral',
+  bodyText: '1) Melatonina 3mg — 1 frasco\n   Tomar 1 comprimido à noite.',
+});
+const simplesPdfBytes = await documentPdf({
+  ...docReceita,
+  patient_cpf: '123.456.789-01',
+  text: builtSimples,
+});
+const simplesPdfDoc = await PDFDocument.load(simplesPdfBytes);
+assert.equal(simplesPdfDoc.getPageCount(), 1, 'Receita simples deve gerar 1 página');
+assert.equal(simplesPdfDoc.getTitle(), 'Receituário');
+
+console.log('PASS: Receituário padrão gera 2 vias (Farmácia/Paciente) A4, com endereço, CPF, SNCR, modalidades Anvisa, templates e download ok.');

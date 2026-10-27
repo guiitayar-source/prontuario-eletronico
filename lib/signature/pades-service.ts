@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import * as pkijs from 'pkijs';
 import * as asn1js from 'asn1js';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import QRCode from 'qrcode';
 import { pdflibAddPlaceholder } from '@signpdf/placeholder-pdf-lib';
 import {
   SUBFILTER_ETSI_CADES_DETACHED,
@@ -25,12 +26,16 @@ try {
 
 export interface PreparePdfOptions {
   signerName: string;
+  signerCpf?: string;
   reason?: string;
   contactInfo?: string;
   location?: string;
   doctorCrm?: string;
+  sncrNumber?: string;
+  verificationUrl?: string;
   signatureLength?: number;
   drawVisualBox?: boolean;
+  allPages?: boolean;
   boxX?: number;
   boxY?: number;
 }
@@ -38,7 +43,7 @@ export interface PreparePdfOptions {
 export class PadesService {
   /**
    * Prepares a PDF document for PAdES digital signature:
-   * 1. Loads the PDF and optionally adds a visual signature stamp.
+   * 1. Loads the PDF and optionally adds a visual signature stamp (with QR Code) on all pages.
    * 2. Adds the cryptographic signature placeholder (ETSI.CAdES.detached).
    * 3. Calculates the exact ByteRange and computes the SHA-256 digest of the signed byte ranges.
    * 4. Returns the PreparedPdf structure ready for remote signing (only digest is sent to HSM).
@@ -50,95 +55,136 @@ export class PadesService {
     const pdfDoc = await PDFDocument.load(pdfInput);
     const pages = pdfDoc.getPages();
     const lastPage = pages[pages.length - 1];
+    const targetPages =
+      options.allPages === false ? (lastPage ? [lastPage] : []) : pages;
 
-    if (options.drawVisualBox !== false && lastPage) {
+    if (options.drawVisualBox !== false && targetPages.length > 0) {
       try {
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+        const qrUrl =
+          options.verificationUrl ||
+          (options.sncrNumber
+            ? `https://sncr.anvisa.gov.br`
+            : 'https://validar.iti.gov.br');
+        let qrImage: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null;
+        try {
+          const qrPngBuffer = await QRCode.toBuffer(qrUrl, {
+            type: 'png',
+            margin: 1,
+            width: 132,
+            errorCorrectionLevel: 'M',
+          });
+          qrImage = await pdfDoc.embedPng(qrPngBuffer);
+        } catch {
+          qrImage = null;
+        }
+
         const boxWidth = 320;
         const boxHeight = 65;
         const rightMargin = 51.1;
-        const boxX =
-          options.boxX !== undefined
-            ? options.boxX
-            : lastPage.getWidth() - boxWidth - rightMargin;
         // Posição vertical ajustada para y = 72 para ficar confortavelmente acima
-        // do rodapé com o endereço da clínica (y: 40 e 28) e abaixo das caixas da 2ª via
+        // do rodapé com o endereço da clínica (y: 40 e 28) e abaixo das caixas da via
         const boxY = options.boxY !== undefined ? options.boxY : 72;
-
-        // Background box
-        lastPage.drawRectangle({
-          x: boxX,
-          y: boxY,
-          width: boxWidth,
-          height: boxHeight,
-          color: rgb(0.97, 0.98, 0.99),
-          borderColor: rgb(0.15, 0.35, 0.65),
-          borderWidth: 1,
-        });
-
-        // ICP-Brasil badge bar
-        lastPage.drawRectangle({
-          x: boxX,
-          y: boxY + boxHeight - 16,
-          width: boxWidth,
-          height: 16,
-          color: rgb(0.15, 0.35, 0.65),
-        });
-
-        lastPage.drawText('ASSINADO DIGITALMENTE • ICP-BRASIL', {
-          x: boxX + 8,
-          y: boxY + boxHeight - 12,
-          size: 7.5,
-          font: fontBold,
-          color: rgb(1, 1, 1),
-        });
-
-        // Signer info
-        lastPage.drawText(`Signatário: ${options.signerName}`, {
-          x: boxX + 8,
-          y: boxY + boxHeight - 28,
-          size: 8,
-          font: fontBold,
-          color: rgb(0.1, 0.15, 0.2),
-        });
-
-        if (options.doctorCrm) {
-          const crmClean = options.doctorCrm.trim();
-          const crmLabel = crmClean.toUpperCase().startsWith('CRM')
-            ? crmClean
-            : `CRM ${crmClean}`;
-          lastPage.drawText(`Registro: ${crmLabel}`, {
-            x: boxX + 8,
-            y: boxY + boxHeight - 39,
-            size: 7.5,
-            font,
-            color: rgb(0.25, 0.3, 0.35),
-          });
-        }
 
         const dateStr = new Date().toLocaleString('pt-BR', {
           timeZone: 'America/Sao_Paulo',
         });
-        lastPage.drawText(`Data/Hora: ${dateStr} (Horário de Brasília)`, {
-          x: boxX + 8,
-          y: boxY + 12,
-          size: 7,
-          font,
-          color: rgb(0.3, 0.35, 0.4),
-        });
 
-        lastPage.drawText(
-          'Padrão PAdES / SHA-256 • Conforme MP 2.200-2/2001 e Lei 14.063/2020',
-          {
+        const badgeTitle = options.sncrNumber
+          ? `ASSINADO DIGITALMENTE • ICP-BRASIL • SNCR ${options.sncrNumber}`
+          : 'ASSINADO DIGITALMENTE • ICP-BRASIL';
+
+        for (const page of targetPages) {
+          const boxX =
+            options.boxX !== undefined
+              ? options.boxX
+              : page.getWidth() - boxWidth - rightMargin;
+
+          // Background box
+          page.drawRectangle({
+            x: boxX,
+            y: boxY,
+            width: boxWidth,
+            height: boxHeight,
+            color: rgb(0.97, 0.98, 0.99),
+            borderColor: rgb(0.15, 0.35, 0.65),
+            borderWidth: 1,
+          });
+
+          // ICP-Brasil badge bar
+          page.drawRectangle({
+            x: boxX,
+            y: boxY + boxHeight - 16,
+            width: boxWidth,
+            height: 16,
+            color: rgb(0.15, 0.35, 0.65),
+          });
+
+          page.drawText(badgeTitle.slice(0, 62), {
             x: boxX + 8,
-            y: boxY + 3,
-            size: 6,
-            font,
-            color: rgb(0.45, 0.5, 0.55),
+            y: boxY + boxHeight - 12,
+            size: 7.5,
+            font: fontBold,
+            color: rgb(1, 1, 1),
+          });
+
+          // Signer info
+          const signerLine = options.signerCpf
+            ? `Signatário: ${options.signerName} (${options.signerCpf})`
+            : `Signatário: ${options.signerName}`;
+          page.drawText(signerLine.slice(0, 52), {
+            x: boxX + 8,
+            y: boxY + boxHeight - 28,
+            size: 7.5,
+            font: fontBold,
+            color: rgb(0.1, 0.15, 0.2),
+          });
+
+          if (options.doctorCrm) {
+            const crmClean = options.doctorCrm.trim();
+            const crmLabel = crmClean.toUpperCase().startsWith('CRM')
+              ? crmClean
+              : `CRM ${crmClean}`;
+            page.drawText(`Registro: ${crmLabel}`, {
+              x: boxX + 8,
+              y: boxY + boxHeight - 39,
+              size: 7.5,
+              font,
+              color: rgb(0.25, 0.3, 0.35),
+            });
           }
-        );
+
+          page.drawText(`Data/Hora: ${dateStr} (Horário de Brasília)`, {
+            x: boxX + 8,
+            y: boxY + 12,
+            size: 7,
+            font,
+            color: rgb(0.3, 0.35, 0.4),
+          });
+
+          page.drawText(
+            'PAdES / SHA-256 • RDC Anvisa 1.000/2025 • validar.iti.gov.br',
+            {
+              x: boxX + 8,
+              y: boxY + 3,
+              size: 6,
+              font,
+              color: rgb(0.45, 0.5, 0.55),
+            }
+          );
+
+          if (qrImage) {
+            const qrSize = 44;
+            page.drawImage(qrImage, {
+              x: boxX + boxWidth - qrSize - 4,
+              y: boxY + 3,
+              width: qrSize,
+              height: qrSize,
+            });
+          }
+        }
       } catch (err) {
         console.warn('Erro ao desenhar carimbo visual no PDF:', err);
       }

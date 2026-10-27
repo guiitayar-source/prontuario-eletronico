@@ -22,7 +22,13 @@ const summary = (text: string) =>
   text
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l && !/^via\s+de\s+administra/i.test(l))
+    .filter(
+      (l) =>
+        l &&
+        !/^via\s+de\s+administra/i.test(l) &&
+        !/^modalidade:/i.test(l) &&
+        !/^(?:n[º°o]?\s*)?sncr:/i.test(l),
+    )
     .slice(0, 2)
     .join(' · ');
 

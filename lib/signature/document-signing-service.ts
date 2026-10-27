@@ -4,7 +4,13 @@ import { adminClient } from '@/lib/supabase/admin';
 import { HttpError } from '@/lib/supabase/server';
 import { documentPdf } from '@/lib/document-pdf';
 import { withPdfData } from '@/lib/supabase/document-pdf-data';
-import type { ClinicalDocument } from '@/lib/document-fields';
+import {
+  buildPrescriptionText,
+  parsePrescriptionText,
+  prescriptionModalities,
+  type ClinicalDocument,
+} from '@/lib/document-fields';
+import { sncrService } from '@/lib/sncr/client';
 import {
   cleanCpf,
   formatCpf,
@@ -418,6 +424,72 @@ export class DocumentSigningService {
 
     const doc = docRecord as ClinicalDocument;
 
+    // Validação ANVISA RDC 1.000/2025 para receitas assinadas digitalmente
+    let sncrNumber: string | undefined;
+    let prescriptionModality: string | undefined;
+    if (doc.kind === 'Receita') {
+      const parsed = parsePrescriptionText(doc.text || '');
+      prescriptionModality = parsed.modality;
+      sncrNumber = parsed.sncrNumber || undefined;
+
+      // Se a receita usa SNCR (qualquer modalidade exceto 'simples'), ainda não tem
+      // número preenchido e há lote SNCR cadastrado ou API configurada, obtém automaticamente
+      if (
+        !sncrNumber &&
+        parsed.modality !== 'simples' &&
+        (await sncrService.hasAvailableNumbering(
+          admin,
+          params.clinicId,
+          parsed.modality
+        ))
+      ) {
+        const allocated = await sncrService.allocateForPrescription({
+          db: admin,
+          clinicId: params.clinicId,
+          modality: parsed.modality,
+          physicianRegistration: doc.physician_registration,
+        });
+        sncrNumber = allocated.number;
+        doc.text = buildPrescriptionText({
+          modality: parsed.modality,
+          sncrNumber,
+          viaAdmin: parsed.viaAdmin,
+          bodyText: parsed.bodyText,
+        });
+        await admin.from('audit_events').insert({
+          clinic_id: params.clinicId,
+          actor_id: params.userId,
+          action: 'sncr.number_allocated',
+          entity_type: 'sncr_numbering',
+          entity_id: allocated.number,
+          context: {
+            document_id: params.documentId,
+            modality: parsed.modality,
+            source: allocated.source,
+            remaining_in_pool: allocated.remainingInPool,
+          },
+        });
+      }
+
+      const modalityCfg = prescriptionModalities.find(
+        (m) => m.id === parsed.modality
+      );
+      if (modalityCfg?.requiresSncrWhenSigned && !sncrNumber) {
+        throw new HttpError(
+          422,
+          'Notificações de Receita (A e B) assinadas digitalmente exigem o número oficial do SNCR (RDC Anvisa nº 1.000/2025).'
+        );
+      }
+    }
+
+    // Toda receita ou documento assinado digitalmente precisa ter data de emissão definida
+    const effectiveDate =
+      doc.document_date ||
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+      }).format(new Date());
+    doc.document_date = effectiveDate;
+
     // 3. Mark status as SIGNING
     await admin
       .from('clinical_documents')
@@ -425,7 +497,7 @@ export class DocumentSigningService {
       .eq('id', params.documentId);
 
     try {
-      // 4. Endereço do paciente (receitas) e timbre do autor
+      // 4. CPF e endereço do paciente (receitas) e timbre do autor
       await withPdfData(admin, params.clinicId, doc);
 
       // 5. Generate unsigned official PDF
@@ -437,15 +509,20 @@ export class DocumentSigningService {
 
       // Extract signer name from CN
       const cnMatch = session.certificate_subject.match(/CN=([^,\n/]+)/i);
-      const signerName = cnMatch ? cnMatch[1].trim() : doc.physician_name;
+      const signerName = cnMatch
+        ? cnMatch[1].split(':')[0].trim()
+        : doc.physician_name;
 
-      // 6. Prepare PDF with PAdES placeholder
+      // 6. Prepare PDF with PAdES placeholder (stamp + QR Code on all pages)
       const prepared = await padesService.preparePdfForSignature(
         unsignedPdfBytes,
         {
           signerName,
+          signerCpf: formatCpf(session.cpf),
           doctorCrm: doc.physician_registration,
-          reason: 'Documento assinado digitalmente com certificado ICP-Brasil',
+          sncrNumber,
+          reason:
+            'Documento assinado digitalmente com certificado ICP-Brasil (RDC Anvisa 1.000/2025)',
         }
       );
 
@@ -534,11 +611,13 @@ export class DocumentSigningService {
         );
       }
 
-      // 12. Update clinical_documents status and path
+      // 12. Update clinical_documents status, text (if SNCR injected), document_date and path
       const { error: docUpdateErr } = await admin
         .from('clinical_documents')
         .update({
           status: 'SIGNED',
+          text: doc.text,
+          document_date: effectiveDate,
           signed_pdf_path: storagePath,
           updated_at: new Date().toISOString(),
         })
@@ -560,11 +639,14 @@ export class DocumentSigningService {
         context: {
           document_id: params.documentId,
           version: doc.version,
+          document_date: effectiveDate,
           cpf: formatCpf(verification.signerCpf || session.cpf),
           certificate_serial: verification.certificateSerial,
           signed_pdf_hash: signedPdfHash,
           storage_path: storagePath,
           provider: session.provider,
+          ...(prescriptionModality ? { prescription_modality: prescriptionModality } : {}),
+          ...(sncrNumber ? { sncr_number: sncrNumber } : {}),
         },
       });
 
