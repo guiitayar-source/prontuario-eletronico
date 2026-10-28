@@ -4,11 +4,13 @@ import {
   buildPrescriptionText,
   documentKinds,
   parsePrescriptionText,
+  stripSncrNumbers,
   type ClinicalDocument,
   type DocumentProfile,
   type PrescriptionModality,
   type PrescriptionTemplate,
 } from '@/lib/document-fields';
+import type { NumberingContext } from '@/lib/sncr/numbering';
 import type { SncrBatchSummary } from '@/lib/sncr/client';
 import type { Patient } from '@/lib/patient-fields';
 import {
@@ -41,6 +43,8 @@ export function useDocuments(patient: Patient, enabled = true) {
     [preview, setPreview] = useState(''),
     [signatureNotice, setSignatureNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null),
     [signingDocId, setSigningDocId] = useState<string | null>(null);
+  const [numbering,setNumbering]=useState<Partial<NumberingContext> & {mode?:string; loading?:boolean; error?:string}>({});
+  const sncrGeneration=useRef(0);
   const previewRef = useRef(''),
     saving = useRef(false);
 
@@ -160,6 +164,20 @@ export function useDocuments(patient: Patient, enabled = true) {
     }
   }
 
+  useEffect(() => {
+    const generation=++sncrGeneration.current;
+    const id=draft?.id;
+    if (!enabled || !id || !draft?.version || draft.kind!=='Receita') { setNumbering({}); return; }
+    setNumbering({loading:true});
+    void apiFetch(`/api/digital-signature/sncr?documentId=${encodeURIComponent(id)}`).then(async r=>{
+      const data=await r.json();
+      if (generation!==sncrGeneration.current) return;
+      if (!r.ok) throw new Error(data.error||'Numeração indisponível');
+      setNumbering(data);
+    }).catch(e=>{ if(generation===sncrGeneration.current) setNumbering({error:e.message}); });
+    return ()=>{++sncrGeneration.current;};
+  },[draft?.id,draft?.version,enabled]);
+
   async function load() {
     const r = await apiFetch(
       '/api/documents?patientId=' + encodeURIComponent(patient.id),
@@ -269,6 +287,7 @@ export function useDocuments(patient: Patient, enabled = true) {
                 updated_at: undefined,
                 status: undefined,
                 signed_pdf_path: null,
+                sncr_number: undefined,
                 document_date: today,
                 consultation_id: consultationId || null,
                 physician_name: profile.physician_name,
@@ -281,7 +300,7 @@ export function useDocuments(patient: Patient, enabled = true) {
                           modality: rx.modality,
                           sncrNumber: '',
                           viaAdmin: rx.viaAdmin,
-                          bodyText: rx.bodyText,
+                          bodyText: stripSncrNumbers(rx.bodyText),
                         });
                       })(),
                     }
@@ -318,6 +337,10 @@ export function useDocuments(patient: Patient, enabled = true) {
   }
   async function save() {
     if (!draft || saving.current) return null;
+    if (numbering.reservation?.document_id===draft.id) {
+      if (dirty) { setError('Documento com reserva é imutável. Duplique como novo rascunho.'); return null; }
+      return draft;
+    }
     saving.current = true;
     setBusy(true);
     setError('');
@@ -370,7 +393,8 @@ export function useDocuments(patient: Patient, enabled = true) {
     }
   }
   async function sign(documentId: string) {
-    if (!signatureSession) {
+    const simulation=draft?.kind==='Receita' && parsePrescriptionText(draft.text).modality!=='simples' && numbering.mode==='local-simulation';
+    if (!signatureSession && !simulation) {
       setError(`Conecte seu ${signature.label} antes de assinar o documento.`);
       return false;
     }
@@ -391,7 +415,7 @@ export function useDocuments(patient: Patient, enabled = true) {
         },
         body: JSON.stringify({ documentId }),
       });
-      const data = (await res.json()) as { error?: string; signedPdfPath?: string };
+      const data = (await res.json()) as { error?: string; signedPdfPath?: string; simulation?:boolean; document?:ClinicalDocument };
       if (!res.ok) {
         // 401: a validação do certificado expirou; a tela passa a oferecer "revalidar".
         if (res.status === 401) signatureState.markExpired();
@@ -400,19 +424,20 @@ export function useDocuments(patient: Patient, enabled = true) {
 
       setSignatureNotice({
         type: 'success',
-        message: '✓ Documento assinado digitalmente com sucesso (ICP-Brasil)!',
+        message: data.simulation ? 'Simulação local concluída — sem validade clínica.' : '✓ Documento assinado digitalmente com sucesso (ICP-Brasil)!',
       });
       await load();
       if (draft && draft.id === documentId) {
         const today = new Intl.DateTimeFormat('en-CA', {
           timeZone: 'America/Sao_Paulo',
         }).format(new Date());
-        setDraft({
+        setDraft(data.document || {
           ...draft,
           status: 'SIGNED',
           document_date: draft.document_date || today,
           signed_pdf_path: data.signedPdfPath,
         });
+        if (data.document) setSaved(JSON.stringify(data.document));
         await pdf();
       }
       return true;
@@ -426,146 +451,19 @@ export function useDocuments(patient: Patient, enabled = true) {
   }
 
   async function requestSncrNumber() {
-    if (!draft || draft.kind !== 'Receita' || draft.status === 'SIGNED') return;
-    const rxMeta = parsePrescriptionText(draft.text);
-    setBusy(true);
-    setError('');
+    if (!draft || draft.kind!=='Receita' || draft.status==='SIGNED') return;
+    const current=dirty || draft.version===0 ? await save() : draft;
+    if (!current) return;
+    ++sncrGeneration.current;
+    setBusy(true); setError('');
     try {
-      const res = await apiFetch('/api/digital-signature/sncr', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Signature-Action': '1',
-        },
-        body: JSON.stringify({
-          modality: rxMeta.modality,
-          physicianRegistration: draft.physician_registration,
-        }),
-      });
-      const data = (await res.json()) as {
-        number?: string;
-        source?: 'batch' | 'api' | 'pool';
-        remainingInPool?: number;
-        saldoReceitas?: number;
-        batches?: SncrBatchSummary[];
-        message?: string;
-        error?: string;
-      };
-      if (!res.ok || !data.number) {
-        throw new Error(data.error || 'Falha ao obter número no SNCR da Anvisa.');
-      }
-      if (Array.isArray(data.batches)) {
-        setSncrBatches(data.batches);
-      }
-      clearPreview();
-      setDraft({
-        ...draft,
-        text: buildPrescriptionText({
-          modality: rxMeta.modality,
-          sncrNumber: data.number,
-          viaAdmin: rxMeta.viaAdmin,
-          bodyText: rxMeta.bodyText,
-        }),
-      });
-      const remaining =
-        data.remainingInPool !== undefined
-          ? data.remainingInPool
-          : data.saldoReceitas;
-      setSignatureNotice({
-        type: 'success',
-        message:
-          data.source === 'batch'
-            ? `✓ Número SNCR aplicado do seu lote: ${data.number}${
-                remaining !== undefined ? ` (${remaining} restantes no lote)` : ''
-              }`
-            : `✓ Número SNCR obtido na Anvisa: ${data.number}${
-                remaining !== undefined ? ` (saldo: ${remaining})` : ''
-              }`,
-      });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function registerSncrBatch(input: {
-    modality: PrescriptionModality;
-    label?: string;
-    inicio?: string;
-    fim?: string;
-    rawList?: string;
-  }) {
-    setBusy(true);
-    setError('');
-    try {
-      const res = await apiFetch('/api/digital-signature/sncr', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Signature-Action': '1',
-        },
-        body: JSON.stringify({
-          action: 'register-batch',
-          ...input,
-        }),
-      });
-      const data = (await res.json()) as {
-        batch?: SncrBatchSummary;
-        batches?: SncrBatchSummary[];
-        error?: string;
-      };
-      if (!res.ok || !data.batch) {
-        throw new Error(data.error || 'Falha ao salvar lote SNCR.');
-      }
-      if (Array.isArray(data.batches)) {
-        setSncrBatches(data.batches);
-      }
-      setSignatureNotice({
-        type: 'success',
-        message: `✓ Lote SNCR salvo (${data.batch.total} números · ${data.batch.remaining} disponíveis).`,
-      });
-      return data.batch;
-    } catch (e) {
-      setError((e as Error).message);
-      return null;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteSncrBatch(batchId: string) {
-    setBusy(true);
-    setError('');
-    try {
-      const res = await apiFetch('/api/digital-signature/sncr', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Signature-Action': '1',
-        },
-        body: JSON.stringify({
-          action: 'delete-batch',
-          batchId,
-        }),
-      });
-      const data = (await res.json()) as {
-        batches?: SncrBatchSummary[];
-        error?: string;
-      };
-      if (!res.ok) {
-        throw new Error(data.error || 'Falha ao remover lote SNCR.');
-      }
-      if (Array.isArray(data.batches)) {
-        setSncrBatches(data.batches);
-      }
-      return true;
-    } catch (e) {
-      setError((e as Error).message);
-      return false;
-    } finally {
-      setBusy(false);
-    }
+      const res=await apiFetch('/api/digital-signature/sncr',{method:'POST',headers:{'Content-Type':'application/json','X-Signature-Action':'1'},body:JSON.stringify({action:'reserve',documentId:current.id})});
+      const data=await res.json();
+      if (!res.ok) throw new Error(data.error||'Reserva indisponível; consulte o estado antes de repetir.');
+      setNumbering(data); setDraft(data.document); setSaved(JSON.stringify(data.document)); clearPreview();
+      setSignatureNotice({type:'success',message:'Reserva sintética vinculada. Este fluxo local não emite receita válida.'});
+    } catch(e) { setError((e as Error).message); setNumbering({error:'Resultado indisponível ou incerto. Reabra a receita para consultar.'}); }
+    finally {setBusy(false);}
   }
 
   return {
@@ -577,10 +475,10 @@ export function useDocuments(patient: Patient, enabled = true) {
     sncrBatches,
     saveTemplate,
     deleteTemplate,
-    registerSncrBatch,
-    deleteSncrBatch,
+    numbering,
     draft,
     setDraft: (d: ClinicalDocument) => {
+      if (numbering.reservation?.document_id===d.id) { setError('Documento com reserva é imutável. Duplique para alterar.'); return; }
       clearPreview();
       setDraft(d);
     },

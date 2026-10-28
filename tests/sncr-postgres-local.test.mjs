@@ -72,6 +72,8 @@ let created=false;
 try {
  sql(`create database ${database} owner postgres template template0;`,{db:'postgres',role:'supabase_admin'}); created=true;
  sql(bootstrap);
+ const signatureTable=readFileSync(new URL('../supabase/migrations/20260925010000_digital_signatures.sql',import.meta.url),'utf8').match(/create table if not exists public\.digital_signatures \([\s\S]*?\n\);/)[0];
+ sql(signatureTable);
  // O arquivo original deve falhar antes de criar qualquer tabela SNCR.
  fails(migration,'P0001');
  assert.equal(sql("select to_regclass('public.sncr_requests') is null;"),'t');

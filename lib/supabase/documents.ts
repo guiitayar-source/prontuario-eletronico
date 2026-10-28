@@ -7,9 +7,11 @@ import {
   writeGuard,
 } from './server.ts';
 import { adminClient } from './admin.ts';
-import { documentKinds, type ClinicalDocument } from '../document-fields.ts';
+import { documentKinds, stripSncrNumbers, type ClinicalDocument } from '../document-fields.ts';
 import { documentPdf } from '../document-pdf.ts';
 import { withPdfData } from './document-pdf-data.ts';
+import { getNumberingContext, localSimulationEnabled, assertSynthetic } from '../sncr/numbering.ts';
+import { simulationPdf } from '../sncr/signing.ts';
 import { createHash } from 'node:crypto';
 
 const uuid =
@@ -115,7 +117,11 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
       await withPdfData(adminClient(), clinic, doc);
       let bytes;
       try {
-        bytes = await documentPdf(doc, { isDraft: true });
+        if (doc.kind==='Receita' && localSimulationEnabled()) {
+          const ctx=await getNumberingContext(adminClient(),{clinicId:clinic,userId:user},doc.id);
+          if (ctx.reservation) { assertSynthetic(ctx); doc.sncr_number=ctx.reservation.number; bytes=await simulationPdf(doc); }
+          else bytes=await documentPdf(doc,{isDraft:true});
+        } else bytes = await documentPdf(doc, { isDraft: true });
       } catch (e) {
         throw new HttpError(422, (e as Error).message);
       }
@@ -189,7 +195,7 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
         await db.rpc('prescription_template_write', {
           c: clinic,
           action: 'save',
-          d: { id: t.id, name, text: body },
+          d: { id: t.id, name, text: stripSncrNumbers(body) },
         }),
       ),
     });

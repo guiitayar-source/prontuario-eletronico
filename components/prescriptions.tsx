@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Plus, Repeat, Trash2 } from 'lucide-react';
 import {
   documentTemplate,
+  stripSncrNumbers,
   type ClinicalDocument,
   type PrescriptionTemplate,
 } from '@/lib/document-fields';
@@ -45,7 +46,7 @@ export function PrescriptionWorkspace({
     [error, setError] = useState(''),
     [message, setMessage] = useState('');
   const d = docs.draft;
-  const editable = !!d && d.status !== 'SIGNED' && !docs.busy;
+  const editable = !!d && d.status !== 'SIGNED' && !docs.busy && docs.numbering.reservation?.document_id!==d.id;
   const patientRows = docs.rows.filter((row) => row.kind === 'Receita');
 
   async function newPrescription() {
@@ -72,7 +73,7 @@ export function PrescriptionWorkspace({
     if (!d || !editable) return;
     setMessage('');
     if (append && !blank(d.text)) {
-      docs.setDraft({ ...d, text: `${d.text.trim()}\n\n${t.text.trim()}` });
+      docs.setDraft({ ...d, text: `${d.text.trim()}\n\n${stripSncrNumbers(t.text).trim()}` });
       return;
     }
     if (
@@ -80,7 +81,7 @@ export function PrescriptionWorkspace({
       !window.confirm(`Substituir o texto atual pelo modelo “${t.name}”?`)
     )
       return;
-    docs.setDraft({ ...d, text: t.text });
+    docs.setDraft({ ...d, text: stripSncrNumbers(t.text) });
   }
 
   async function saveTemplate() {
@@ -100,7 +101,7 @@ export function PrescriptionWorkspace({
       await docs.saveTemplate({
         id: existing?.id || crypto.randomUUID(),
         name: name.trim(),
-        text: d.text,
+        text: stripSncrNumbers(d.text),
       });
       setNaming(false);
       setName('');
@@ -163,7 +164,7 @@ export function PrescriptionWorkspace({
               <li key={row.id}>
                 <strong>
                   {formatDate(row)}
-                  {row.status === 'SIGNED' ? ' · Assinada' : ' · Rascunho'}
+                  {row.signed_pdf_path?.includes('/sncr-simulations/') ? ' · Simulação local — sem validade clínica' : row.status === 'SIGNED' ? ' · Assinada' : ' · Rascunho'}
                   {row.id === d?.id ? ' · aberta' : ''}
                 </strong>
                 <span className="prescription-summary">

@@ -1,16 +1,14 @@
 import crypto from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { adminClient } from '@/lib/supabase/admin';
-import { HttpError } from '@/lib/supabase/server';
-import { documentPdf } from '@/lib/document-pdf';
-import { withPdfData } from '@/lib/supabase/document-pdf-data';
+import { adminClient } from '../supabase/admin.ts';
+import { HttpError } from '../supabase/server.ts';
+import { documentPdf } from '../document-pdf.ts';
+import { withPdfData } from '../supabase/document-pdf-data.ts';
 import {
-  buildPrescriptionText,
   parsePrescriptionText,
-  prescriptionModalities,
   type ClinicalDocument,
-} from '@/lib/document-fields';
-import { sncrService } from '@/lib/sncr/client';
+} from '../document-fields.ts';
+import { signReservedSimulation } from '../sncr/signing.ts';
 import {
   cleanCpf,
   formatCpf,
@@ -28,6 +26,8 @@ import type {
 } from './types.ts';
 
 export class DocumentSigningService {
+  private readonly documentAdmin: typeof adminClient;
+  constructor(documentAdmin = adminClient) { this.documentAdmin = documentAdmin; }
   /**
    * Initiates an OAuth 2.0 PKCE flow with the signature provider (Bird ID or VIDaaS).
    */
@@ -378,9 +378,48 @@ export class DocumentSigningService {
     documentId: string;
     signedPdfPath: string;
     verification: PadesVerificationResult;
-    signature: DigitalSignatureRecord;
+    signature?: DigitalSignatureRecord;
+    simulation?: boolean;
+    document?: ClinicalDocument;
   }> {
-    const admin = adminClient();
+    const admin = this.documentAdmin();
+
+    // 2. Fetch document
+    const { data: docRecord, error: docErr } = await admin
+      .from('clinical_documents')
+      .select('*')
+      .eq('clinic_id', params.clinicId)
+      .eq('id', params.documentId)
+      .maybeSingle();
+
+    if (docErr || !docRecord) {
+      throw new HttpError(404, 'Documento clínico não encontrado.');
+    }
+
+    if (docRecord.status === 'SIGNED' && !(docRecord.kind === 'Receita' && parsePrescriptionText(docRecord.text).modality !== 'simples')) {
+      throw new HttpError(
+        409,
+        'Este documento já foi assinado digitalmente e está imutável.'
+      );
+    }
+
+    const doc = docRecord as ClinicalDocument;
+
+    if (doc.kind==='Receita' && parsePrescriptionText(doc.text).modality==='simples' && parsePrescriptionText(doc.text).sncrNumber) throw new HttpError(422, 'Número SNCR manual incompatível com receita simples. Revise o rascunho.');
+    if (doc.kind === 'Receita' && parsePrescriptionText(doc.text).modality !== 'simples') {
+      if (doc.author_id !== params.userId) throw new HttpError(403, 'Documento não pertence ao prescritor.');
+      return signReservedSimulation(admin, params, params.documentId, {
+        put: async (path, bytes) => {
+          const { error } = await admin.storage.from('clinical-files').upload(path, bytes, {contentType:'application/pdf',upsert:false});
+          if (error) throw new HttpError(503, 'Falha ao armazenar artefato simulado. Não repetir assinatura.');
+        },
+        get: async (path) => {
+          const {data,error}=await admin.storage.from('clinical-files').download(path);
+          if (error || !data) throw new HttpError(503, 'Artefato original indisponível.');
+          return new Uint8Array(await data.arrayBuffer());
+        },
+      }, {enrich: (d) => withPdfData(admin,params.clinicId,d)});
+    }
 
     // 1. Check active session
     const { data: session, error: sessionErr } = await admin
@@ -403,84 +442,8 @@ export class DocumentSigningService {
 
     const accessToken = decryptToken(session.access_token_encrypted);
 
-    // 2. Fetch document
-    const { data: docRecord, error: docErr } = await admin
-      .from('clinical_documents')
-      .select('*')
-      .eq('clinic_id', params.clinicId)
-      .eq('id', params.documentId)
-      .maybeSingle();
-
-    if (docErr || !docRecord) {
-      throw new HttpError(404, 'Documento clínico não encontrado.');
-    }
-
-    if (docRecord.status === 'SIGNED') {
-      throw new HttpError(
-        409,
-        'Este documento já foi assinado digitalmente e está imutável.'
-      );
-    }
-
-    const doc = docRecord as ClinicalDocument;
-
-    // Validação ANVISA RDC 1.000/2025 para receitas assinadas digitalmente
-    let sncrNumber: string | undefined;
-    let prescriptionModality: string | undefined;
-    if (doc.kind === 'Receita') {
-      const parsed = parsePrescriptionText(doc.text || '');
-      prescriptionModality = parsed.modality;
-      sncrNumber = parsed.sncrNumber || undefined;
-
-      // Se a receita usa SNCR (qualquer modalidade exceto 'simples'), ainda não tem
-      // número preenchido e há lote SNCR cadastrado ou API configurada, obtém automaticamente
-      if (
-        !sncrNumber &&
-        parsed.modality !== 'simples' &&
-        (await sncrService.hasAvailableNumbering(
-          admin,
-          params.clinicId,
-          parsed.modality
-        ))
-      ) {
-        const allocated = await sncrService.allocateForPrescription({
-          db: admin,
-          clinicId: params.clinicId,
-          modality: parsed.modality,
-          physicianRegistration: doc.physician_registration,
-        });
-        sncrNumber = allocated.number;
-        doc.text = buildPrescriptionText({
-          modality: parsed.modality,
-          sncrNumber,
-          viaAdmin: parsed.viaAdmin,
-          bodyText: parsed.bodyText,
-        });
-        await admin.from('audit_events').insert({
-          clinic_id: params.clinicId,
-          actor_id: params.userId,
-          action: 'sncr.number_allocated',
-          entity_type: 'sncr_numbering',
-          entity_id: allocated.number,
-          context: {
-            document_id: params.documentId,
-            modality: parsed.modality,
-            source: allocated.source,
-            remaining_in_pool: allocated.remainingInPool,
-          },
-        });
-      }
-
-      const modalityCfg = prescriptionModalities.find(
-        (m) => m.id === parsed.modality
-      );
-      if (modalityCfg?.requiresSncrWhenSigned && !sncrNumber) {
-        throw new HttpError(
-          422,
-          'Notificações de Receita (A e B) assinadas digitalmente exigem o número oficial do SNCR (RDC Anvisa nº 1.000/2025).'
-        );
-      }
-    }
+    const sncrNumber: string | undefined = undefined;
+    const prescriptionModality = doc.kind === 'Receita' ? 'simples' : undefined;
 
     // Toda receita ou documento assinado digitalmente precisa ter data de emissão definida
     const effectiveDate =

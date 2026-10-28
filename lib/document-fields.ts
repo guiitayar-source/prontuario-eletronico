@@ -238,3 +238,8 @@ export function documentTemplate(kind: string) {
     )[kind] || ''
   );
 }
+
+// Modelos e duplicações nunca transferem a identidade de uma numeração anterior.
+export function stripSncrNumbers(text: string): string {
+  return text.replace(/\r\n?/g,'\n').split('\n').filter(line=>!/^\s*(?:n[º°o]?\s*)?sncr\s*:/i.test(line)).join('\n');
+}

@@ -30,7 +30,7 @@ export function DocumentHistory({
             <strong>{d.kind}</strong>
             {d.status === 'SIGNED' ? (
               <span style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--success)', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <CheckCircle2 size={12} /> Assinado ICP-Brasil
+                <CheckCircle2 size={12} /> {d.signed_pdf_path?.includes('/sncr-simulations/') ? 'Simulação local — sem validade clínica' : 'Assinado ICP-Brasil'}
               </span>
             ) : d.status === 'SIGNING' ? (
               <span style={{ backgroundColor: 'var(--warning-soft)', color: 'var(--warning)', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>

@@ -255,8 +255,6 @@ function getUrls() {
 
 export class SncrService {
   private tokenCache: { accessToken: string; expiresAt: number } | null = null;
-  // Pool em memória por chave `${clinicId}:${conselho}:${uf}:${documento}:${sncrKind}`
-  private numberPools = new Map<string, string[]>();
   private fetchImpl: typeof fetch;
 
   constructor(customFetch?: typeof fetch) {
@@ -596,254 +594,23 @@ export class SncrService {
     }
   }
 
-  /**
-   * Verifica se há algum lote local com números disponíveis ou se a API SNCR está configurada.
-   */
+  /** @deprecated Credenciais e eventos legados não comprovam estoque confiável. */
   async hasAvailableNumbering(
-    db: SupabaseClient,
-    clinicId: string,
-    modality: PrescriptionModality
+    _db: SupabaseClient,
+    _clinicId: string,
+    _modality: PrescriptionModality
   ): Promise<boolean> {
-    if (modality === 'simples') return false;
-    if (isSncrConfigured()) return true;
-    const summaries = await this.listBatches(db, clinicId);
-    return summaries.some((b) => b.modality === modality && b.remaining > 0);
+    return false;
   }
 
-  /**
-   * Aloca um número oficial do SNCR para a prescrição de acordo com a modalidade:
-   * 1. Prioriza os lotes SNCR cadastrados localmente pela clínica (sem exigir e-CNPJ);
-   * 2. Caso não haja lote local disponível, consulta o pool/API do SNCR da Anvisa:
-   *    - `controle_especial` -> `RCE` (`/api/v1/numeracoes/receita-especial-retencao`)
-   *    - `retencao` -> `RET` (`/api/v1/numeracoes/receita-especial-retencao`)
-   *    - `notificacao_b` -> `NRB` (`/api/v1/numeracoes/notificacao-receita`)
-   *    - `notificacao_a` -> `NRA` (`/api/v1/numeracoes/notificacao-receita`)
-   */
-  async allocateForPrescription(params: {
+  /** @deprecated A alocação exige documento persistido e RPC transacional. */
+  async allocateForPrescription(_params: {
     db?: SupabaseClient;
     clinicId: string;
     modality: PrescriptionModality;
     physicianRegistration: string;
   }): Promise<SncrAllocationResult> {
-    if (this.legacyAllocationDisabled()) {
-      throw new HttpError(503, 'Reserva SNCR indisponível até a implantação e validação do estoque transacional.');
-    }
-    if (params.modality === 'simples') {
-      throw new HttpError(
-        422,
-        'Receitas simples sem retenção não utilizam numeração do SNCR.'
-      );
-    }
-
-    const usedNumbers = params.db
-      ? await this.getUsedNumbers(params.db, params.clinicId)
-      : new Set<string>();
-
-    // 1. Tenta alocar a partir de lote SNCR cadastrado localmente (não exige e-CNPJ nem API da Anvisa)
-    if (params.db) {
-      const batches = await this.listRawBatches(params.db, params.clinicId);
-      const matchingNumbers = batches
-        .filter((b) => b.modality === params.modality)
-        .flatMap((b) => b.numbers)
-        .filter((n) => !usedNumbers.has(n));
-
-      const uniqueAvailable = Array.from(new Set(matchingNumbers));
-      if (uniqueAvailable.length > 0) {
-        const [nextNumber, ...rest] = uniqueAvailable;
-        return {
-          number: nextNumber,
-          source: 'batch',
-          remainingInPool: rest.length,
-          saldoReceitas: rest.length,
-        };
-      }
-    }
-
-    if (!isSncrConfigured()) {
-      throw new HttpError(
-        422,
-        'Nenhum número disponível no seu estoque de lotes SNCR para esta modalidade. Clique em "Lotes SNCR" para cadastrar a faixa de números obtida no portal sncr.anvisa.gov.br.'
-      );
-    }
-
-    const reg = extractCouncilRegistration(params.physicianRegistration);
-    if (!reg) {
-      throw new HttpError(
-        422,
-        'Informe o número do CRM e a sigla da UF no campo "CRM/UF e RQE" (ex.: CRM 123456 SP) para solicitar numeração ao SNCR da Anvisa.'
-      );
-    }
-
-    const poolKey = `${params.clinicId}:${reg.conselho}:${reg.uf}:${reg.documento}:${params.modality}`;
-    const existingPool = (this.numberPools.get(poolKey) || []).filter(
-      (n) => !usedNumbers.has(n)
-    );
-
-    if (existingPool.length > 0) {
-      const [nextNumber, ...rest] = existingPool;
-      this.numberPools.set(poolKey, rest);
-      return {
-        number: nextNumber,
-        source: 'pool',
-        remainingInPool: rest.length,
-      };
-    }
-
-    const token = await this.getAccessToken();
-    const { baseUrl } = getUrls();
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    };
-    const jws = process.env.ANVISA_SNCR_JWS_INTEGRADORA?.trim();
-    if (jws) {
-      headers['X-Jws-Integradora'] = jws;
-    }
-
-    // Caso 1: Receita Branca (RCE = Controle Especial C1/C5 | RET = Sujeita a Retenção)
-    if (
-      params.modality === 'controle_especial' ||
-      params.modality === 'retencao'
-    ) {
-      const cnpj = (process.env.ANVISA_SNCR_CNPJ || '').replace(/\D/g, '');
-      if (cnpj.length !== 14) {
-        throw new HttpError(
-          422,
-          'Configure o CNPJ da clínica/instituição em ANVISA_SNCR_CNPJ (14 dígitos) para gerar numeração de Receita de Controle Especial / Retenção no SNCR.'
-        );
-      }
-
-      const tipo = params.modality === 'controle_especial' ? 'RCE' : 'RET';
-      const res = await this.fetchImpl(
-        `${baseUrl}/api/v1/numeracoes/receita-especial-retencao`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            conselho: reg.conselho,
-            tipo,
-            documento: reg.documento,
-            uf: reg.uf,
-            cnpj,
-          }),
-        }
-      );
-
-      if (res.status === 204) {
-        throw new HttpError(
-          422,
-          'O SNCR da Anvisa informou que não há numeração disponível para este prescritor no momento (HTTP 204).'
-        );
-      }
-
-      if (!res.ok) {
-        const errPayload = await res.json().catch(() => null);
-        const msg =
-          errPayload?.mensagem ||
-          errPayload?.errorObject?.description ||
-          `HTTP ${res.status}`;
-        throw new HttpError(
-          res.status === 400 ? 422 : 502,
-          `SNCR Anvisa (${tipo}): ${msg}`
-        );
-      }
-
-      const data = (await res.json()) as {
-        inicio?: string;
-        fim?: string;
-        quantidade?: number;
-        mensagem?: string;
-      };
-      const numbers = expandSncrRange(
-        data.inicio || '',
-        data.fim || ''
-      ).filter((n) => !usedNumbers.has(n));
-
-      if (!numbers.length) {
-        throw new HttpError(
-          502,
-          'A API do SNCR não retornou numerações utilizáveis para esta receita.'
-        );
-      }
-
-      const [first, ...rest] = numbers;
-      this.numberPools.set(poolKey, rest);
-      return {
-        number: first,
-        source: 'api',
-        remainingInPool: rest.length,
-        message: data.mensagem,
-      };
-    }
-
-    // Caso 2: Notificação de Receita (NRA / NRB)
-    const receitaCode = params.modality === 'notificacao_a' ? 'NRA' : 'NRB';
-    const res = await this.fetchImpl(
-      `${baseUrl}/api/v1/numeracoes/notificacao-receita`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          receita: receitaCode,
-          conselho: reg.conselho,
-          uf: reg.uf,
-          documento: reg.documento,
-          quantidade: 10,
-        }),
-      }
-    );
-
-    if (res.status === 204) {
-      throw new HttpError(
-        422,
-        `Nenhuma numeração de Notificação (${receitaCode}) disponível no SNCR para ${reg.conselho} ${reg.documento}/${reg.uf}. Verifique sua concessão ativa no portal sncr.anvisa.gov.br.`
-      );
-    }
-
-    if (!res.ok) {
-      const errPayload = await res.json().catch(() => null);
-      const firstArrayErr = Array.isArray(errPayload) ? errPayload[0] : null;
-      const msg =
-        firstArrayErr?.mensagem ||
-        errPayload?.mensagem ||
-        errPayload?.errorObject?.description ||
-        `HTTP ${res.status}`;
-      throw new HttpError(
-        res.status === 400 ? 422 : 502,
-        `SNCR Anvisa (${receitaCode}): ${msg}`
-      );
-    }
-
-    const data = (await res.json()) as {
-      numeracoesReceita?: unknown;
-      saldoReceitas?: number;
-      mensagem?: string;
-    };
-    const numbers = parseNotificacaoNumbers(data.numeracoesReceita).filter(
-      (n) => !usedNumbers.has(n)
-    );
-
-    if (!numbers.length) {
-      throw new HttpError(
-        502,
-        `O SNCR não retornou números válidos para a Notificação (${receitaCode}).`
-      );
-    }
-
-    const [first, ...rest] = numbers;
-    this.numberPools.set(poolKey, rest);
-    return {
-      number: first,
-      source: 'api',
-      remainingInPool: rest.length,
-      saldoReceitas: data.saldoReceitas,
-      message: data.mensagem,
-    };
-  }
-
-  private legacyAllocationDisabled(): boolean {
-    return true;
+    throw new HttpError(503, 'Reserva SNCR indisponível pelo contrato legado. Utilize reserva transacional vinculada ao documento.');
   }
 }
 

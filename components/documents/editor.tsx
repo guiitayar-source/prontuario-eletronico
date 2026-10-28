@@ -9,7 +9,7 @@ import {
   type ClinicalDocument,
   type PrescriptionModality,
 } from '@/lib/document-fields';
-import { Download, ShieldCheck, Key, Lock, Layers, Trash2 } from 'lucide-react';
+import { Download, ShieldCheck, Key, Lock } from 'lucide-react';
 import type { DocumentsController } from './use-documents';
 import { DocumentAiBox } from './ai-box';
 import { useFeature } from '../plan';
@@ -26,11 +26,6 @@ export function DocumentEditor({
 }) {
   const ai = useFeature('ia');
   const [choosingProvider, setChoosingProvider] = useState(false);
-  const [showSncrBatches, setShowSncrBatches] = useState(false);
-  const [batchLabel, setBatchLabel] = useState('');
-  const [batchInicio, setBatchInicio] = useState('');
-  const [batchFim, setBatchFim] = useState('');
-  const [batchRawList, setBatchRawList] = useState('');
   // Validação expirada com a página aberta: revalida direto no mesmo provedor.
   const expiredProvider = isSignatureProviderId(docs.signatureExpired)
     ? docs.signatureExpired
@@ -38,17 +33,23 @@ export function DocumentEditor({
   const d = docs.draft;
   if (!d) return null;
   const isSigned = d.status === 'SIGNED';
+  const reservation=docs.numbering.reservation?.document_id===d.id ? docs.numbering.reservation : null;
+  const controlled=d.kind==='Receita' && parsePrescriptionText(d.text).modality!=='simples';
+  const simulated=!!d.signed_pdf_path?.includes('/sncr-simulations/');
+  const local=docs.numbering.mode==='local-simulation';
+  const frozen=isSigned || !!reservation;
+  const reservationLabels={reserved:'reservada',signing:'assinatura em andamento',uncertain:'resultado incerto — reconciliação necessária',abandoned:'abandonada, com número preservado',signed:'simulação concluída'};
   const noun = prescription ? 'receita' : 'documento';
 
   function update(fields: Partial<ClinicalDocument>) {
-    if (isSigned) return;
+    if (frozen) return;
     docs.setDraft({ ...d!, ...fields });
   }
 
   return (
     <>
       <h2 id="dialog-title">
-        {isSigned
+        {simulated ? 'Simulação local — sem validade clínica' : isSigned
           ? prescription
             ? 'Receita assinada digitalmente'
             : 'Documento assinado digitalmente'
@@ -92,9 +93,9 @@ export function DocumentEditor({
             fontSize: '13px',
           }}
         >
-          <strong>✓ Assinado Digitalmente • ICP-Brasil (PAdES)</strong>
+          <strong>{simulated ? 'SIMULAÇÃO LOCAL — SEM VALIDADE CLÍNICA' : '✓ Assinado Digitalmente • ICP-Brasil (PAdES)'}</strong>
           <p style={{ margin: '4px 0 0 0' }}>
-            Este documento possui assinatura digital válida e seu conteúdo é imutável. Para realizar alterações, duplique-o como um novo rascunho.
+            {simulated ? 'Artefato sintético assinado para teste local. Seu conteúdo é imutável.' : 'Este documento possui assinatura digital válida e seu conteúdo é imutável.'} Para realizar alterações, duplique-o como um novo rascunho.
           </p>
         </div>
       ) : (
@@ -179,7 +180,7 @@ export function DocumentEditor({
           {docs.error} Seu texto foi mantido para revisão.
         </div>
       )}
-      <fieldset disabled={docs.busy || isSigned} style={{ border: 0, padding: 0 }}>
+      <fieldset disabled={docs.busy || frozen} style={{ border: 0, padding: 0 }}>
         {!prescription && (
           <>
             <label htmlFor="doctype">Tipo de documento</label>
@@ -218,9 +219,6 @@ export function DocumentEditor({
         )}
         {d.kind === 'Receita' && (() => {
           const rxMeta = parsePrescriptionText(d.text);
-          const modalityCfg =
-            prescriptionModalities.find((m) => m.id === rxMeta.modality) ||
-            prescriptionModalities[0];
           return (
             <>
               <label htmlFor="prescription-modality">
@@ -253,288 +251,14 @@ export function DocumentEditor({
                   ))}
                 </select>
               </label>
-              {rxMeta.modality !== 'simples' && (() => {
-                const modalityBatches = (docs.sncrBatches || []).filter(
-                  (b) => b.modality === rxMeta.modality,
-                );
-                const totalRemaining = modalityBatches.reduce(
-                  (acc, b) => acc + b.remaining,
-                  0,
-                );
-                const totalNumbers = modalityBatches.reduce(
-                  (acc, b) => acc + b.total,
-                  0,
-                );
-                const firstAvailable =
-                  modalityBatches.find((b) => b.nextNumber)?.nextNumber || null;
-
-                return (
-                  <div style={{ marginBottom: '12px' }}>
-                    <label htmlFor="prescription-sncr">
-                      {modalityCfg.requiresSncrWhenSigned
-                        ? 'Número SNCR — Anvisa (obrigatório para assinar digitalmente)'
-                        : 'Número SNCR — Anvisa (RDC 1.000/2025 — puxado do seu lote ou informado)'}
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: '8px',
-                          alignItems: 'center',
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <input
-                          id="prescription-sncr"
-                          maxLength={60}
-                          placeholder={
-                            firstAvailable
-                              ? `Próximo do lote: ${firstAvailable}`
-                              : 'Ex.: 2602.6-53.0000001'
-                          }
-                          value={rxMeta.sncrNumber}
-                          readOnly={isSigned}
-                          style={{ flex: 1, minWidth: '180px' }}
-                          onChange={(e) =>
-                            update({
-                              text: buildPrescriptionText({
-                                modality: rxMeta.modality,
-                                sncrNumber: e.target.value,
-                                viaAdmin: rxMeta.viaAdmin,
-                                bodyText: rxMeta.bodyText,
-                              }),
-                            })
-                          }
-                        />
-                        {!isSigned && (
-                          <>
-                            <button
-                              type="button"
-                              className="secondary"
-                              disabled={docs.busy}
-                              onClick={() => void docs.requestSncrNumber()}
-                              title="Puxar o próximo número livre do seu lote SNCR (ou solicitar na API da Anvisa)"
-                              style={{ whiteSpace: 'nowrap' }}
-                            >
-                              {totalRemaining > 0
-                                ? `Usar nº do lote (${totalRemaining})`
-                                : 'Gerar nº no SNCR'}
-                            </button>
-                            <button
-                              type="button"
-                              className="secondary"
-                              disabled={docs.busy}
-                              onClick={() => setShowSncrBatches((v) => !v)}
-                              title="Cadastrar ou gerenciar lotes de numeração SNCR obtidos no site da Anvisa (sem precisar de e-CNPJ)"
-                              style={{
-                                whiteSpace: 'nowrap',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px',
-                              }}
-                            >
-                              <Layers size={14} />
-                              Lotes SNCR
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </label>
-                    <p
-                      className="document-template-note"
-                      style={{ marginTop: '4px', marginBottom: '4px' }}
-                    >
-                      {modalityBatches.length > 0 ? (
-                        <>
-                          <strong>Estoque ({modalityCfg.label}):</strong>{' '}
-                          {totalRemaining} disponíveis de {totalNumbers}
-                          {firstAvailable ? ` · Próximo: ${firstAvailable}` : ' · Lote esgotado'}
-                          {totalRemaining > 0 && !rxMeta.sncrNumber
-                            ? ' (se deixar em branco, o próximo número será preenchido automaticamente ao assinar).'
-                            : ''}
-                        </>
-                      ) : (
-                        <>
-                          Nenhum lote cadastrado para {modalityCfg.label}. Clique em{' '}
-                          <strong>Lotes SNCR</strong> para salvar sua faixa de números obtida no
-                          site da Anvisa (sem precisar de e-CNPJ).
-                        </>
-                      )}
-                    </p>
-                    {showSncrBatches && !isSigned && (
-                      <div
-                        style={{
-                          padding: '12px 14px',
-                          backgroundColor: 'var(--surface)',
-                          border: '1px solid var(--border)',
-                          borderRadius: '6px',
-                          marginTop: '8px',
-                          fontSize: '13px',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: '8px',
-                          }}
-                        >
-                          <strong>
-                            Estoque de Lotes SNCR — {modalityCfg.label}
-                          </strong>
-                          <button
-                            type="button"
-                            className="text-button"
-                            onClick={() => setShowSncrBatches(false)}
-                          >
-                            Fechar
-                          </button>
-                        </div>
-                        <p
-                          className="document-template-note"
-                          style={{ marginTop: 0, marginBottom: '10px' }}
-                        >
-                          Pegue um lote de números no portal{' '}
-                          <a
-                            href="https://sncr.anvisa.gov.br"
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            sncr.anvisa.gov.br
-                          </a>{' '}
-                          e salve a faixa abaixo. O PsyWrite puxará o próximo número livre
-                          automaticamente a cada receita, sem precisar de e-CNPJ.
-                        </p>
-
-                        {modalityBatches.length > 0 && (
-                          <ul
-                            className="prescription-list"
-                            style={{ marginBottom: '12px' }}
-                          >
-                            {modalityBatches.map((b) => (
-                              <li
-                                key={b.id}
-                                style={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                }}
-                              >
-                                <div>
-                                  <strong>{b.label}</strong>
-                                  <span
-                                    className="prescription-summary"
-                                    style={{ display: 'block' }}
-                                  >
-                                    Restantes: <strong>{b.remaining}</strong> de{' '}
-                                    {b.total} (usados: {b.used})
-                                    {b.nextNumber
-                                      ? ` · Próximo: ${b.nextNumber}`
-                                      : ' · Esgotado'}
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  className="text-button danger"
-                                  disabled={docs.busy}
-                                  title={`Remover lote ${b.label}`}
-                                  onClick={() => {
-                                    if (
-                                      window.confirm(
-                                        `Remover o lote SNCR "${b.label}"?`,
-                                      )
-                                    ) {
-                                      void docs.deleteSncrBatch(b.id);
-                                    }
-                                  }}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns:
-                              'repeat(auto-fit, minmax(180px, 1fr))',
-                            gap: '8px',
-                            marginBottom: '8px',
-                          }}
-                        >
-                          <label style={{ margin: 0 }}>
-                            Nº inicial da faixa
-                            <input
-                              placeholder="Ex.: 2602.6-53.0000001"
-                              value={batchInicio}
-                              onChange={(e) => setBatchInicio(e.target.value)}
-                            />
-                          </label>
-                          <label style={{ margin: 0 }}>
-                            Nº final da faixa
-                            <input
-                              placeholder="Ex.: 2602.6-53.0000100"
-                              value={batchFim}
-                              onChange={(e) => setBatchFim(e.target.value)}
-                            />
-                          </label>
-                          <label style={{ margin: 0 }}>
-                            Identificação (opcional)
-                            <input
-                              placeholder="Ex.: Lote C1 Out/2026"
-                              maxLength={80}
-                              value={batchLabel}
-                              onChange={(e) => setBatchLabel(e.target.value)}
-                            />
-                          </label>
-                        </div>
-
-                        <label style={{ marginBottom: '8px' }}>
-                          Ou cole uma lista de números (separados por vírgula ou
-                          linha)
-                          <textarea
-                            rows={2}
-                            placeholder="Opcional se você já preencheu o Nº inicial e Nº final acima"
-                            value={batchRawList}
-                            onChange={(e) => setBatchRawList(e.target.value)}
-                            style={{ minHeight: '52px' }}
-                          />
-                        </label>
-
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            className="secondary"
-                            disabled={
-                              docs.busy ||
-                              (!batchInicio.trim() && !batchRawList.trim())
-                            }
-                            onClick={async () => {
-                              const created = await docs.registerSncrBatch({
-                                modality: rxMeta.modality,
-                                label: batchLabel,
-                                inicio: batchInicio,
-                                fim: batchFim,
-                                rawList: batchRawList,
-                              });
-                              if (created) {
-                                setBatchLabel('');
-                                setBatchInicio('');
-                                setBatchFim('');
-                                setBatchRawList('');
-                              }
-                            }}
-                          >
-                            Salvar lote SNCR
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+              {rxMeta.modality!=='simples' && <div style={{marginBottom:12}}>
+                <label>Número vinculado
+                  <input readOnly value={reservation?.number || rxMeta.sncrNumber} placeholder="Sem reserva" />
+                </label>
+                <p role="status">{docs.numbering.loading ? 'Consultando numeração…' : docs.numbering.error ? docs.numbering.error : reservation ? `Numeração ${reservationLabels[reservation.state]} · ${reservation.environment} · versão ${reservation.document_version}` : rxMeta.sncrNumber ? 'Número manual/histórico não verificado. Não autoriza emissão.' : local ? 'Simulação local disponível. Nenhum número reservado.' : 'Emissão controlada bloqueada até autenticação oficial SNCR/gov.br.'}</p>
+                {local && <p>Estoque sintético disponível: {docs.sncrBatches.filter(b=>b.modality===rxMeta.modality).reduce((sum,b)=>sum+b.remaining,0)}</p>}
+                {!reservation && <button type="button" className="secondary" disabled={!local || docs.numbering.loading || docs.busy} onClick={()=>void docs.requestSncrNumber()}>Reservar número sintético local</button>}
+              </div>}
             </>
           );
         })()}
@@ -652,7 +376,7 @@ export function DocumentEditor({
             <button
               type="button"
               className="secondary"
-              disabled={docs.busy}
+              disabled={docs.busy || !!reservation}
               onClick={() => void docs.save()}
             >
               Salvar rascunho
@@ -665,7 +389,10 @@ export function DocumentEditor({
             >
               Prévia / PDF
             </button>
-            {!docs.signatureSession && choosingProvider ? (
+            {controlled ? <>
+              <button type="button" className="primary" disabled={docs.busy || !local || !reservation || reservation.state==='abandoned' || ((reservation.state==='uncertain'||reservation.state==='signing') && !reservation.artifact_metadata)} onClick={()=>void docs.sign(d.id)}>{reservation?.artifact_metadata ? 'Recuperar artefato simulado original' : 'Assinar simulação local (sem validade clínica)'}</button>
+              {reservation && <button type="button" className="secondary" disabled={docs.busy} onClick={()=>docs.open(d,undefined,true)}>Duplicar como novo rascunho</button>}
+            </> : !docs.signatureSession && choosingProvider ? (
               <div
                 style={{
                   display: 'inline-flex',
@@ -756,7 +483,7 @@ export function DocumentEditor({
         {docs.busy
           ? 'Processando…'
           : isSigned
-            ? 'Documento assinado digitalmente (imutável)'
+            ? simulated ? 'Simulação local concluída (imutável)' : 'Documento assinado digitalmente (imutável)'
             : docs.dirty
               ? 'Alterações não salvas'
               : d.version
@@ -769,7 +496,7 @@ export function DocumentEditor({
         <>
           <p>
             {isSigned
-              ? 'PDF oficial com assinatura digital ICP-Brasil.'
+              ? simulated ? 'SIMULAÇÃO LOCAL — SEM VALIDADE CLÍNICA.' : 'PDF oficial com assinatura digital ICP-Brasil.'
               : 'Prévia da versão salva. Use o visualizador para imprimir.'}
           </p>
           <iframe
