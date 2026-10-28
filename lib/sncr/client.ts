@@ -109,7 +109,7 @@ export function extractCouncilRegistration(
 export function expandSncrRange(
   inicio: string,
   fim: string,
-  maxItems = 200
+  maxItems = 1000
 ): string[] {
   const startTrimmed = (inicio || '').trim();
   const endTrimmed = (fim || '').trim();
@@ -119,7 +119,7 @@ export function expandSncrRange(
   const startMatch = startTrimmed.match(/^(.*?)(\d+)$/);
   const endMatch = endTrimmed.match(/^(.*?)(\d+)$/);
   if (!startMatch || !endMatch || startMatch[1] !== endMatch[1]) {
-    return [startTrimmed];
+    throw new HttpError(422, 'Faixa SNCR inválida.');
   }
 
   const prefix = startMatch[1];
@@ -127,14 +127,18 @@ export function expandSncrRange(
   const startNum = Number.parseInt(startMatch[2], 10);
   const endNum = Number.parseInt(endMatch[2], 10);
   if (
-    !Number.isFinite(startNum) ||
-    !Number.isFinite(endNum) ||
+    !Number.isSafeInteger(startNum) ||
+    !Number.isSafeInteger(endNum) ||
+    startMatch[2].length !== endMatch[2].length ||
     endNum < startNum
   ) {
-    return [startTrimmed];
+    throw new HttpError(422, 'Faixa SNCR inválida.');
   }
 
-  const count = Math.min(endNum - startNum + 1, maxItems);
+  const count = endNum - startNum + 1;
+  if (!Number.isSafeInteger(maxItems) || maxItems < 1 || count > maxItems) {
+    throw new HttpError(422, 'Faixa SNCR excede o limite de expansão; nenhum número foi importado.');
+  }
   const result: string[] = [];
   for (let i = 0; i < count; i++) {
     result.push(`${prefix}${String(startNum + i).padStart(width, '0')}`);
@@ -195,7 +199,8 @@ export function parseSncrBatchInput(params: {
       .map((s) => s.trim().replace(/^["']|["']$/g, ''))
       .filter((s) => s.length >= 3 && s.length <= 60 && /\d/.test(s));
 
-    const unique = Array.from(new Set(tokens)).slice(0, max);
+    const unique = Array.from(new Set(tokens));
+    if (unique.length > max) throw new HttpError(422, 'Lista SNCR excede o limite; nenhum número foi importado.');
     return {
       numbers: unique,
       inicio: unique[0] || '',
@@ -225,9 +230,9 @@ export function isSncrConfigured(): boolean {
 }
 
 export function getSncrEnvironment(): SncrEnvironment {
-  return process.env.ANVISA_SNCR_ENV?.trim().toLowerCase() === 'hmg'
-    ? 'hmg'
-    : 'prd';
+  return process.env.ANVISA_SNCR_ENV?.trim().toLowerCase() === 'prd'
+    ? 'prd'
+    : 'hmg';
 }
 
 function getUrls() {
@@ -620,6 +625,9 @@ export class SncrService {
     modality: PrescriptionModality;
     physicianRegistration: string;
   }): Promise<SncrAllocationResult> {
+    if (this.legacyAllocationDisabled()) {
+      throw new HttpError(503, 'Reserva SNCR indisponível até a implantação e validação do estoque transacional.');
+    }
     if (params.modality === 'simples') {
       throw new HttpError(
         422,
@@ -832,6 +840,10 @@ export class SncrService {
       saldoReceitas: data.saldoReceitas,
       message: data.mensagem,
     };
+  }
+
+  private legacyAllocationDisabled(): boolean {
+    return true;
   }
 }
 

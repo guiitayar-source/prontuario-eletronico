@@ -231,6 +231,10 @@ export function DocumentEditor({
                   disabled={isSigned}
                   onChange={(e) => {
                     const nextModality = e.target.value as PrescriptionModality;
+                    if (nextModality !== rxMeta.modality && rxMeta.sncrNumber) {
+                      window.alert('Esta receita já contém uma numeração SNCR. Revise e retire a numeração antes de mudar a modalidade; não reutilize o número em outra receita.');
+                      return;
+                    }
                     update({
                       text: buildPrescriptionText({
                         modality: nextModality,
@@ -520,16 +524,6 @@ export function DocumentEditor({
                                 setBatchInicio('');
                                 setBatchFim('');
                                 setBatchRawList('');
-                                if (!rxMeta.sncrNumber && created.nextNumber) {
-                                  update({
-                                    text: buildPrescriptionText({
-                                      modality: rxMeta.modality,
-                                      sncrNumber: created.nextNumber,
-                                      viaAdmin: rxMeta.viaAdmin,
-                                      bodyText: rxMeta.bodyText,
-                                    }),
-                                  });
-                                }
                               }
                             }}
                           >
