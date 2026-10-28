@@ -5,12 +5,13 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { containerEngine, containerImage } from './helpers/sncr-container.mjs';
 
 const containerName = 'psywrite-sncr-3a-disposable';
-const inspect = JSON.parse(execFileSync('docker', ['inspect', containerName], {encoding:'utf8'}))[0];
+const inspect = JSON.parse(execFileSync(containerEngine, ['inspect', containerName], {encoding:'utf8'}))[0];
 assert.equal(inspect.HostConfig.NetworkMode, 'none');
 assert.equal(inspect.Mounts.length, 0);
-assert.equal(inspect.Config.Image, 'public.ecr.aws/supabase/postgres:17.6.1.167');
+assert.equal(inspect.Config.Image, containerImage);
 assert.equal(inspect.State.Running, true);
 // Fixar o ID evita atingir outro contêiner se o nome for reutilizado durante o teste.
 const container = inspect.Id;
@@ -23,14 +24,14 @@ const doc = n => `md5('doc-${n}')::uuid`;
 const key = n => `md5('key-${n}')::uuid`;
 const args = (db=database) => ['exec','-i',container,'psql','-X','-U','supabase_admin','-d',db,'-v','ON_ERROR_STOP=1','-v','VERBOSITY=verbose','-qAt'];
 function sql(s, {role='postgres',db=database}={}) {
-  return execFileSync('docker',args(db),{input:`set role ${role}; set statement_timeout='15s'; ${s}`,encoding:'utf8',stdio:['pipe','pipe','pipe'],timeout:25000}).trim();
+  return execFileSync(containerEngine,args(db),{input:`set role ${role}; set statement_timeout='15s'; ${s}`,encoding:'utf8',stdio:['pipe','pipe','pipe'],timeout:25000}).trim();
 }
 function sqlAsync(s, {role='postgres'}={}) {
   return new Promise((resolve,reject) => {
-    const p=spawn('docker',args()); let out='',err='';
+    const p=spawn(containerEngine,args()); let out='',err='';
     const timer=setTimeout(()=>{p.kill();reject(Error('Tempo limite do teste PostgreSQL'));},25000);
     p.stdout.on('data',x=>out+=x); p.stderr.on('data',x=>err+=x);
-    p.on('error',reject); p.on('close',code=>{clearTimeout(timer);code ? reject(Error(err)) : resolve(out.trim());});
+    p.on('error',reject); p.on('close',code=>{clearTimeout(timer);if (code) reject(Error(err)); else resolve(out.trim());});
     p.stdin.end(`set role ${role}; set statement_timeout='15s'; ${s}`);
   });
 }
@@ -83,7 +84,7 @@ try {
 
  await test('duas conexões independentes reservam números distintos', async () => {
   const r=await Promise.all([sqlAsync(reserve(1),{role:'service_role'}),sqlAsync(reserve(2),{role:'service_role'})]);
-  assert.equal(new Set(r).size,2); assert.deepEqual(r.sort(),['TEST.0000001','TEST.0000002']);
+  assert.equal(new Set(r).size,2); assert.deepEqual(r.sort((a,b)=>a.localeCompare(b)),['TEST.0000001','TEST.0000002']);
  });
  await test('dez conexões independentes disputam o mesmo lote sem perdas', async () => {
   const r=await Promise.all(Array.from({length:10},(_,i)=>sqlAsync(reserve(i+3),{role:'service_role'})));
@@ -109,7 +110,7 @@ try {
  });
  await test('reinicialização real do PostgreSQL preserva reserva e cursor', async () => {
   const before=rpc(reserve(1)), stock=cursor();
-  execFileSync('docker',['restart',container],{stdio:'pipe',timeout:25000});
+  execFileSync(containerEngine,['restart',container],{stdio:'pipe',timeout:25000});
   let ready=false;
   for(let i=0;i<30;i++){ try { if(sql('select 1;')==='1'){ready=true;break;} } catch {} await new Promise(r=>setTimeout(r,250)); }
   assert.equal(ready,true); assert.equal(rpc(reserve(1)),before); assert.equal(cursor(),stock);

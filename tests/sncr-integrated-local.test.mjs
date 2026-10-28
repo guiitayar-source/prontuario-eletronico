@@ -7,6 +7,8 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createSncrDb } from './helpers/sncr-local-db.mjs';
+import { containerEngine } from './helpers/sncr-container.mjs';
+import { syntheticRceText, syntheticRceData } from './helpers/rce-fixture.mjs';
 import {
   reserveDocument,
   getNumberingContext,
@@ -92,7 +94,7 @@ function fixture({
       status: 'DRAFT',
       physician_registration: 'CRM 12345 SP',
       version: 1,
-      text: 'Via de administração: Uso oral\n\nMED001 - Instrução sintética',
+      text: syntheticRceText,
       document_date: '2026-10-27',
       patient_name: 'Paciente Sintético',
       physician_name: 'Médico Sintético',
@@ -124,7 +126,7 @@ const provider = {
 };
 const reserve = (d) => reserveDocument(h.db, f.actor, d.id);
 const sign = (d, opts = {}, storage = store) =>
-  signReservedSimulation(h.db, f.actor, d.id, storage, { provider, ...opts });
+  signReservedSimulation(h.db, f.actor, d.id, storage, { provider, enrich: async doc => Object.assign(doc, syntheticRceData), ...opts });
 async function textOf(bytes) {
   const path = join(root, `${uuid()}.pdf`);
   await writeFile(path, bytes);
@@ -140,6 +142,7 @@ try {
     const text = await textOf(
       await simulationPdf({
         ...ctx.document,
+        ...syntheticRceData,
         sncr_number: ctx.reservation.number,
       }),
     );
@@ -242,6 +245,8 @@ try {
   });
   await test('entrada real DocumentSigningService usa contexto persistido e armazenamento local', async () => {
     const d = f.document();
+    h.sql(`insert into patients values ('${f.actor.clinicId}','synthetic-patient','52998224725','Rua Sintética','100','Sala de teste','Centro','Cidade de Teste','SP');
+      update document_profiles set letterhead_address='Rua do Teste, 200 - Cidade de Teste - SP',letterhead_phone='(11) 0000-0000' where clinic_id='${f.actor.clinicId}';`);
     await reserve(d);
     const application = {
       ...h.applicationDb,
@@ -398,6 +403,25 @@ try {
     await assert.rejects(sign(d));
     assert.equal(calls, before);
   });
+  for (const { label, overrides, options } of [
+    { label: 'campo clínico ausente', overrides: { text: syntheticRceText.replace('Concentração: 10 mg (teste)\n', '') }, options: {} },
+    { label: 'identificação ausente', overrides: {}, options: { enrich: async () => {} } },
+    { label: 'posologia maior que o formulário', overrides: { text: syntheticRceText.replace('Instrução sintética:', 'Linha de teste\n'.repeat(40)) }, options: {} },
+  ]) await test(`RCE incompleta (${label}) nunca chega ao provedor nem perde o texto ou número`, async () => {
+    const d = f.document(overrides);
+    const reserved = await reserve(d), before = calls;
+    await assert.rejects(sign(d, options));
+    const ctx = await getNumberingContext(h.db, f.actor, d.id);
+    assert.equal(calls, before);
+    assert.equal(ctx.document.text, d.text);
+    assert.equal(ctx.document.version, d.version);
+    assert.equal(ctx.reservation.number, reserved.reservation.number);
+    assert.equal(ctx.reservation.state, 'uncertain');
+    assert.equal(ctx.reservation.artifact_metadata, null);
+    assert.equal(h.sql(`select count(*) from digital_signatures where document_id='${d.id}';`), '0');
+    await assert.rejects(sign(d, options));
+    assert.equal(calls, before);
+  });
   await test('recusa do provedor conserva estado incerto sem devolver número', async () => {
     const d = f.document();
     await reserve(d);
@@ -425,7 +449,7 @@ try {
   await test('reinicialização entre reserva e assinatura preserva vínculo', async () => {
     const d = f.document();
     const before = await reserve(d);
-    execFileSync('docker', ['restart', h.container], { stdio: 'pipe' });
+    execFileSync(containerEngine, ['restart', h.container], { stdio: 'pipe' });
     for (let i = 0; i < 30; i++) {
       try {
         h.sql('select 1;');
@@ -579,6 +603,8 @@ try {
 } finally {
   h.cleanup();
   await rm(root, { recursive: true, force: true });
-  for (const k of keys)
-    old[k] === undefined ? delete process.env[k] : (process.env[k] = old[k]);
+  for (const k of keys) {
+    if (old[k] === undefined) delete process.env[k];
+    else process.env[k] = old[k];
+  }
 }

@@ -33,7 +33,10 @@ const nextConfig: NextConfig = {
   // O contrato SNCR retorna session_id na query: não registrar a URL do callback.
   logging: { incomingRequests: { ignore: [/^\/api\/sncr\/auth\/callback\//] } },
   poweredByHeader: false,
-  outputFileTracingIncludes: { '/api/documents': ['./assets/fonts/*.ttf'] },
+  outputFileTracingIncludes: {
+    '/api/documents': ['./assets/fonts/*.ttf', './assets/sncr/*.pdf'],
+    '/api/digital-signature/sign': ['./assets/fonts/*.ttf', './assets/sncr/*.pdf'],
+  },
   experimental,
   // `npm run build` runs `tsc --noEmit` first. Avoid Next's duplicate typecheck
   // worker, which loses compiler output under the managed Node runtime.

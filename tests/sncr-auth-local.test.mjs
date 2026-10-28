@@ -5,6 +5,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createSncrDb } from './helpers/sncr-local-db.mjs';
+import { containerEngine } from './helpers/sncr-container.mjs';
 import {
   SncrSessions,
   authOperation,
@@ -72,7 +73,7 @@ const migration = readFileSync(
 const guard =
   "do $$ begin\n raise exception 'Migração de sessões SNCR em revisão: não aplicar';\nend $$;";
 const config = sncrAuthConfig();
-let calls = [];
+const calls = [];
 let response = () =>
   Response.json({ access_token: 'synthetic-token-only', token_type: 'Bearer' });
 const transport = async (url, options) => {
@@ -777,14 +778,14 @@ try {
   await test('reinicialização real do banco preserva sessão cifrada e vínculo', async () => {
     const actor = fixture();
     await login(actor);
-    execFileSync('docker', ['restart', h.container], {
+    execFileSync(containerEngine, ['restart', h.container], {
       stdio: 'pipe',
       timeout: 15000,
     });
     for (let i = 0; i < 30; i++) {
       try {
         execFileSync(
-          'docker',
+          containerEngine,
           ['exec', h.container, 'pg_isready', '-U', 'postgres'],
           { stdio: 'pipe' },
         );
@@ -860,6 +861,8 @@ try {
   });
 } finally {
   h.cleanup();
-  for (const k of keys)
-    old[k] === undefined ? delete process.env[k] : (process.env[k] = old[k]);
+  for (const k of keys) {
+    if (old[k] === undefined) delete process.env[k];
+    else process.env[k] = old[k];
+  }
 }

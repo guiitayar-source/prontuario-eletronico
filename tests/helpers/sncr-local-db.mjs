@@ -3,9 +3,10 @@ import { execFileSync, spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
+import { containerEngine, containerImage } from './sncr-container.mjs';
 export function createSncrDb() {
   const inspect = JSON.parse(
-    execFileSync('docker', ['inspect', 'psywrite-sncr-3a-disposable'], {
+    execFileSync(containerEngine, ['inspect', 'psywrite-sncr-3a-disposable'], {
       encoding: 'utf8',
     }),
   )[0];
@@ -14,7 +15,7 @@ export function createSncrDb() {
   assert.equal(inspect.State.Running, true);
   assert.equal(
     inspect.Config.Image,
-    'public.ecr.aws/supabase/postgres:17.6.1.167',
+    containerImage,
   );
   const container = inspect.Id,
     database = `sncr_3b_test_${randomUUID().replaceAll('-', '')}`;
@@ -35,7 +36,7 @@ export function createSncrDb() {
     '-qAt',
   ];
   function sql(s, role = 'postgres', db = database) {
-    return execFileSync('docker', args(db), {
+    return execFileSync(containerEngine, args(db), {
       input: `set role ${role}; set statement_timeout='15s'; ${s}`,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -44,7 +45,7 @@ export function createSncrDb() {
   }
   function asyncSql(s, role = 'service_role') {
     return new Promise((resolve, reject) => {
-      const p = spawn('docker', args());
+      const p = spawn(containerEngine, args());
       let out = '',
         err = '';
       const timer = setTimeout(() => {
@@ -56,9 +57,8 @@ export function createSncrDb() {
       p.on('error', reject);
       p.on('close', (code) => {
         clearTimeout(timer);
-        code
-          ? reject(Object.assign(Error(err), { stderr: err }))
-          : resolve(out.trim());
+        if (code) reject(Object.assign(Error(err), { stderr: err }));
+        else resolve(out.trim());
       });
       p.stdin.end(`set role ${role}; set statement_timeout='15s'; ${s}`);
     });

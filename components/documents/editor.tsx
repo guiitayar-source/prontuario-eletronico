@@ -13,6 +13,7 @@ import { Download, ShieldCheck, Key, Lock } from 'lucide-react';
 import type { DocumentsController } from './use-documents';
 import { DocumentAiBox } from './ai-box';
 import { useFeature } from '../plan';
+import { rceElectronicTemplate } from '@/lib/sncr/rce-fields';
 import {
   isSignatureProviderId,
   signatureProviderLabel,
@@ -257,6 +258,12 @@ export function DocumentEditor({
                 </label>
                 <p role="status">{docs.numbering.loading ? 'Consultando numeração…' : docs.numbering.error ? docs.numbering.error : reservation ? `Numeração ${reservationLabels[reservation.state]} · ${reservation.environment} · versão ${reservation.document_version}` : rxMeta.sncrNumber ? 'Número manual/histórico não verificado. Não autoriza emissão.' : local ? 'Simulação local disponível. Nenhum número reservado.' : 'Emissão controlada bloqueada até autenticação oficial SNCR/gov.br.'}</p>
                 {local && <p>Estoque sintético disponível: {docs.sncrBatches.filter(b=>b.modality===rxMeta.modality).reduce((sum,b)=>sum+b.remaining,0)}</p>}
+                {local && rxMeta.modality === 'controle_especial' && <p>
+                  A simulação usa o formulário eletrônico da Anvisa, com um medicamento por documento.
+                  Preencha nome do medicamento ou substância, concentração, forma farmacêutica, quantidade e posologia com esses rótulos, além da via de administração.
+                  Informe a data, CPF ou passaporte do paciente estrangeiro, endereço do paciente e endereço e telefone do prescritor antes de reservar.
+                  Conteúdo que exceda o formulário bloqueia a assinatura; a reserva congela o rascunho.
+                </p>}
                 {!reservation && <button type="button" className="secondary" disabled={!local || docs.numbering.loading || docs.busy} onClick={()=>void docs.requestSncrNumber()}>Reservar número sintético local</button>}
               </div>}
             </>
@@ -303,6 +310,15 @@ export function DocumentEditor({
           </label>
         )}
         <div className="document-tools">
+          {local && !frozen && d.kind === 'Receita' && parsePrescriptionText(d.text).modality === 'controle_especial' && (
+            <button type="button" className="secondary" onClick={() => {
+              // O texto anterior permanece visível para revisão humana. Não há
+              // conversão automática nem substituição de conteúdo clínico.
+              update({ text: rceElectronicTemplate + (d.text.trim() ? `\nTexto anterior para revisão do prescritor (remova este rótulo após conferir):\n${d.text}` : '') });
+            }}>
+              Inserir campos RCE eletrônica (simulação)
+            </button>
+          )}
           {!isSigned && (
             <button
               className="secondary"
