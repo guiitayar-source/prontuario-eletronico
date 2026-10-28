@@ -30,6 +30,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // O contrato SNCR retorna session_id na query: não registrar a URL do callback.
+  logging: { incomingRequests: { ignore: [/^\/api\/sncr\/auth\/callback\//] } },
   poweredByHeader: false,
   outputFileTracingIncludes: { '/api/documents': ['./assets/fonts/*.ttf'] },
   experimental,

@@ -2,6 +2,10 @@
 import { createHash } from 'node:crypto';
 import { HttpError } from '../supabase/server.ts';
 import type { ClinicalDocument } from '../document-fields.ts';
+import { parsePrescriptionText } from '../document-fields.ts';
+import { SncrSessions } from './sessions.ts';
+import { sncrAuthConfig } from './auth-config.ts';
+import { platformMaintainer } from './maintainer.ts';
 
 export interface SncrDb {
   rpc(
@@ -26,7 +30,7 @@ export type Reservation = {
   artifact_metadata: Record<string, unknown> | null;
 };
 export type NumberingContext = {
-  document: ClinicalDocument;
+  document: ClinicalDocument & {clinic_id: string};
   reservation: Reservation | null;
   origin: string | null;
   sandbox: boolean;
@@ -117,6 +121,20 @@ export async function reserveDocument(
   actor: SncrActor,
   documentId: string,
 ) {
+  if (!localSimulationEnabled() && process.env.PSYWRITE_SNCR_AUTH_MODE === 'homologation') {
+    const config=sncrAuthConfig();
+    const context=await getNumberingContext(db,actor,documentId);
+    const doc=context.document;
+    if(doc.author_id!==actor.userId || doc.clinic_id!==actor.clinicId || doc.kind!=='Receita' || parsePrescriptionText(doc.text).modality==='simples')
+      throw new HttpError(403,'Documento incompatível com o prescritor ou a modalidade SNCR.');
+    if(context.reservation && (context.reservation.environment!==config.environment || context.origin==='synthetic'))
+      throw new HttpError(403,'Reserva sintética ou de outro ambiente não autoriza operação oficial.');
+    if(!platformMaintainer()) throw new HttpError(503,'Mantenedora da plataforma não configurada.');
+    // A identidade é obtida da sessão isolada e da inscrição persistida, nunca do browser.
+    // Bloqueio local conservador; a validação CPF x inscrição pelo próprio SNCR está
+    // documentada para a transação de numeração. Isso não é uma exigência de pré-prova local.
+    await new SncrSessions(db).numberingIdentity(actor,config.environment,doc.physician_registration || '');
+  }
   requireLocalSimulation();
   const ctx = await sncrRpc(db, 'sncr_reserve_document', {
     ...actorArgs(actor, documentId),
