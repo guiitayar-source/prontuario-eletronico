@@ -1,0 +1,134 @@
+// PostgreSQL real, isolado e sem .env. Reaplica os arquivos SQL históricos inteiros.
+import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { readFileSync, readdirSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { containerEngine, containerImage } from './sncr-container.mjs';
+
+export const trustMigration = '20261029010000_signature_trust_permissions.sql';
+export const trustGuard =
+  "do $$ begin\n raise exception 'Migração de permissões de assinatura em revisão: não aplicar';\nend $$;";
+const migrations = new URL('../../supabase/migrations/', import.meta.url);
+export function createSignatureTrustDb({ baseline = false } = {}) {
+  const inspect = JSON.parse(
+    execFileSync(containerEngine, ['inspect', 'psywrite-sncr-3a-disposable'], {
+      encoding: 'utf8',
+    }),
+  )[0];
+  assert.equal(inspect.HostConfig.NetworkMode, 'none');
+  assert.equal(inspect.Mounts.length, 0);
+  assert.equal(inspect.Config.Image, containerImage);
+  assert.equal(inspect.State.Running, true);
+  assert.equal(inspect.Config.Labels?.['psywrite.test'], 'lote-6c');
+  const container = inspect.Id;
+  const database = `signature_trust_${randomUUID().replaceAll('-', '')}`;
+  const lit = (value) =>
+    value == null
+      ? 'null'
+      : `'${(typeof value === 'object' ? JSON.stringify(value) : String(value)).replaceAll("'", "''")}'`;
+  function sql(
+    statement,
+    { role = 'postgres', user = null, db = database } = {},
+  ) {
+    assert.ok(
+      [
+        'postgres',
+        'supabase_admin',
+        'anon',
+        'authenticated',
+        'service_role',
+      ].includes(role),
+    );
+    return execFileSync(
+      containerEngine,
+      [
+        'exec',
+        '-i',
+        container,
+        'psql',
+        '-X',
+        '-U',
+        'supabase_admin',
+        '-d',
+        db,
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-v',
+        'VERBOSITY=verbose',
+        '-qAt',
+      ],
+      {
+        input: `set role ${role}; set statement_timeout='15s'; set request.jwt.claims=${lit({ role, ...(user ? { sub: user } : {}), aal: 'aal2' })}; ${statement}`,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 25000,
+      },
+    ).trim();
+  }
+  const cleanup = () =>
+    sql(`drop database ${database} with (force);`, {
+      role: 'supabase_admin',
+      db: 'postgres',
+    });
+  function applyTrust() {
+    const source = readFileSync(new URL(trustMigration, migrations), 'utf8');
+    assert.equal(
+      source.split(trustGuard).length,
+      2,
+      'Bloqueio da migração deve permanecer intacto.',
+    );
+    sql(
+      `begin; ${source.replace(trustGuard, '-- somente cópia descartável')} commit;`,
+    );
+  }
+  sql(`create database ${database} owner postgres template template0;`, {
+    role: 'supabase_admin',
+    db: 'postgres',
+  });
+  const applied = [];
+  try {
+    // Interfaces de auth/storage são mínimas; não emulam GoTrue nem Storage API.
+    // Os papéis/BYPASSRLS vêm da imagem Supabase, não são superusuários de teste.
+    sql(`create schema auth; create schema storage;
+      create table auth.users(id uuid primary key);
+      create table auth.mfa_factors(user_id uuid references auth.users, status text);
+      create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
+      create function auth.uid() returns uuid language sql stable as $$ select nullif(auth.jwt()->>'sub','')::uuid $$;
+      create function auth.role() returns text language sql stable as $$ select auth.jwt()->>'role' $$;
+      create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+      create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text references storage.buckets,name text,metadata jsonb);
+      alter table storage.objects enable row level security;
+      grant usage on schema public,auth,storage to anon,authenticated,service_role;
+      grant select,insert,update,delete on storage.objects to anon,authenticated,service_role;
+      alter default privileges in schema public grant all on tables to anon,authenticated,service_role;
+      alter default privileges in schema public grant all on sequences to anon,authenticated,service_role;`);
+    const guards = [
+      "do $$ begin\n raise exception 'Migração SNCR em revisão: não aplicar';\nend $$;",
+      "do $$ begin\n raise exception 'Migração de sessões SNCR em revisão: não aplicar';\nend $$;",
+      "do $$ begin\n raise exception 'Migração de identidade de assinatura em revisão: não aplicar';\nend $$;",
+    ];
+    for (const file of readdirSync(migrations)
+      .filter((f) => f.endsWith('.sql') && f !== trustMigration)
+      .sort()) {
+      let source = readFileSync(new URL(file, migrations), 'utf8');
+      for (const guard of guards)
+        if (source.includes(guard)) {
+          assert.equal(source.split(guard).length, 2);
+          source = source.replace(guard, '-- somente cópia descartável');
+        }
+      try {
+        sql(`begin; ${source} commit;`);
+      } catch (error) {
+        throw new Error(
+          `Migração histórica ${file}: ${error.stderr || error.message}`,
+        );
+      }
+      applied.push(file);
+    }
+    if (!baseline) applyTrust();
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
+  return { container, database, sql, lit, cleanup, applyTrust, applied };
+}
