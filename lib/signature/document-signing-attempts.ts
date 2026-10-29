@@ -382,8 +382,11 @@ export async function signDocumentAttempt(
       prepared,
       signed.cmsSignatureBase64,
     );
-    const verification = await padesService.verifyPadesSignature(bytes);
-    if (!verification.isValid)
+    // Emissão ao vivo: revogação conhecida ou certificado vencido agora bloqueiam (6F.2C-R).
+    const verification = await padesService.verifyPadesSignature(bytes, {
+      validationContext: 'LIVE_ISSUANCE',
+    });
+    if (!verification.assessment.issuanceAllowed)
       throw new SigningIdentityError('cms_verification_failed', 409);
     assertSigningCertificate(identity.authorization, verification);
     const metadata = {

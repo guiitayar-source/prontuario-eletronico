@@ -148,8 +148,13 @@ export async function signReservedSimulation(
       prepared,
       signed.cmsSignatureBase64,
     );
-    const verification = await padesService.verifyPadesSignature(bytes);
-    if (!verification.isValid) throw new Error('Assinatura simulada inválida.');
+    // Simulação local: certificado sintético fora da ICP-Brasil, então nunca há confiança plena;
+    // exige-se só integridade e ausência de rejeição. O registro sai como local_simulation/UNVERIFIED.
+    const verification = await padesService.verifyPadesSignature(bytes, {
+      validationContext: 'LIVE_ISSUANCE',
+    });
+    if (!verification.assessment.issuanceAllowed)
+      throw new Error('Assinatura simulada inválida.');
     const path = `${actor.clinicId}/sncr-simulations/${documentId}_v${doc.version}_${attempt}.pdf`;
     const metadata = {
       provider: 'local_simulation',

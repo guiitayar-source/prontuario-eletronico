@@ -17,6 +17,10 @@ import {
 import { validatePadesPdfStructure } from './pdf-structure-validator.ts';
 import { evaluateTemporalValidityAndPoe } from './rfc3161-timestamp.ts';
 import { evaluateDocumentRevocation } from './revocation-validator.ts';
+import {
+  assessSignature,
+  persistenceStatusFor,
+} from './verification-policy.ts';
 import type {
   PadesChainValidationResult,
   PadesCmsIntegrityResult,
@@ -549,6 +553,24 @@ export class PadesService {
     optionsOrTrustedCerts?: pkijs.Certificate[] | PadesVerificationOptions
   ): Promise<PadesVerificationResult> {
     const options = normalizeOptions(optionsOrTrustedCerts);
+    const core = await this.evaluatePades(pdfBuffer, options);
+    // Lote 6F.2C-R: `isValid`, `persistenceStatus` e `assessment` saem de uma única regra
+    // (verification-policy.ts) para todos os caminhos de retorno.
+    const assessment = assessSignature(core);
+    return {
+      ...core,
+      persistenceStatus: persistenceStatusFor(core.status),
+      isValid: options.requireFullTrust
+        ? assessment.fullTrust
+        : assessment.cryptographicIntegrity && !assessment.rejected,
+      assessment,
+    };
+  }
+
+  private async evaluatePades(
+    pdfBuffer: Buffer,
+    options: PadesVerificationOptions,
+  ): Promise<Omit<PadesVerificationResult, 'assessment'>> {
     const policy = options.pdfRevisionPolicy ?? 'PADES_LTV_ALLOWED';
     const verificationTime = options.verificationTime ?? new Date();
 
@@ -618,7 +640,7 @@ export class PadesService {
       pdfIntegrity: PadesPdfIntegrityResult,
       cmsIntegrity: PadesCmsIntegrityResult = emptyCmsIntegrity,
       subIndication = 'FORMAT_FAILURE',
-    ): PadesVerificationResult => ({
+    ): Omit<PadesVerificationResult, 'assessment'> => ({
       isValid: false,
       status: 'INVALID',
       subIndication,

@@ -132,7 +132,7 @@ export function EvolutionSignatureDetailsModal({
                 <Check size={18} />
               </div>
               <div>
-                <strong>Assinatura válida</strong>
+                <strong>Assinatura íntegra, cadeia ICP-Brasil confirmada</strong>
                 <p>
                   A assinatura confere com a chave do certificado, o
                   certificado pertence à cadeia ICP-Brasil e estava válido na

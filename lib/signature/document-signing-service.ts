@@ -403,11 +403,15 @@ export class DocumentSigningService {
     );
 
     // 5. Verify cryptographically
-    const verification = await padesService.verifyPadesSignature(signedPdfBuffer);
-    if (!verification.isValid) {
+    const verification = await padesService.verifyPadesSignature(signedPdfBuffer, {
+      validationContext: 'LIVE_ISSUANCE',
+    });
+    if (!verification.assessment.issuanceAllowed) {
       throw new Error(
         `Falha na validação criptográfica do PDF assinado: ${
-          verification.error || 'Assinatura inválida'
+          verification.assessment.issuanceBlockReason ||
+          verification.error ||
+          'Assinatura inválida'
         }`
       );
     }

@@ -422,13 +422,40 @@ export interface PreparedPdf {
   actualByteRangePdf: Buffer;
 }
 
+/**
+ * Avaliação explícita do resultado (Lote 6F.2C-R); ver `verification-policy.ts`.
+ * Cada campo responde a uma pergunta diferente e nenhum substitui outro.
+ */
+export interface SignatureAssessment {
+  /** PDF e CMS conferem com a chave do certificado embutido. */
+  cryptographicIntegrity: boolean;
+  /** Titular extraído, CPF coerente com o CN, certificado final com uso de assinatura. */
+  signerIdentity: boolean;
+  /** Cadeia validada até uma raiz confiável (ICP-Brasil fixada, salvo âncoras de teste). */
+  chainTrusted: boolean;
+  /** `status === 'VALID'`: cadeia, tempo/POE e revogação comprovados. */
+  fullTrust: boolean;
+  /** Evidência autêntica de revogação/suspensão na cadeia do signatário. */
+  knownRevocation: boolean;
+  /** `status === 'INVALID'` ou revogação conhecida. */
+  rejected: boolean;
+  /** Pode iniciar/concluir a emissão clínica (não implica confiança plena). */
+  issuanceAllowed: boolean;
+  issuanceBlockReason?: string;
+  /** Estado que pode ser gravado no banco: INDETERMINATE nunca vira VALID. */
+  persistenceStatus: VerificationStatus;
+}
+
 export interface PadesVerificationResult {
   /**
-   * Indicador de retrocompatibilidade: true quando `cryptographicIntegrity === true`
-   * e `status !== 'INVALID'` (ou `status === 'VALID'` quando `requireFullTrust === true`).
-   * NUNCA equivale isoladamente a confiança plena ICP-Brasil (`isTrusted` / `status === 'VALID'`).
+   * Retrocompatibilidade: "não rejeitada". True quando há integridade criptográfica, o status
+   * não é INVALID e não há revogação conhecida da cadeia do signatário (ou, com
+   * `requireFullTrust`, somente quando `status === 'VALID'`).
+   * NÃO significa confiança plena: use `assessment.fullTrust` / `status === 'VALID'` para isso
+   * e `assessment.issuanceAllowed` para autorizar emissão.
    */
   isValid: boolean;
+  assessment: SignatureAssessment;
   status: VerificationGlobalStatus;
   subIndication?: string;
   persistenceStatus: VerificationStatus;

@@ -129,13 +129,17 @@ export function useDocuments(patient: Patient, enabled = true) {
         success?: boolean;
         error?: string;
         storagePath?: string;
-        verification?: { isValid: boolean; signerName: string; signerCpf: string; algorithm: string };
+        verification?: { isValid: boolean; status?: string; signerName: string; signerCpf: string; algorithm: string };
       };
       if (!res.ok) throw new Error(data.error || 'Falha ao testar assinatura');
 
       setSignatureNotice({
         type: 'success',
-        message: `✓ Documento sintético assinado com sucesso! Titular: ${data.verification?.signerName} (${data.verification?.signerCpf}).`,
+        message: `✓ Documento sintético assinado com sucesso! Titular: ${data.verification?.signerName} (${data.verification?.signerCpf}).${
+          data.verification?.status === 'VALID'
+            ? ''
+            : ' Integridade conferida; confiança plena ICP-Brasil (revogação) ainda não comprovada.'
+        }`,
       });
 
       if (data.storagePath) {

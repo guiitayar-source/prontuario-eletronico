@@ -69,10 +69,11 @@ export function authorizeSigningIdentity(
 }
 
 export function assertSigningCertificate(authorization: SigningAuthorization, verification: PadesVerificationResult) {
-  if (!verification.isValid || verification.certificateFingerprint !== authorization.certificateFingerprint ||
+  if (!verification.assessment.issuanceAllowed || verification.certificateFingerprint !== authorization.certificateFingerprint ||
       signingCpf(verification.signerCpf) !== authorization.cpf)
     throw new SigningIdentityError('certificate_identity_mismatch', 409);
-  // A correspondência de identidade não atesta cadeia ICP-Brasil ou revogação.
+  // A correspondência de identidade não atesta confiança plena (cadeia + revogação comprovada):
+  // `issuanceAllowed` só exclui invalidade provada e revogação conhecida; o banco grava UNVERIFIED.
 }
 
 export function assertAuthorizedDocumentVersion(authorization: SigningAuthorization, doc: AuthoredDocument | null) {

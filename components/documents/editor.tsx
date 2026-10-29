@@ -97,7 +97,7 @@ export function DocumentEditor({
         >
           <strong>{simulated ? 'SIMULAÇÃO LOCAL — SEM VALIDADE CLÍNICA' : '✓ Assinado Digitalmente • ICP-Brasil (PAdES)'}</strong>
           <p style={{ margin: '4px 0 0 0' }}>
-            {simulated ? 'Artefato sintético assinado para teste local. Seu conteúdo é imutável.' : 'Este documento possui assinatura digital válida e seu conteúdo é imutável.'} Para realizar alterações, duplique-o como um novo rascunho.
+            {simulated ? 'Artefato sintético assinado para teste local. Seu conteúdo é imutável.' : 'Assinatura conferida na emissão; a revogação do certificado ainda não é verificada pelo sistema (confira no validador do ITI). Seu conteúdo é imutável.'} Para realizar alterações, duplique-o como um novo rascunho.
           </p>
         </div>
       ) : (
