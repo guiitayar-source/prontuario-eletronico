@@ -60,7 +60,7 @@ Object.assign(process.env, {
 });
 delete process.env.VERCEL;
 delete process.env.VERCEL_ENV;
-const h = createSncrDb(),
+const h = createSncrDb({ signatureIdentityGuard: true }),
   root = await mkdtemp(join(tmpdir(), 'psywrite-sncr-3b-'));
 const store = {
   put: async (path, bytes) => {

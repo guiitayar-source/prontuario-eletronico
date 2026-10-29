@@ -341,48 +341,10 @@ export class PadesService {
       const contentInfo = new pkijs.ContentInfo({ schema: sigAsn1.result });
       const signedData = new pkijs.SignedData({ schema: contentInfo.content });
 
-      // Find signer certificate
-      const certificates = signedData.certificates || [];
+      // Um único signatário neste fluxo. O certificado deve ser o efetivamente
+      // usado por pkijs (issuer + serial ou SKI), nunca o primeiro da lista.
+      if (signedData.signerInfos.length !== 1) throw new Error('CMS exige um signatário identificável.');
       let signerCert: pkijs.Certificate | undefined;
-
-      const signerInfo = signedData.signerInfos[0];
-      if (signerInfo?.sid && certificates.length > 0) {
-        const sid = signerInfo.sid;
-        if ('serialNumber' in sid && sid.serialNumber) {
-          signerCert = certificates.find((c) => {
-            if (c instanceof pkijs.Certificate) {
-              return c.serialNumber.isEqual(sid.serialNumber as asn1js.Integer);
-            }
-            return false;
-          }) as pkijs.Certificate | undefined;
-        }
-      }
-
-      if (!signerCert && certificates[0] instanceof pkijs.Certificate) {
-        signerCert = certificates[0];
-      }
-
-      if (!signerCert) {
-        return {
-          isValid: false,
-          signerName: 'Desconhecido',
-          signerCpf: null,
-          certificateSubject: '',
-          certificateIssuer: '',
-          certificateSerial: '',
-          certificateFingerprint: '',
-          validFrom: new Date(0),
-          validTo: new Date(0),
-          digestAlgorithm: 'SHA-256',
-          messageDigestHex: '',
-          calculatedDigestHex,
-          error: 'Nenhum certificado de signatário encontrado na assinatura CMS',
-        };
-      }
-
-      // Parse certificate details
-      const certDer = Buffer.from(signerCert.toSchema().toBER());
-      const certInfo = parseX509Certificate(certDer);
 
       // Verifica a assinatura CMS: messageDigest dos bytes assinados e assinatura
       // sobre os atributos assinados, com a chave do certificado do signatário.
@@ -401,11 +363,15 @@ export class PadesService {
           extendedMode: true,
         });
         isValid = Boolean(result.signatureVerified);
+        if (isValid && result.signerCertificate instanceof pkijs.Certificate) signerCert = result.signerCertificate;
         if (!isValid) verifyError = result.message || 'Assinatura inválida';
       } catch (err) {
         verifyError =
           (err as { message?: string })?.message || 'Assinatura inválida';
       }
+
+      if (!isValid || !signerCert) throw new Error(verifyError || 'Certificado do signatário não identificado criptograficamente.');
+      const certInfo = parseX509Certificate(Buffer.from(signerCert.toSchema().toBER()));
 
       return {
         isValid: Boolean(isValid),

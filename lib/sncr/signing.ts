@@ -19,6 +19,7 @@ import type { ClinicalDocument } from '../document-fields.ts';
 import { parsePrescriptionText } from '../document-fields.ts';
 import { rceSimulationPdf } from './rce-pdf.ts';
 import { notificationSimulationPdf } from './notification-pdf.ts';
+import { assertDocumentSigningAuthor } from '../signature/signing-identity.ts';
 
 export interface ArtifactStore {
   put(path: string, bytes: Uint8Array): Promise<void>;
@@ -96,6 +97,7 @@ export async function signReservedSimulation(
 ) {
   requireLocalSimulation();
   let ctx = await getNumberingContext(db, actor, documentId);
+  assertDocumentSigningAuthor(actor, ctx.document);
   assertSynthetic(ctx);
   const r = ctx.reservation!;
   if (

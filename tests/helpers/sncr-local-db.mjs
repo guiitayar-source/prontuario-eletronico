@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { containerEngine, containerImage } from './sncr-container.mjs';
-export function createSncrDb() {
+export function createSncrDb({ signatureIdentityGuard = false } = {}) {
   const inspect = JSON.parse(
     execFileSync(containerEngine, ['inspect', 'psywrite-sncr-3a-disposable'], {
       encoding: 'utf8',
@@ -151,6 +151,17 @@ export function createSncrDb() {
     sql(
       `begin; ${original.replace(guard, '-- somente cópia descartável')} commit;`,
     );
+    if (signatureIdentityGuard) {
+      // Coexistência com o gatilho de imutabilidade já existente, sem reescrevê-lo.
+      const immutable = signingMigration.match(/create or replace function public\.check_clinical_document_immutable\(\)[\s\S]*?\$\$;/)?.[0];
+      const immutableTrigger = signingMigration.match(/create trigger trg_check_clinical_document_immutable[\s\S]*?execute function public\.check_clinical_document_immutable\(\);/)?.[0];
+      assert.ok(immutable && immutableTrigger);
+      sql(immutable + '\n' + immutableTrigger);
+      const identity = readFileSync(new URL('../../supabase/migrations/20261028020000_signature_identity_guard.sql', import.meta.url), 'utf8');
+      const identityGuard = "do $$ begin\n raise exception 'Migração de identidade de assinatura em revisão: não aplicar';\nend $$;";
+      assert.equal(identity.split(identityGuard).length, 2);
+      sql(`begin; ${identity.replace(identityGuard, '-- somente cópia descartável')} commit;`);
+    }
   } catch (e) {
     cleanup();
     throw e;
