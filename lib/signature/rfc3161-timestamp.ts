@@ -16,6 +16,7 @@ import type {
   PdfSignatureRevisionSummary,
 } from './types.ts';
 import { evaluateTsaChainRevocation } from './revocation-validator.ts';
+import { withOnlineRevocationEvidence } from './revocation-fetch.ts';
 
 try {
   pkijs.setEngine(
@@ -757,11 +758,17 @@ export async function validateRfc3161TimestampToken(
   let tsaRevoked = false;
 
   if (validAndTrusted && params.revocationOptions) {
+    const tsaVerificationTime = params.verificationTime ?? new Date();
     const tsaRevEval = await evaluateTsaChainRevocation({
       tsaChainNodes: tsaChainEval.chainNodes,
       genTime,
-      verificationTime: params.verificationTime ?? new Date(),
-      options: params.revocationOptions,
+      verificationTime: tsaVerificationTime,
+      // 6F.2D: evidência buscada na rede para a cadeia da TSA, já validada até a âncora.
+      options: await withOnlineRevocationEvidence(
+        params.revocationOptions,
+        tsaChainEval.chainNodes,
+        tsaVerificationTime,
+      ),
     });
     tsaRevocationChecked = tsaRevEval.revocationChecked;
     tsaRevocationComplete = tsaRevEval.trustComplete;

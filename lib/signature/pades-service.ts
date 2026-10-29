@@ -17,6 +17,7 @@ import {
 import { validatePadesPdfStructure } from './pdf-structure-validator.ts';
 import { evaluateTemporalValidityAndPoe } from './rfc3161-timestamp.ts';
 import { evaluateDocumentRevocation } from './revocation-validator.ts';
+import { withOnlineRevocationEvidence } from './revocation-fetch.ts';
 import {
   assessSignature,
   persistenceStatusFor,
@@ -1144,7 +1145,12 @@ export class PadesService {
             temporalValidity,
             claimedSigningTime: primaryClaimedSigningTime,
             verificationTime,
-            options,
+            // 6F.2D: evidência buscada na rede só depois de a cadeia chegar a uma âncora.
+            options: await withOnlineRevocationEvidence(
+              options,
+              chainNodes,
+              verificationTime,
+            ),
             // 6F.2C-R: só a TSA da POE efetivamente usada interessa à revogação do documento.
             tsaRevocationSummaries:
               temporalValidity.poeSource === 'RFC3161_SIGNATURE_TIMESTAMP' ||

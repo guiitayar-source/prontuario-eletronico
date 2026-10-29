@@ -19,6 +19,7 @@ import { getSignatureProvider } from './provider-factory.ts';
 import { oauthHash, oauthSecret, oauthRedirect, validSecret } from './oauth-context.ts';
 import { signatureProviderLabel, type SignatureProviderId } from './providers.ts';
 import { padesService } from './pades-service.ts';
+import { liveIssuanceRevocationOptions } from './revocation-fetch.ts';
 import { signDocumentAttempt } from './document-signing-attempts.ts';
 import {
   assertDocumentSigningAuthor,
@@ -405,6 +406,7 @@ export class DocumentSigningService {
     // 5. Verify cryptographically
     const verification = await padesService.verifyPadesSignature(signedPdfBuffer, {
       validationContext: 'LIVE_ISSUANCE',
+      ...liveIssuanceRevocationOptions(),
     });
     if (!verification.assessment.issuanceAllowed) {
       throw new Error(

@@ -8,6 +8,7 @@ import { HttpError } from '../supabase/server.ts';
 import { decryptToken, encryptToken, formatCpf } from './crypto-utils.ts';
 import { getSignatureProvider } from './provider-factory.ts';
 import { padesService } from './pades-service.ts';
+import { liveIssuanceRevocationOptions } from './revocation-fetch.ts';
 import {
   authorizeSigningIdentity,
   assertSigningCertificate,
@@ -383,8 +384,10 @@ export async function signDocumentAttempt(
       signed.cmsSignatureBase64,
     );
     // Emissão ao vivo: revogação conhecida ou certificado vencido agora bloqueiam (6F.2C-R).
+    // A LCR/OCSP vem da rede (6F.2D); sem resposta, a emissão segue como INDETERMINATE.
     const verification = await padesService.verifyPadesSignature(bytes, {
       validationContext: 'LIVE_ISSUANCE',
+      ...liveIssuanceRevocationOptions(),
     });
     if (!verification.assessment.issuanceAllowed)
       throw new SigningIdentityError('cms_verification_failed', 409);
