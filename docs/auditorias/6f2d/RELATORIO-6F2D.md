@@ -1,8 +1,25 @@
 # Lote 6F.2D — evidência de revogação (LCR/OCSP) obtida na rede (A1)
 
 Branch `work/checkpoint-lote-1-2026-10-27`. Segue o desenho da Fase 3 de
-`docs/auditorias/6f2c/CORRECAO-6F2C-R.md`. Commits: `707de44` (módulo de busca), `574394b`
-(ligação na verificação e na emissão e testes).
+`docs/auditorias/6f2c/CORRECAO-6F2C-R.md`.
+
+Commits:
+- `707de44`: módulo de busca;
+- `574394b`: ligação na verificação e na emissão, com testes;
+- `ba66c84`: hosts abertos e lista de bloqueio;
+- `359b729`: migração de evidências;
+- `922b1c2`: gravação e reverificação sem rede.
+
+> **Antes de ir para a main:** a migração `20261029040000_revocation_evidence.sql` (em revisão,
+> com trava) depende de `20261029030000_document_signing_attempts.sql`, também em revisão. As duas
+> precisam ser aplicadas em produção **com o aval do Guilherme** antes do merge. Até lá, o código
+> degrada: sem a tabela, nada é gravado e a recuperação segue sem evidência, sem interromper a
+> assinatura.
+
+Decisões do Guilherme (29/10/2026):
+- aceitar qualquer host que conste no CDP/AIA de uma cadeia ICP-Brasil validada;
+- guardar a evidência no banco;
+- DSS/LTV fica para um lote próprio.
 
 ## 1. O que foi feito
 
@@ -15,13 +32,16 @@ Branch `work/checkpoint-lote-1-2026-10-27`. Segue o desenho da Fase 3 de
   no signatário, `validAndTrusted` na TSA). Além disso, o provedor recusa cadeia cuja âncora não
   seja, byte a byte, uma raiz de `icp-brasil-certs.ts`. URL vinda do PDF, do DSS ou do cliente
   nunca é usada.
-- **Política de URL.** Só `http`/`https`, nas portas 80/443, sem usuário ou senha e sem IP
-  literal. O host tem de pertencer à allowlist, que admite subdomínios:
-  `ICP_BRASIL_REVOCATION_HOST_SUFFIXES`, com 16 domínios levantados dos CDP/AIA dos certificados
-  oficiais do pacote.
-  - Um teste confere que todo CDP/AIA daqueles certificados continua coberto.
-  - Hosts extras entram por `PSYWRITE_REVOCATION_EXTRA_HOSTS`, separados por vírgula; IP é
-    recusado.
+- **Política de URL.**
+  - Vale qualquer host que conste no CDP/AIA da cadeia validada; a lista fixa de 16 domínios foi
+    retirada em `ba66c84`.
+  - Só `http`/`https`, nas portas 80/443, sem usuário ou senha e sem IP literal (inclusive nas
+    formas decimal e hexadecimal).
+  - Nomes internos são recusados: sem ponto, `localhost`, `.local`, `.internal`, `.intranet`,
+    `.lan` e `home.arpa`.
+  - Lista de bloqueio opcional em `PSYWRITE_REVOCATION_BLOCKED_HOSTS` (separada por vírgula;
+    cada item vale para o domínio e seus subdomínios).
+  - Um teste confere que todo CDP/AIA dos certificados ICP-Brasil oficiais passa pela política.
 - **DNS e IP.** O transporte resolve o nome e exige que todos os endereços sejam públicos. Ficam
   bloqueados, entre outros:
   - privados (10/8, 172.16/12, 192.168/16) e loopback;
@@ -65,21 +85,64 @@ Branch `work/checkpoint-lote-1-2026-10-27`. Segue o desenho da Fase 3 de
 - A recuperação e a entrega de artefato já assinado continuam sem busca na rede, de propósito:
   ver o risco de recuperação no relatório do 6F.2C-R.
 
+**Evidência no banco** (`supabase/migrations/20261029040000_revocation_evidence.sql` e
+`lib/signature/revocation-evidence-store.ts`):
+- `revocation_evidence`: o DER deduplicado por SHA-256, com tipo, emissor, datas e URL de origem.
+  Não tem `clinic_id`: é dado público de AC, compartilhado entre clínicas, sem paciente.
+- `signing_revocation_evidence`: vínculo entre clínica, tentativa e evidência. Guarda a cadeia
+  (signatário ou TSA), o papel do certificado, o serial, a impressão digital e o resultado que a
+  verificação deu.
+- **Escrita:** só por `signing_revocation_evidence_write`, `security definer` e executável apenas
+  por `service_role`. A função:
+  - exige médico ou titular da clínica e uma tentativa dele mesmo, com artefato
+    (EXTERNAL_STARTED ou posterior);
+  - recalcula o SHA-256 sobre os bytes recebidos;
+  - limita cada evidência a 10 MB e a chamada a 20 MB e 32 itens;
+  - não tem UPDATE nem DELETE concedidos.
+- **Leitura:** RLS com `has_clinic_role(owner, doctor)`. A evidência só é visível a quem enxerga
+  um vínculo dela na própria clínica; secretária, outra clínica e anônimo não leem nada.
+- **bytea, não Storage.**
+  - A evidência entra na mesma transação do vínculo, sem objeto órfão nem segunda credencial.
+  - A deduplicação faz cada versão de LCR ocupar espaço uma vez só.
+  - O OCSP, preferido, tem poucos KB.
+  - O custo cresce com a frequência de publicação das LCRs das ACs usadas, quando não há OCSP. Se
+    isso pesar, migrar `der` para o Storage privado mantém o mesmo esquema (o SHA-256 vira a
+    chave do objeto).
+- **Emissão:** grava a evidência usada logo depois da verificação, inclusive quando a emissão é
+  bloqueada por revogação, como prova do motivo. Falha ao gravar só gera log.
+- **Recuperação e entrega** (`readArtifact` e `recover` em `document-signing-attempts.ts`):
+  reverificam com a evidência guardada, sem rede. Na leitura, os bytes cujo SHA-256 não confere
+  são descartados.
+- **Degradação:** se a tabela ou a função não existir, ou se o banco falhar, gravar devolve
+  `unavailable` e ler devolve listas vazias. Não lança exceção.
+- **Testes de banco:** a migração vai para o helper `tests/helpers/signature-trust-db.mjs` com a
+  opção `revocationEvidence`, aplicada depois da de tentativas; o original continua bloqueado.
+
 **Fora deste lote:**
 - Não alterei os bytes assinados, o texto canônico (`canonical-evolution.ts`) nem o formato do
   PDF.
-- DSS/LTV não foi embutido.
-- Nenhuma migração foi criada: a evidência não é persistida no banco.
+- DSS/LTV fica para um lote próprio.
+
+**Teste com Bird ID real:** roteiro em `docs/auditorias/6f2d/ROTEIRO-BIRDID.md`, com o script
+`scripts/check-revocation.mjs`, que confere um PDF já assinado sem banco e sem assinar.
+- O caminho seguro é `npm run dev` contra o Supabase local.
+- O Preview da Vercel não tem nenhuma variável (todas são só de Production), e configurá-lo
+  levaria as chaves de produção para um banco sem as migrações em revisão.
+- Testei as 7 migrações em revisão no stack local, dentro de uma transação com ROLLBACK: aplicam
+  sem erro.
 
 ## 2. Testes
 
-Nova suíte `tests/revocation-fetch.test.mjs`, com 22 casos. Sem rede real: servidor HTTP em
+Nova suíte `tests/revocation-fetch.test.mjs`, com 24 casos. Sem rede real: servidor HTTP em
 127.0.0.1 e resolvedor de DNS injetado. As LCR/OCSP são sintéticas e assinadas de verdade, e a PKI
 sintética tem CDP/AIA apontando para o servidor local.
 
-- **Política de URL:** esquemas ftp/file/ldap, credenciais, portas 8080/22, IP literal (incluindo
-  decimal e IPv6), host fora da lista e nomes parecidos (`icpbrasil.gov.br.evil.example`,
-  `evilicpbrasil.gov.br`); variável de hosts extras; cobertura dos CDP/AIA oficiais.
+- **Política de URL:**
+  - host fora da antiga lista agora é aceito;
+  - recusa esquemas ftp/file/ldap, credenciais, portas 8080/22, IP literal (decimal, hexadecimal,
+    IPv6, metadados) e nomes internos;
+  - lista de bloqueio funcionando;
+  - CDP/AIA oficiais aceitos.
 - **Endereços:** privados, loopback, link-local, CGNAT, metadados AWS/Alibaba, IPv6 ULA e
   link-local, IPv4 mapeado (pontuado e hexadecimal), além dos públicos aceitos.
 - **Transporte:**
@@ -97,6 +160,9 @@ sintética tem CDP/AIA apontando para o servidor local.
   - HTML, HTTP 500, rede caída e provedor que lança erro dão INDETERMINATE com emissão liberada;
   - redirecionamento dentro da lista é seguido; para fora dela ou acima do limite é recusado sem
     tocar o destino;
+  - redirecionamento para IP interno é recusado, seja literal ou por DNS que resolve para
+    10.0.0.5;
+  - URL vinda do PDF: com cadeia não confiável, o provedor nem é chamado;
   - host do CDP fora da lista não gera nenhuma requisição;
   - cadeia sem raiz ICP-Brasil oficial: coleta recusada;
   - cache até nextUpdate;
@@ -104,7 +170,8 @@ sintética tem CDP/AIA apontando para o servidor local.
 
 | Suíte | Antes (17af400) | Depois |
 |---|---|---|
-| revocation-fetch (nova) | — | 22/22 |
+| revocation-fetch (nova) | — | 24/24 |
+| revocation-evidence-db (nova, PostgreSQL + PostgREST reais) | — | 9/9 |
 | pades-revocation-6f2c-r | 22/22 | 22/22 |
 | pades-revocation-poe | 20/20 | 20/20 |
 | pades-rfc3161-poe | 13/13 | 13/13 |
@@ -118,6 +185,20 @@ sintética tem CDP/AIA apontando para o servidor local.
 | sncr, sncr-safety, sncr-maintainer, platform | 6, 4, 8, 6 | 6, 4, 8, 6 |
 | PostgreSQL real: signature-trust-permissions, signature-identity-db, signature-persistence-local, signature-trust-flow, signature-oauth-local | 24, 3, 46, 10, 36 | 24, 3, 46, 10, 36 |
 | PostgreSQL real: sncr-postgres-local, sncr-auth-local, sncr-concurrency-local, sncr-integrated-local | 23, 36, 4, 32 | 23, 36, 4, 32 |
+
+`revocation-evidence-db` cobre:
+- a trava da migração;
+- os registros (papel, resultado, datas);
+- a gravação pelo backend e a deduplicação: 2 evidências e 4 vínculos para 2 tentativas;
+- as recusas da função: SHA divergente, secretária, outra clínica, tentativa sem artefato e lista
+  vazia;
+- autenticado sem escrita, nem pela função nem direto na tabela;
+- RLS: médico lê 4/2; secretária, outra clínica e anônimo, 0/0;
+- reverificação com a evidência guardada dando GOOD sem rede (sem ela, REVOCATION_UNAVAILABLE);
+- bytes adulterados descartados;
+- degradação sem a migração.
+
+`signature-trust-permissions` passou a excluir a nova migração da lista do histórico (24/24).
 
 Nenhuma suíte existente disparou busca na rede: as cadeias sintéticas não terminam em raiz
 ICP-Brasil oficial. Além das suítes:
@@ -139,22 +220,23 @@ assinatura confere com a raiz v5: true
 
 ## 3. Riscos restantes e decisões pendentes
 
-- **Allowlist fixa.** Se a AC emissora do certificado do médico (por exemplo, a AC de 2º nível do
-  Bird ID) publicar a LCR/OCSP num domínio fora da lista, a busca é recusada e o resultado
-  continua INDETERMINATE, como hoje.
-  - Isso precisa ser conferido com um certificado real, cuja cadeia não está no repositório.
-  - Decisão do Guilherme: manter a lista e ampliá-la com `PSYWRITE_REVOCATION_EXTRA_HOSTS`, ou
-    aceitar qualquer host que conste num certificado de cadeia ICP-Brasil validada.
+- **Hosts abertos.** Qualquer AC credenciada (cadeia validada até a raiz ICP-Brasil) pode fazer o
+  servidor consultar um host público à escolha dela. O risco é limitado: só IP público, portas
+  80/443, sem credenciais, com limites de tamanho e tempo, e a resposta passa pelo validador.
+  Para cortar uma AC específica, use `PSYWRITE_REVOCATION_BLOCKED_HOSTS`.
+- **Migração pendente em produção.** Sem ela, a evidência não é guardada, e a recuperação e a
+  reverificação seguem sem evidência, como antes do lote.
+- **Evidência guardada envelhece.** Sem POE, a reverificação usa a validação atual
+  (`thisUpdate ≤ agora ≤ nextUpdate`). Depois do `nextUpdate`, a LCR guardada fica NOT_FRESH e o
+  resultado volta a INDETERMINATE. Ela continua valendo como registro do que foi verificado na
+  emissão; para valer no tempo é preciso carimbo e LTV (próximo lote).
+- **Volume do bytea.** Ver a escolha acima; acompanhar o tamanho de `revocation_evidence`.
 - **Carimbo e validação histórica.** Com carimbo de tempo, a LCR precisa ter `thisUpdate`
   posterior ao `genTime`. Na emissão, a LCR em cache costuma ser anterior, e a TSA fica sem
   revogação comprovada. O OCSP, emitido na hora, resolve. A coleta tardia (job com carência) segue
   pendente. As assinaturas Bird ID atuais (PAdES-B-B, sem carimbo) usam a validação atual e não
   são afetadas.
-- **Persistência e LTV.** A evidência não é guardada no banco nem embutida no PDF (DSS). Uma
-  verificação futura depende de buscar de novo; depois do vencimento do certificado, a LCR deixa
-  de comprovar. Decisão do Guilherme:
-  - tabela `revocation_evidence`, que exige migração aplicada antes de ir para a main;
-  - DSS/LTV numa revisão incremental do PDF.
+- **DSS/LTV.** A evidência não é embutida no PDF. Fica para um lote próprio.
 - **Envenenamento do cache.** Quem conseguir interceptar o HTTP de uma AC (as LCRs ICP-Brasil são
   em HTTP) pode servir uma resposta legível, mas inválida. Ela fica no cache até 6 h e mantém o
   resultado INDETERMINATE, nunca GOOD. Mitigações possíveis: validar antes de guardar no cache ou
@@ -173,8 +255,9 @@ assinatura confere com a raiz v5: true
 ## 4. Veredito
 
 **PENDENTE.**
-- O código e os testes estão completos e verdes.
-- Falta conferir com uma assinatura Bird ID real que os CDP/AIA da AC do médico estão na
-  allowlist e que a evidência chega a GOOD. O teste manual cobriu só a LCR da raiz.
-- Faltam as decisões de persistência e de DSS.
+- O código, a migração (testada só em cópia descartável) e os testes estão completos e verdes.
+- Faltam:
+  1. o teste com Bird ID real (`ROTEIRO-BIRDID.md`, caminho A primeiro);
+  2. a aplicação das migrações em revisão em produção, com o aval do Guilherme, antes do merge na
+     main.
 - Não houve deploy, migração remota nem assinatura real.
