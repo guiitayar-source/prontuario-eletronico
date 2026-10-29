@@ -30,8 +30,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  // O contrato SNCR retorna session_id na query: não registrar a URL do callback.
-  logging: { incomingRequests: { ignore: [/^\/api\/sncr\/auth\/callback\//] } },
+  // Callbacks retornam segredos na query: não registrar suas URLs.
+  logging: { incomingRequests: { ignore: [/^\/api\/sncr\/auth\/callback\//, /^\/api\/digital-signature\/(birdid|vidaas)\/callback(?:\/|\?|$)/] } },
   poweredByHeader: false,
   outputFileTracingIncludes: {
     '/api/documents': ['./assets/fonts/*.ttf', './assets/sncr/*.pdf'],

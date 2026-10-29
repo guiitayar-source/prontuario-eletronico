@@ -5,6 +5,9 @@ import { randomBytes, createHmac } from 'node:crypto';
 import { containerEngine } from './sncr-container.mjs';
 
 export async function startSignatureTrustRest(h) {
+  const image = process.env.SIGNATURE_TEST_REST_IMAGE || 'public.ecr.aws/supabase/postgrest:v16.2';
+  if (!['public.ecr.aws/supabase/postgrest:v16.2', 'public.ecr.aws/supabase/postgrest:v14.5'].includes(image))
+    throw Error('Imagem PostgREST local não autorizada.');
   const suffix = randomBytes(6).toString('hex');
   const gateway = `signature_gateway_${suffix}`;
   const secret = randomBytes(32).toString('hex');
@@ -46,11 +49,11 @@ export async function startSignatureTrustRest(h) {
         'PGRST_SERVER_HOST=127.0.0.1',
         '-e',
         'PGRST_SERVER_PORT=31006',
-        'public.ecr.aws/supabase/postgrest:v16.2',
+        image,
       ],
       { encoding: 'utf8', stdio: 'pipe' },
     ).trim();
-    const jwt = (role, sub) => {
+    const jwt = (role, sub, claims = {}) => {
       const header = Buffer.from(
         JSON.stringify({ alg: 'HS256', typ: 'JWT' }),
       ).toString('base64url');
@@ -58,6 +61,7 @@ export async function startSignatureTrustRest(h) {
         JSON.stringify({
           role,
           ...(sub ? { sub } : {}),
+          ...claims,
           aal: 'aal2',
           exp: Math.floor(Date.now() / 1000) + 3600,
         }),

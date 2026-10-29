@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import {
   createSignatureTrustDb,
   trustMigration,
+  oauthMigration,
 } from './helpers/signature-trust-db.mjs';
 
 const h = createSignatureTrustDb({
@@ -326,7 +327,7 @@ try {
       assert.deepEqual(
         h.applied,
         readdirSync(new URL('../supabase/migrations/', import.meta.url))
-          .filter((file) => file.endsWith('.sql') && file !== trustMigration)
+          .filter((file) => file.endsWith('.sql') && ![trustMigration, oauthMigration].includes(file))
           .sort(),
       );
     });

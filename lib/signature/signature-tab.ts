@@ -12,9 +12,16 @@ import { apiFetch } from '@/lib/supabase/http';
 const CHANNEL = 'psywrite-birdid';
 const WAIT_LIMIT_MS = 10 * 60 * 1000;
 
-export type SignatureTabResult =
+export type SignatureTabResult = { attempt?: string } & (
   | { status: 'connected' }
-  | { status: 'error'; message: string };
+  | { status: 'error'; message: string });
+
+async function attemptForAuthorization(authorizationUrl: string) {
+  const state = new URL(authorizationUrl).searchParams.get('state');
+  if (!state) throw new Error('Tentativa de autorização ausente.');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`psywrite-psc:state:${state}`));
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+}
 
 /** Abre a aba em branco. Retorna `null` se o navegador bloqueou (use o redirecionamento). */
 export function openSignatureTab(label: string): Window | null {
@@ -39,6 +46,7 @@ export async function fetchSignatureAuthorizationUrl(
 ): Promise<string> {
   const r = await apiFetch(
     `/api/digital-signature/birdid/authorize?provider=${encodeURIComponent(provider)}`,
+    { method: 'POST', headers: { 'X-Signature-Action': '1' } },
   );
   const data = (await r.json()) as {
     authorizationUrl?: string;
@@ -53,6 +61,7 @@ export async function fetchSignatureAuthorizationUrl(
 
 /** Leva a aba ao provedor e a fecha quando a autenticação terminar (ou ela for abandonada). */
 export function sendTabToProvider(tab: Window, authorizationUrl: string) {
+  const attempt = attemptForAuthorization(authorizationUrl);
   tab.location.href = authorizationUrl;
   const channel = new BroadcastChannel(CHANNEL);
   const started = Date.now();
@@ -64,7 +73,9 @@ export function sendTabToProvider(tab: Window, authorizationUrl: string) {
   const timer = setInterval(() => {
     if (tab.closed || Date.now() - started > WAIT_LIMIT_MS) end();
   }, 1000);
-  channel.onmessage = end;
+  channel.onmessage = async (event: MessageEvent<SignatureTabResult>) => {
+    if (event.data.attempt && event.data.attempt === await attempt) end();
+  };
 }
 
 /** Chamado pela aba que voltou do provedor, para avisar a aba original. */

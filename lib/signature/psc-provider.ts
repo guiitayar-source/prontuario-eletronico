@@ -135,33 +135,25 @@ export class PscProvider implements DigitalSignatureProvider {
         Accept: 'application/json',
       },
       body: JSON.stringify(tokenPayload),
+      redirect: 'error',
+      cache: 'no-store',
       signal: AbortSignal.timeout(15000),
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      let errorJson: { error?: string; error_description?: string } = {};
-      try {
-        errorJson = JSON.parse(errorText);
-      } catch {
-        // Ignored
-      }
-      throw new HttpError(
-        response.status,
-        `Falha ao trocar código de autorização ${this.label} (${response.status}): ${
-          errorJson.error_description || errorJson.error || errorText
-        }`
-      );
+      // Nunca repassar corpo externo: pode repetir código, token ou dados pessoais.
+      throw new HttpError(response.status, `Autorização ${this.label} recusada pelo provedor.`);
     }
-
     const data = (await response.json()) as PscTokenResponse;
-    if (!data.access_token) {
-      throw new HttpError(500, `${this.label} não retornou access_token válido.`);
-    }
+    const expiresIn = data.expires_in === undefined ? 3600 : Number(data.expires_in);
+    if (typeof data.access_token !== 'string' || !data.access_token ||
+        (data.token_type && data.token_type.toLowerCase() !== 'bearer') ||
+        !Number.isFinite(expiresIn) || expiresIn <= 0 || expiresIn > 86400)
+      throw new HttpError(502, 'Resposta de autorização inválida.');
 
     return {
       accessToken: data.access_token,
-      expiresIn: Number(data.expires_in) || 3600,
+      expiresIn,
       tokenType: data.token_type || 'Bearer',
       cpf: cleanCpf(data.authorized_identification || ''),
     };
@@ -176,26 +168,16 @@ export class PscProvider implements DigitalSignatureProvider {
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
       },
+      redirect: 'error',
+      cache: 'no-store',
       signal: AbortSignal.timeout(15000),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new HttpError(
-        response.status,
-        `Falha ao buscar certificados no ${this.label} (${response.status}): ${errorText}`
-      );
-    }
-
+    if (!response.ok)
+      throw new HttpError(response.status, `Não foi possível consultar o certificado no ${this.label}.`);
     const data = (await response.json()) as PscDiscoveryResponse;
-    if (data.status && !['S', 'success', 'OK'].includes(data.status)) {
-      throw new HttpError(
-        422,
-        `${this.label} retornou status de erro ao buscar certificados: ${
-          data.error_description || data.error || JSON.stringify(data)
-        }`
-      );
-    }
+    if (data.status && !['S', 'success', 'OK'].includes(data.status))
+      throw new HttpError(422, 'Consulta de certificado recusada pelo provedor.');
 
     const rawList: Array<{ alias?: string; certificate?: string }> =
       data.certificates || [];

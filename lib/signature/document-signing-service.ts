@@ -17,6 +17,7 @@ import {
   parseX509Certificate,
 } from './crypto-utils.ts';
 import { getSignatureProvider } from './provider-factory.ts';
+import { oauthHash, oauthSecret, oauthRedirect, validSecret } from './oauth-context.ts';
 import { signatureProviderLabel, type SignatureProviderId } from './providers.ts';
 import { padesService } from './pades-service.ts';
 import {
@@ -36,262 +37,101 @@ import type {
 export class DocumentSigningService {
   private readonly documentAdmin: typeof adminClient;
   constructor(documentAdmin = adminClient) { this.documentAdmin = documentAdmin; }
-  /**
-   * Initiates an OAuth 2.0 PKCE flow with the signature provider (Bird ID or VIDaaS).
-   */
+  /** Tentativa PSC vinculada ao usuário, sessão PsyWrite e segredo do navegador. */
   async initiateOAuthSession(params: {
-    db: SupabaseClient;
-    clinicId: string;
-    userId: string;
-    redirectUri: string;
-    provider: SignatureProviderId;
+    db: SupabaseClient; clinicId: string; userId: string;
+    authSessionId: string; binding: string; provider: SignatureProviderId;
   }): Promise<{ authorizationUrl: string; state: string }> {
+    if (!params.authSessionId || !validSecret(params.binding))
+      throw new HttpError(403, 'Sessão e navegador autorizados são obrigatórios.');
+    const redirectUri = oauthRedirect(params.provider);
     const provider = getSignatureProvider(params.provider);
-    const { codeVerifier, codeChallenge } = generatePkce();
-
-    const state = crypto.randomBytes(24).toString('base64url');
-    const stateHash = crypto.createHash('sha256').update(state).digest('hex');
-    const codeVerifierEncrypted = encryptToken(codeVerifier);
-
-    const admin = adminClient();
-
-    // Store state with encrypted verifier
-    const { error: stateError } = await admin
-      .from('signature_oauth_states')
-      .insert({
-        clinic_id: params.clinicId,
-        user_id: params.userId,
-        provider: params.provider,
-        state_hash: stateHash,
-        code_verifier_encrypted: codeVerifierEncrypted,
-        redirect_uri: params.redirectUri,
-        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      });
-
-    if (stateError) {
-      throw new HttpError(
-        500,
-        `Falha ao iniciar estado OAuth: ${stateError.message}`
-      );
-    }
-
-    // Try to get doctor CPF to use as login_hint for the provider
-    const { data: profile } = await admin
-      .from('document_profiles')
-      .select('cpf')
-      .eq('clinic_id', params.clinicId)
-      .eq('user_id', params.userId)
-      .maybeSingle();
-
-    const authorizationUrl = provider.getAuthorizationUrl({
-      state,
-      codeChallenge,
-      redirectUri: params.redirectUri,
-      loginHint: profile?.cpf || undefined,
-      lifetimeSeconds: 4 * 3600, // 4 hours signature session
-    });
-
-    return { authorizationUrl, state };
+    const { codeVerifier, codeChallenge } = generatePkce(), state = oauthSecret();
+    const admin = this.documentAdmin();
+    await this.oauthOperation(admin, params, state, 'start', {
+      provider: params.provider, redirect_uri: redirectUri, verifier: encryptToken(codeVerifier),
+    }, 'pending');
+    // login_hint não concede identidade. Somente o X.509 é usado na conclusão.
+    return { state, authorizationUrl: provider.getAuthorizationUrl({ state, codeChallenge, redirectUri, lifetimeSeconds: 4 * 3600 }) };
   }
 
-  /**
-   * Completes OAuth callback: exchanges code, validates CPF, stores encrypted session.
-   */
+  private async oauthOperation(
+    db: SupabaseClient,
+    actor: { clinicId: string; userId: string; authSessionId: string; binding: string },
+    state: string, action: string, payload: Record<string, unknown>, expected?: string,
+  ) {
+    const { data, error } = await db.rpc('signature_oauth_operation', {
+      p_action: action, p_clinic_id: actor.clinicId, p_user_id: actor.userId,
+      p_auth_session_id: actor.authSessionId, p_state_hash: oauthHash('state', state),
+      p_binding_hash: oauthHash('browser', actor.binding), p_payload: payload,
+    });
+    if (error || !data) throw new HttpError(503, 'Não foi possível confirmar a tentativa OAuth. Inicie nova conexão.');
+    if (expected && data.status !== expected)
+      throw new HttpError(data.reason === 'certificate_profile_identity_mismatch' ? 403 : 409,
+        data.reason === 'certificate_profile_identity_mismatch'
+          ? 'O certificado não corresponde à identidade autorizada. As sessões incompatíveis exigem revisão.'
+          : 'Tentativa inválida, já utilizada ou expirada. Inicie nova conexão.');
+    return data;
+  }
+
+  /** O chamador fornece exclusivamente contexto autenticado, nunca o usuário salvo no state. */
   async handleOAuthCallback(params: {
-    db: SupabaseClient;
-    clinicId: string;
-    userId: string;
-    code: string;
-    state: string;
+    db: SupabaseClient; clinicId: string; userId: string; authSessionId: string;
+    binding: string; code: string; state: string; redirectUri: string; cancelled?: boolean;
   }): Promise<SignatureSessionData> {
+    if (!params.authSessionId || !validSecret(params.binding) || !validSecret(params.state) ||
+        (!params.cancelled && (!params.code || params.code.length > 1024)))
+      throw new HttpError(403, 'Contexto de autorização ausente ou inválido.');
     const admin = this.documentAdmin();
-    const stateHash = crypto
-      .createHash('sha256')
-      .update(params.state)
-      .digest('hex');
-
-    // Retrieve and validate state
-    const { data: stateRecord, error: stateError } = await admin
-      .from('signature_oauth_states')
-      .select('*')
-      .eq('state_hash', stateHash)
-      .gt('expires_at', new Date().toISOString())
-      .maybeSingle();
-
-    if (stateError || !stateRecord) {
-      throw new HttpError(
-        400,
-        'Estado de autorização expirado ou inválido (CSRF prevenido). Reinicie a autorização.'
-      );
+    // Única aquisição: COMMIT no PostgreSQL antes de decifrar PKCE ou chamar o PSC.
+    const attempt = await this.oauthOperation(admin, params, params.state, 'claim', { redirect_uri: params.redirectUri }, 'processing');
+    let externalStarted = false, exchanged = false;
+    try {
+      if (params.cancelled) throw new HttpError(409, 'Autorização cancelada. Inicie nova conexão.');
+      if (oauthRedirect(attempt.provider) !== params.redirectUri) throw new HttpError(403, 'Endereço de retorno incompatível.');
+      const codeVerifier = decryptToken(attempt.verifier), provider = getSignatureProvider(attempt.provider);
+      externalStarted = true;
+      const token = await provider.exchangeAuthorizationCode({ code: params.code, codeVerifier, redirectUri: attempt.redirect_uri });
+      exchanged = true;
+      if (!token.accessToken || !Number.isFinite(token.expiresIn) || token.expiresIn <= 0 || token.expiresIn > 86400)
+        throw new HttpError(422, 'Resposta de autorização inválida.');
+      const certs = await provider.getCertificates(token.accessToken);
+      let cert;
+      try { cert = parseX509Certificate(certs[0].rawPem, certs[0].alias); }
+      catch { throw new HttpError(422, 'Não foi possível identificar o certificado autorizado.'); }
+      const cpf = signingCpf(cert.cpf);
+      if (!cpf) throw new HttpError(422, 'Não foi possível identificar o CPF do titular no certificado.');
+      // Não confia somente no CPF editável do perfil nem no CPF declarado pelo PSC.
+      const { data: previous, error } = await admin.from('signature_sessions')
+        .select('certificate_raw').eq('user_id', params.userId);
+      if (error) throw new HttpError(503, 'Não foi possível conferir a identidade anterior.');
+      const priorMismatch = (previous || []).some(row => {
+        if (!row.certificate_raw) return false; // legado será revogado na transação
+        try { return signingCpf(parseX509Certificate(row.certificate_raw).cpf) !== cpf; }
+        catch { return true; }
+      });
+      const completed = await this.oauthOperation(admin, params, params.state, 'finish', {
+        cpf, certificate_alias: cert.alias, certificate_subject: cert.subject, certificate_issuer: cert.issuer,
+        certificate_valid_from: cert.validFrom.toISOString(), certificate_valid_to: cert.validTo.toISOString(),
+        certificate_raw: cert.rawPem, common_name: cert.commonName, prior_certificate_mismatch: priorMismatch,
+        access_token_encrypted: encryptToken(token.accessToken), expires_at: new Date(Date.now() + token.expiresIn * 1000).toISOString(),
+      }, 'completed');
+      const s = completed.session;
+      return { id: s.id, clinicId: s.clinic_id, userId: s.user_id, provider: s.provider, cpf: s.cpf,
+        certificateAlias: s.certificate_alias, certificateSubject: s.certificate_subject, certificateIssuer: s.certificate_issuer,
+        certificateValidFrom: s.certificate_valid_from, certificateValidTo: s.certificate_valid_to, expiresAt: s.expires_at, revoked: s.revoked };
+    } catch (error) {
+      // Sem repetição de token exchange, inclusive se a resposta do COMMIT se perder.
+      const invalidCode = !exchanged && error instanceof HttpError && [400, 401, 403].includes(error.status);
+      const uncertain = externalStarted && !invalidCode && (!exchanged || !(error instanceof HttpError) || error.status >= 500);
+      const reason = params.cancelled ? 'cancelled' : invalidCode ? 'invalid_code' : !exchanged ? 'external_failure' : 'certificate_identity_unavailable';
+      try { await this.oauthOperation(admin, params, params.state, uncertain ? 'uncertain' : 'reject', { reason }); }
+      catch { /* O claim durável permanece processing; nunca libera nova troca. */ }
+      throw new HttpError(uncertain ? 409 : error instanceof HttpError && error.status === 422 ? 422 : 403,
+        uncertain ? 'Resultado externo incerto. A tentativa não será repetida; inicie nova conexão.'
+          : params.cancelled ? 'Autorização cancelada. Inicie nova conexão.'
+          : 'Não foi possível autorizar o certificado para esta identidade. Inicie nova conexão ou solicite revisão.');
     }
-
-    if (
-      stateRecord.clinic_id !== params.clinicId ||
-      stateRecord.user_id !== params.userId
-    ) {
-      throw new HttpError(
-        403,
-        'O estado de autorização pertence a outro usuário ou clínica.'
-      );
-    }
-
-    const codeVerifier = decryptToken(stateRecord.code_verifier_encrypted);
-    const provider = getSignatureProvider(stateRecord.provider);
-
-    // 1. Exchange authorization code for token
-    const tokenResult = await provider.exchangeAuthorizationCode({
-      code: params.code,
-      codeVerifier,
-      redirectUri: stateRecord.redirect_uri,
-    });
-
-    // 2. Discover certificates
-    const certs = await provider.getCertificates(tokenResult.accessToken);
-    if (!certs.length) {
-      throw new HttpError(
-        422,
-        `Nenhum certificado ICP-Brasil encontrado na conta ${signatureProviderLabel(stateRecord.provider)}.`
-      );
-    }
-    // A identidade vem do certificado X.509, não de um CPF declarado na resposta OAuth.
-    let cert;
-    try { cert = parseX509Certificate(certs[0].rawPem, certs[0].alias); }
-    catch { throw new HttpError(422, 'Não foi possível identificar o certificado autorizado.'); }
-
-    const certCpf = signingCpf(cert.cpf);
-    if (!certCpf) {
-      throw new HttpError(
-        422,
-        'Não foi possível identificar o CPF do titular no certificado digital ICP-Brasil.'
-      );
-    }
-
-    // 3. Strict CPF validation against doctor's registered profile
-    const { data: profile, error: profileError } = await admin
-      .from('document_profiles')
-      .select('cpf, physician_name')
-      .eq('clinic_id', params.clinicId)
-      .eq('user_id', params.userId)
-      .maybeSingle();
-
-    if (profileError) throw new HttpError(503, 'Não foi possível confirmar o perfil autorizado.');
-
-    if (profile?.cpf) {
-      const registeredCpf = signingCpf(profile.cpf);
-      if (registeredCpf !== certCpf) {
-        // Security audit event
-        await admin.from('audit_events').insert({
-          clinic_id: params.clinicId,
-          actor_id: params.userId,
-          action: 'signature_cpf_mismatch',
-          entity_type: 'signature_session',
-          entity_id: params.userId,
-          context: {
-            reason: 'certificate_profile_identity_mismatch',
-          },
-        });
-
-        throw new HttpError(
-          403,
-          'O certificado não corresponde à identidade cadastrada para este médico. A sessão não foi autorizada.'
-        );
-      }
-    } else if (profile) {
-      // First time setting CPF on profile: lock it to the verified certificate's CPF
-      const { error } = await admin
-        .from('document_profiles')
-        .update({ cpf: certCpf })
-        .eq('clinic_id', params.clinicId)
-        .eq('user_id', params.userId);
-      if (error) throw new HttpError(503, 'Não foi possível registrar a identidade autorizada.');
-    } else {
-      // Create initial profile locked to verified certificate
-      const { error } = await admin
-        .from('document_profiles')
-        .insert({
-          clinic_id: params.clinicId,
-          user_id: params.userId,
-          physician_name: cert.commonName || '',
-          physician_registration: '',
-          cpf: certCpf,
-        });
-      if (error) throw new HttpError(503, 'Não foi possível registrar a identidade autorizada.');
-    }
-
-    // 4. Store encrypted session
-    const encryptedToken = encryptToken(tokenResult.accessToken);
-    const expiresAt = new Date(
-      Date.now() + tokenResult.expiresIn * 1000
-    ).toISOString();
-
-    // Invalidate prior sessions
-    await admin
-      .from('signature_sessions')
-      .update({ revoked: true })
-      .eq('clinic_id', params.clinicId)
-      .eq('user_id', params.userId)
-      .eq('revoked', false);
-
-    const { data: newSession, error: sessionError } = await admin
-      .from('signature_sessions')
-      .insert({
-        clinic_id: params.clinicId,
-        user_id: params.userId,
-        provider: stateRecord.provider,
-        cpf: certCpf,
-        certificate_alias: cert.alias,
-        certificate_subject: cert.subject,
-        certificate_issuer: cert.issuer,
-        certificate_valid_from: cert.validFrom.toISOString(),
-        certificate_valid_to: cert.validTo.toISOString(),
-        certificate_raw: cert.rawPem,
-        access_token_encrypted: encryptedToken,
-        expires_at: expiresAt,
-        revoked: false,
-      })
-      .select()
-      .single();
-
-    if (sessionError || !newSession) {
-      throw new HttpError(
-        500,
-        `Falha ao salvar sessão de assinatura: ${sessionError?.message}`
-      );
-    }
-
-    // Clean up consumed OAuth state
-    await admin
-      .from('signature_oauth_states')
-      .delete()
-      .eq('id', stateRecord.id);
-
-    // Audit log
-    await admin.from('audit_events').insert({
-      clinic_id: params.clinicId,
-      actor_id: params.userId,
-      action: 'signature_session_created',
-      entity_type: 'signature_session',
-      entity_id: newSession.id,
-      context: {
-        provider: stateRecord.provider,
-        expires_at: expiresAt,
-      },
-    });
-
-    return {
-      id: newSession.id,
-      clinicId: newSession.clinic_id,
-      userId: newSession.user_id,
-      provider: newSession.provider,
-      cpf: newSession.cpf,
-      certificateAlias: newSession.certificate_alias,
-      certificateSubject: newSession.certificate_subject,
-      certificateIssuer: newSession.certificate_issuer,
-      certificateValidFrom: newSession.certificate_valid_from,
-      certificateValidTo: newSession.certificate_valid_to,
-      expiresAt: newSession.expires_at,
-      revoked: newSession.revoked,
-    };
   }
 
   /**

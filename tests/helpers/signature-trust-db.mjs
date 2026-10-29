@@ -9,7 +9,9 @@ export const trustMigration = '20261029010000_signature_trust_permissions.sql';
 export const trustGuard =
   "do $$ begin\n raise exception 'Migração de permissões de assinatura em revisão: não aplicar';\nend $$;";
 const migrations = new URL('../../supabase/migrations/', import.meta.url);
-export function createSignatureTrustDb({ baseline = false } = {}) {
+export const oauthMigration = '20261029020000_signature_oauth_attempts.sql';
+export const oauthGuard = "do $$ begin\n raise exception 'Migração OAuth de assinatura em revisão: não aplicar';\nend $$;";
+export function createSignatureTrustDb({ baseline = false, oauth = false } = {}) {
   const inspect = JSON.parse(
     execFileSync(containerEngine, ['inspect', 'psywrite-sncr-3a-disposable'], {
       encoding: 'utf8',
@@ -91,6 +93,7 @@ export function createSignatureTrustDb({ baseline = false } = {}) {
     // Os papéis/BYPASSRLS vêm da imagem Supabase, não são superusuários de teste.
     sql(`create schema auth; create schema storage;
       create table auth.users(id uuid primary key);
+      create table auth.sessions(id uuid primary key,user_id uuid references auth.users,not_after timestamptz);
       create table auth.mfa_factors(user_id uuid references auth.users, status text);
       create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
       create function auth.uid() returns uuid language sql stable as $$ select nullif(auth.jwt()->>'sub','')::uuid $$;
@@ -108,7 +111,7 @@ export function createSignatureTrustDb({ baseline = false } = {}) {
       "do $$ begin\n raise exception 'Migração de identidade de assinatura em revisão: não aplicar';\nend $$;",
     ];
     for (const file of readdirSync(migrations)
-      .filter((f) => f.endsWith('.sql') && f !== trustMigration)
+      .filter((f) => f.endsWith('.sql') && ![trustMigration,oauthMigration].includes(f))
       .sort()) {
       let source = readFileSync(new URL(file, migrations), 'utf8');
       for (const guard of guards)
@@ -126,6 +129,11 @@ export function createSignatureTrustDb({ baseline = false } = {}) {
       applied.push(file);
     }
     if (!baseline) applyTrust();
+    if (oauth) {
+      const source = readFileSync(new URL(oauthMigration, migrations), 'utf8');
+      assert.equal(source.split(oauthGuard).length, 2);
+      sql(`begin; ${source.replace(oauthGuard, '-- somente cópia descartável')} commit;`);
+    }
   } catch (error) {
     cleanup();
     throw error;

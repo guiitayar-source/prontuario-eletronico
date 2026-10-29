@@ -14,9 +14,10 @@ const { DocumentSigningService } = await import('../lib/signature/document-signi
 const { setCustomSignatureProvider } = await import('../lib/signature/provider-factory.ts');
 const oldFetch = globalThis.fetch;
 const oldKey = process.env.SIGNATURE_ENCRYPTION_KEY;
+const oldRedirect = process.env.BIRDID_REDIRECT_URI;
 process.env.SIGNATURE_ENCRYPTION_KEY = 'synthetic-identity-test-key';
 globalThis.fetch = async () => { throw Error('Rede proibida neste teste.'); };
-after(() => { globalThis.fetch = oldFetch; setCustomSignatureProvider(null); if (oldKey === undefined) delete process.env.SIGNATURE_ENCRYPTION_KEY; else process.env.SIGNATURE_ENCRYPTION_KEY = oldKey; });
+after(() => { if(oldRedirect===undefined) delete process.env.BIRDID_REDIRECT_URI; else process.env.BIRDID_REDIRECT_URI=oldRedirect; globalThis.fetch = oldFetch; setCustomSignatureProvider(null); if (oldKey === undefined) delete process.env.SIGNATURE_ENCRYPTION_KEY; else process.env.SIGNATURE_ENCRYPTION_KEY = oldKey; });
 const cpf = '52998224725', otherCpf = '11144477735';
 const matching = new MockBirdIdProvider({ mockCpf: cpf, doctorName: 'TITULAR SINTETICO' });
 const different = new MockBirdIdProvider({ mockCpf: otherCpf, doctorName: 'OUTRO TITULAR SINTETICO' });
@@ -238,20 +239,36 @@ test('CMS com valor de assinatura corrompido nao conclui nem admite retry', asyn
 });
 
 function oauthFixture(profileCpf = cpf) {
+  process.env.BIRDID_REDIRECT_URI='https://synthetic.invalid/api/digital-signature/birdid/callback';
   const sessions = [], audits = [];
   const actor = { clinicId: 'synthetic-clinic', userId: 'synthetic-author' };
-  const state = { id: 'synthetic-state', clinic_id: actor.clinicId, user_id: actor.userId, provider: 'birdid', code_verifier_encrypted: encryptToken('synthetic-verifier'), redirect_uri: 'https://synthetic.invalid/callback' };
-  const db = { from(table) {
+  const state = { id: 'synthetic-state', clinic_id: actor.clinicId, user_id: actor.userId, provider: 'birdid', code_verifier_encrypted: encryptToken('synthetic-verifier'), redirect_uri: 'https://synthetic.invalid/api/digital-signature/birdid/callback' };
+  const db = {
+    async rpc(_name, args) {
+      if (args.p_action === 'claim') return { data: { status:'processing', provider:'birdid', verifier:state.code_verifier_encrypted, redirect_uri:state.redirect_uri }, error:null };
+      if (args.p_action === 'finish') {
+        const v=args.p_payload;
+        if (v.cpf !== profileCpf) {
+          audits.push({ context:{reason:'certificate_profile_identity_mismatch'} });
+          return { data:{status:'rejected',reason:'certificate_profile_identity_mismatch'},error:null };
+        }
+        const session={id:'synthetic-session',clinic_id:actor.clinicId,user_id:actor.userId,provider:'birdid',...v};
+        sessions.push(session);
+        return { data:{status:'completed',session},error:null };
+      }
+      return { data:{status:'rejected'},error:null };
+    },
+    from(table) {
     let value;
     const q = { select: () => q, eq: () => q, gt: () => q, delete: () => q, update: () => q,
       insert(v) { value = v; if (table === 'signature_sessions') sessions.push(v); if (table === 'audit_events') audits.push(v); return q; },
       async maybeSingle() { return { data: table === 'signature_oauth_states' ? state : { cpf: profileCpf, physician_name: 'Titular sintetico' }, error: null }; },
       async single() { return { data: { id: 'synthetic-session', ...value }, error: null }; },
       // eslint-disable-next-line unicorn/no-thenable -- Contrato awaitable do QueryBuilder Supabase.
-      then(resolve, reject) { return Promise.resolve({ data: null, error: null }).then(resolve, reject); },
+      then(resolve, reject) { return Promise.resolve({ data: [], error: null }).then(resolve, reject); },
     }; return q;
   } };
-  return { sessions, audits, complete: () => new DocumentSigningService(() => db).handleOAuthCallback({ db, ...actor, code: 'synthetic-code', state: 'synthetic-state' }) };
+  return { sessions, audits, complete: () => new DocumentSigningService(() => db).handleOAuthCallback({ db, ...actor, code: 'synthetic-code', state: 's'.repeat(43), binding:'b'.repeat(43), authSessionId:'synthetic-session-id', redirectUri:state.redirect_uri }) };
 }
 test('autorizacao OAuth conserva o certificado X509 para confronto posterior', async () => {
   setCustomSignatureProvider(matching);

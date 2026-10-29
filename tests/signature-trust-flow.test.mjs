@@ -27,7 +27,7 @@ const { documents } = await import('../lib/supabase/documents.ts');
 const { reserveDocument, getNumberingContext, localSimulationEnabled } =
   await import('../lib/sncr/numbering.ts');
 
-const h = createSignatureTrustDb();
+const h = createSignatureTrustDb({ oauth: true });
 const clinic = randomUUID(),
   doctor = randomUUID(),
   colleague = randomUUID(),
@@ -41,6 +41,7 @@ const envKeys = [
   'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
   'SUPABASE_SECRET_KEY',
   'SIGNATURE_ENCRYPTION_KEY',
+  'BIRDID_REDIRECT_URI',
   'PSYWRITE_SNCR_MODE',
   'ANVISA_SNCR_ENV',
   'VERCEL',
@@ -71,6 +72,7 @@ try {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: tokens.anon,
     SUPABASE_SECRET_KEY: tokens.server,
     SIGNATURE_ENCRYPTION_KEY: 'synthetic-6c-only',
+    BIRDID_REDIRECT_URI: 'https://synthetic.invalid/api/digital-signature/birdid/callback',
     PSYWRITE_SNCR_MODE: 'local-simulation',
     ANVISA_SNCR_ENV: 'hmg',
   });
@@ -158,16 +160,20 @@ try {
     insert into patients(clinic_id,id,name,cpf,street,address_number,city,state) values ('${clinic}','synthetic','Paciente sintético','52998224725','Rua Sintética','100','Cidade de Teste','SP');
     insert into document_profiles(clinic_id,user_id,physician_name,physician_registration,cpf,letterhead_address,letterhead_phone)
       values ('${clinic}','${doctor}','Titular sintético','CRM 12345 SP','52998224725','Rua Sintética, 200 - Cidade de Teste - SP','(11) 0000-0000');`);
+  const authSessionId=randomUUID();
+  h.sql(`insert into auth.sessions values('${authSessionId}','${doctor}',null);`);
   async function oauth() {
+    const binding='b'.repeat(43);
     const start = await service.initiateOAuthSession({
       db: userDb,
       ...actor,
-      redirectUri: 'https://synthetic.invalid/callback',
+      authSessionId, binding,
       provider: 'birdid',
     });
     return service.handleOAuthCallback({
       db: userDb,
       ...actor,
+      authSessionId, binding, redirectUri: process.env.BIRDID_REDIRECT_URI,
       code: 'synthetic-code-only',
       state: start.state,
     });
@@ -200,7 +206,7 @@ try {
   await test('13 backend cria estado OAuth e sessão cifrada pelo PostgREST', async () => {
     session = await oauth();
     assert.equal(session.userId, doctor);
-    assert.equal(h.sql('select count(*) from signature_oauth_states;'), '0');
+    assert.equal(h.sql("select count(*) from signature_oauth_states where status='pending';"), '0');
     const cipher = h.sql(
       `select access_token_encrypted from signature_sessions where id='${session.id}';`,
     );

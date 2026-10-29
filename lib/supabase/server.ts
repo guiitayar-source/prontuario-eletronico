@@ -59,13 +59,22 @@ export async function context(request: Request) {
   });
   const { data, error } = await db.auth.getUser(authorization.slice(7));
   if (error || !data.user) throw new HttpError(401, 'Sessão expirada. Entre novamente.');
+  // O payload só é lido APÓS getUser validar este mesmo Bearer no Auth.
+  // OAuth exige session_id, estável durante refresh; tokens sem sessão não vinculam credenciais.
+  let authSessionId: string | null = null;
+  try {
+    const claims = JSON.parse(Buffer.from(authorization.split('.')[1], 'base64url').toString('utf8'));
+    if (claims.sub === data.user.id && typeof claims.session_id === 'string' &&
+        /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(claims.session_id))
+      authSessionId = claims.session_id;
+  } catch { /* Interfaces sem sessão continuam utilizáveis fora do OAuth. */ }
   const memberships = check(await db.from('clinic_members').select('clinic_id,role').eq('user_id', data.user.id));
   const clinic = request.headers.get('x-clinic-id');
   const member = clinic ? memberships.find(m => m.clinic_id === clinic) : memberships[0];
   if (!member) throw new HttpError(403, 'Sua conta ainda não está vinculada a uma clínica.');
   if (!check(await db.rpc('session_is_strong', { c: member.clinic_id })))
     throw new HttpError(403, 'Confirme o segundo fator de autenticação para acessar a clínica.');
-  return { db, clinic: member.clinic_id as string, role: member.role as string, user: data.user.id };
+  return { db, clinic: member.clinic_id as string, role: member.role as string, user: data.user.id, authSessionId };
 }
 export type Context = Awaited<ReturnType<typeof context>>;
 export const handle = (fn: (request: Request, ctx: Context) => Promise<Response>) => async (request: Request) => {
