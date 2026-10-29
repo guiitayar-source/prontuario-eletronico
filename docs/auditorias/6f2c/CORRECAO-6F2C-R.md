@@ -195,7 +195,7 @@ INDETERMINATE/REVOCATION_UNAVAILABLE, gravado como UNVERIFIED, e a emissão segu
   no banco (só o código mudou).
 - **Testes de banco.** Rodados em 29/10/2026 sobre 17af400 (seção 8). Nenhuma falha do lote.
 
-## 8. Execução das suítes de banco (29/10/2026)
+## 8. Validação com banco (Arch, 29/10/2026)
 
 Ambiente: Supabase local (`http://127.0.0.1:54321`, URL lida de `supabase status`) e contêiner
 descartável `psywrite-sncr-3a-disposable` (`postgres:17.6.1.167`, `--network none`, rótulo
@@ -224,3 +224,6 @@ descartável `psywrite-sncr-3a-disposable` (`postgres:17.6.1.167`, `--network no
   tabela não tem trigger. O default continua `'VALID'` (ver seção 7).
 - `tsc --noEmit` sem erros. `npm run lint`: 3 erros `no-deprecated` antigos em
   `tests/sncr.test.mjs` e `tests/sncr-safety.test.mjs`.
+
+**Veredito: APROVADO** (antes PENDENTE). Continuam pendentes: A1 (obter CRL/OCSP em produção,
+lote 6F.2D) e o default `'VALID'` de `evolution_signatures.verification_status`.
