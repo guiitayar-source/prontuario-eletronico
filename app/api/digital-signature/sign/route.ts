@@ -15,7 +15,7 @@ export const POST = handle(async (request, ctx) => {
   if (!['owner', 'doctor'].includes(ctx.role)) {
     throw new HttpError(
       403,
-      'Apenas médicos podem assinar documentos clínicos.'
+      'Apenas médicos podem assinar documentos clínicos.',
     );
   }
 
@@ -26,11 +26,31 @@ export const POST = handle(async (request, ctx) => {
     throw new HttpError(400, 'Informe o ID do documento a ser assinado.');
   }
 
+  const headerKey = request.headers.get('idempotency-key');
+  if (
+    payload.idempotencyKey !== undefined &&
+    typeof payload.idempotencyKey !== 'string'
+  )
+    throw new HttpError(400, 'Chave de idempotência inválida.');
+  if (
+    headerKey &&
+    payload.idempotencyKey &&
+    headerKey !== payload.idempotencyKey
+  )
+    throw new HttpError(400, 'Chaves de idempotência incompatíveis.');
+  if (
+    payload.documentVersion !== undefined &&
+    (!Number.isInteger(payload.documentVersion) ||
+      Number(payload.documentVersion) < 1)
+  )
+    throw new HttpError(400, 'Versão documental inválida.');
   const result = await documentSigningService.signClinicalDocument({
     db: ctx.db,
     clinicId: ctx.clinic,
     userId: ctx.user,
     documentId: documentId.trim(),
+    documentVersion: payload.documentVersion as number | undefined,
+    idempotencyKey: headerKey || (payload.idempotencyKey as string | undefined),
   });
 
   return json(result);

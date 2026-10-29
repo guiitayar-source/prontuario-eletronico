@@ -34,12 +34,12 @@ export function DocumentEditor({
     : undefined;
   const d = docs.draft;
   if (!d) return null;
-  const isSigned = d.status === 'SIGNED';
+  const isSigned = d.status === 'SIGNED' || d.status === 'SUPERSEDED';
   const reservation=docs.numbering.reservation?.document_id===d.id ? docs.numbering.reservation : null;
   const controlled=d.kind==='Receita' && parsePrescriptionText(d.text).modality!=='simples';
   const simulated=!!d.signed_pdf_path?.includes('/sncr-simulations/');
   const local=docs.numbering.mode==='local-simulation';
-  const frozen=isSigned || !!reservation;
+  const frozen=isSigned || d.status==='SIGNING' || !!reservation;
   const reservationLabels={reserved:'reservada',signing:'assinatura em andamento',uncertain:'resultado incerto — reconciliação necessária',abandoned:'abandonada, com número preservado',signed:'simulação concluída'};
   const noun = prescription ? 'receita' : 'documento';
 
@@ -404,7 +404,7 @@ export function DocumentEditor({
             <button
               type="button"
               className="secondary"
-              disabled={docs.busy || !!reservation}
+              disabled={docs.busy || frozen}
               onClick={() => void docs.save()}
             >
               Salvar rascunho
@@ -420,7 +420,9 @@ export function DocumentEditor({
             {controlled ? <>
               <button type="button" className="primary" disabled={docs.busy || !local || !reservation || reservation.state==='abandoned' || ((reservation.state==='uncertain'||reservation.state==='signing') && !reservation.artifact_metadata)} onClick={()=>void docs.sign(d.id)}>{reservation?.artifact_metadata ? 'Recuperar artefato simulado original' : 'Assinar simulação local (sem validade clínica)'}</button>
               {reservation && <button type="button" className="secondary" disabled={docs.busy} onClick={()=>docs.open(d,undefined,true)}>Duplicar como novo rascunho</button>}
-            </> : !docs.signatureSession && choosingProvider ? (
+            </> : d.status==='SIGNING' ? (
+              <button type="button" className="primary" disabled={docs.busy} onClick={()=>void docs.sign(d.id)}>Consultar ou retomar assinatura</button>
+            ) : !docs.signatureSession && choosingProvider ? (
               <div
                 style={{
                   display: 'inline-flex',

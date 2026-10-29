@@ -27,7 +27,7 @@ const { documents } = await import('../lib/supabase/documents.ts');
 const { reserveDocument, getNumberingContext, localSimulationEnabled } =
   await import('../lib/sncr/numbering.ts');
 
-const h = createSignatureTrustDb({ oauth: true });
+const h = createSignatureTrustDb({ oauth: true, attempts: true });
 const clinic = randomUUID(),
   doctor = randomUUID(),
   colleague = randomUUID(),
@@ -126,7 +126,11 @@ try {
           'Somente servidor envia o original neste ensaio.',
         );
         assert.ok(!files.has(path), 'Original não pode ser sobrescrito.');
-        files.set(path, new Uint8Array(await request.arrayBuffer()));
+        const bytes=new Uint8Array(await request.arrayBuffer());
+        const metadata=request.headers.get('x-metadata');
+        const userMetadata=metadata?JSON.parse(Buffer.from(metadata,'base64').toString('utf8')):{};
+        h.sql(`insert into storage.objects(bucket_id,name,metadata,user_metadata) values('clinical-files',${h.lit(path)},${h.lit({size:bytes.length})},${h.lit(userMetadata)});`,{role:'service_role'});
+        files.set(path, bytes);
         return Response.json({ Key: `clinical-files/${path}` });
       }
       if (request.method === 'GET' && files.has(path))

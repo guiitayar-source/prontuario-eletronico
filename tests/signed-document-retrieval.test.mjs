@@ -6,7 +6,7 @@ import { documents } from '../lib/supabase/documents.ts';
 const savedFetch = globalThis.fetch;
 const keys = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SECRET_KEY'];
 const oldEnv = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
-after(() => { globalThis.fetch = savedFetch; for (const k of keys) oldEnv[k] === undefined ? delete process.env[k] : process.env[k] = oldEnv[k]; });
+after(() => { globalThis.fetch = savedFetch; for (const k of keys) { if (oldEnv[k] === undefined) delete process.env[k]; else process.env[k] = oldEnv[k]; } });
 const artifact = new TextEncoder().encode('%PDF-1.7\nsynthetic original signed artifact');
 const digest = createHash('sha256').update(artifact).digest('hex');
 const base = { id: 'doc-1', clinic_id: 'clinic-1', patient_id: 'patient-1', kind: 'Receita', text: '1) Medicamento', patient_name: 'Paciente Fictício', physician_name: 'Médico Fictício', physician_registration: 'CRM 12345 SP', document_date: '2026-10-27', version: 1, status: 'SIGNED', signed_pdf_path: 'clinic-1/signatures/doc-1.pdf' };
@@ -42,6 +42,7 @@ describe('recuperação do artefato assinado', () => {
   it('gera PDF de documento não assinado', async () => { doc.status = 'DRAFT'; const r = await documents(request()); assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /pdf/); });
   it('entrega os bytes originais quando o PDF assinado existe', async () => { const r = await documents(request()); assert.equal(r.status, 200); assert.deepEqual(new Uint8Array(await r.arrayBuffer()), artifact); assert.ok(!calls.some((c) => c.path === '/rest/v1/patients')); });
   for (const scenario of ['missing-path', 'missing', 'network', 'read-failure', 'corrupt']) it(`não regenera em falha de recuperação: ${scenario}`, async () => {
+    // eslint-disable-next-line typescript/unbound-method -- Captura para restaurar o método no protótipo.
     const original = Blob.prototype.arrayBuffer;
     if (scenario === 'missing-path') doc.signed_pdf_path = null;
     if (scenario === 'missing' || scenario === 'network' || scenario === 'corrupt') mode = scenario;
@@ -49,6 +50,8 @@ describe('recuperação do artefato assinado', () => {
     try { const r = await documents(request()); assert.ok(r.status >= 400); assert.match((await r.json()).error, /assinado/i); assert.ok(!calls.some((c) => c.path === '/rest/v1/patients')); assert.ok(!calls.some((c) => c.method !== 'GET' && !c.path.includes('/rpc/session_is_strong'))); }
     finally { Blob.prototype.arrayBuffer = original; }
   });
+  it('documento SUPERSEDED conserva os bytes do original assinado', async () => { doc.status='SUPERSEDED'; const r=await documents(request()); assert.equal(r.status,200); assert.deepEqual(new Uint8Array(await r.arrayBuffer()),artifact); assert.ok(!calls.some(c=>c.path==='/rest/v1/patients')); });
+  it('documento SUPERSEDED sem original retorna erro sem regenerar', async () => { doc.status='SUPERSEDED'; doc.signed_pdf_path=null; const r=await documents(request()); assert.equal(r.status,503); assert.ok(!calls.some(c=>c.path==='/rest/v1/patients')); });
   it('admite artefato histórico sem hash cadastrado', async () => { hash = null; const r = await documents(request()); assert.equal(r.status, 200); assert.deepEqual(new Uint8Array(await r.arrayBuffer()), artifact); });
   it('recusa caminho que diverge do registro de assinatura existente', async () => {
     doc.signed_pdf_path = 'clinic-1/signatures/outro.pdf';

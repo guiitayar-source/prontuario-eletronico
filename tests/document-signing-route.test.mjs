@@ -69,3 +69,8 @@ test('frontend nao pode selecionar clinica da qual nao participa', async () => {
   assert.equal(res.status, 403);
   assert.equal(reads, before);
 });
+
+for(const payload of [{documentVersion:0},{idempotencyKey:123},{idempotencyKey:'body-key-6e'}])test('rota recusa versão ou chave incompatível: '+JSON.stringify(payload),async()=>{
+ const response=await POST(new Request('https://psywrite.synthetic/api/digital-signature/sign',{method:'POST',headers:{authorization:'Bearer synthetic-token','x-signature-action':'1','content-type':'application/json',origin:'https://psywrite.synthetic','idempotency-key':'header-key-6e'},body:JSON.stringify({documentId,...payload})}));
+ assert.equal(response.status,400);
+});

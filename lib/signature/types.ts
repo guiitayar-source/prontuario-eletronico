@@ -37,6 +37,7 @@ export interface SignatureSessionData {
 }
 
 export interface DigitalSignatureRecord {
+  signing_attempt_id?: string | null;
   id: string;
   clinic_id: string;
   document_id: string;

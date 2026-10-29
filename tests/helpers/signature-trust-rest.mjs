@@ -1,12 +1,19 @@
 // PostgREST real no namespace de rede isolado do PostgreSQL descartável.
 // JWTs são assinados por segredo efêmero local; não utiliza GoTrue nem chaves reais.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execFile } from 'node:child_process';
 import { randomBytes, createHmac } from 'node:crypto';
 import { containerEngine } from './sncr-container.mjs';
 
 export async function startSignatureTrustRest(h) {
-  const image = process.env.SIGNATURE_TEST_REST_IMAGE || 'public.ecr.aws/supabase/postgrest:v16.2';
-  if (!['public.ecr.aws/supabase/postgrest:v16.2', 'public.ecr.aws/supabase/postgrest:v14.5'].includes(image))
+  const image =
+    process.env.SIGNATURE_TEST_REST_IMAGE ||
+    'public.ecr.aws/supabase/postgrest:v16.2';
+  if (
+    ![
+      'public.ecr.aws/supabase/postgrest:v16.2',
+      'public.ecr.aws/supabase/postgrest:v14.5',
+    ].includes(image)
+  )
     throw Error('Imagem PostgREST local não autorizada.');
   const suffix = randomBytes(6).toString('hex');
   const gateway = `signature_gateway_${suffix}`;
@@ -99,14 +106,21 @@ export async function startSignatureTrustRest(h) {
         ? null
         : Buffer.from(await request.arrayBuffer());
       if (body) args.push('--data-binary', '@-');
-      const result = String(
-        execFileSync(containerEngine, args, {
-          input: body,
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-          timeout: 15000,
-        }),
-      );
+      // Não bloquear o event loop: callbacks das conexões SQL concorrentes
+      // precisam progredir enquanto outros pedidos REST estão em voo.
+      const result = await new Promise((resolve, reject) => {
+        const child = execFile(
+          containerEngine,
+          args,
+          { encoding: 'utf8', timeout: 15000, maxBuffer: 64 * 1024 * 1024 },
+          (error, stdout) => {
+            if (error)
+              reject(Error('Transporte PostgREST local não confirmado.'));
+            else resolve(stdout);
+          },
+        );
+        child.stdin.end(body || undefined);
+      });
       const split = result.lastIndexOf('\n');
       const status = Number(result.slice(split + 1));
       return new Response(

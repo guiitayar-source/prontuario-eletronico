@@ -64,7 +64,7 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
       const doc = d as ClinicalDocument;
 
       // Um documento assinado só pode ser entregue a partir do arquivo original.
-      if (doc.status === 'SIGNED') {
+      if (doc.status === 'SIGNED' || doc.status === 'SUPERSEDED') {
         const unavailable = () => new HttpError(503, 'Não foi possível recuperar o documento assinado original.');
         if (!doc.signed_pdf_path) throw unavailable();
 

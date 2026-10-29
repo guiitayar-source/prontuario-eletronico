@@ -6,6 +6,7 @@ import {
   createSignatureTrustDb,
   trustMigration,
   oauthMigration,
+  attemptsMigration,
 } from './helpers/signature-trust-db.mjs';
 
 const h = createSignatureTrustDb({
@@ -327,7 +328,7 @@ try {
       assert.deepEqual(
         h.applied,
         readdirSync(new URL('../supabase/migrations/', import.meta.url))
-          .filter((file) => file.endsWith('.sql') && ![trustMigration, oauthMigration].includes(file))
+          .filter((file) => file.endsWith('.sql') && ![trustMigration, oauthMigration, attemptsMigration].includes(file))
           .sort(),
       );
     });

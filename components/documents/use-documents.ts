@@ -394,12 +394,13 @@ export function useDocuments(patient: Patient, enabled = true) {
   }
   async function sign(documentId: string) {
     const simulation=draft?.kind==='Receita' && parsePrescriptionText(draft.text).modality!=='simples' && numbering.mode==='local-simulation';
-    if (!signatureSession && !simulation) {
+    const pending=draft?.id===documentId && draft.status==='SIGNING';
+    if (!signatureSession && !simulation && !pending) {
       setError(`Conecte seu ${signature.label} antes de assinar o documento.`);
       return false;
     }
     let currentDoc = draft;
-    if (dirty || currentDoc?.version === 0) {
+    if (!pending && (dirty || currentDoc?.version === 0)) {
       currentDoc = await save();
       if (!currentDoc) return false;
     }
@@ -413,7 +414,7 @@ export function useDocuments(patient: Patient, enabled = true) {
           'Content-Type': 'application/json',
           'X-Signature-Action': '1',
         },
-        body: JSON.stringify({ documentId }),
+        body: JSON.stringify({ documentId, documentVersion: currentDoc?.version }),
       });
       const data = (await res.json()) as { error?: string; signedPdfPath?: string; simulation?:boolean; document?:ClinicalDocument };
       if (!res.ok) {

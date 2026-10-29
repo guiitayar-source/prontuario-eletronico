@@ -30,7 +30,36 @@ function fixture({ kind = 'Receita', document = {}, session = {}, profile = {}, 
   const registered = { clinic_id: actor.clinicId, user_id: actor.userId, cpf, physician_registration: doc.physician_registration, ...profile };
   const audits = [], signatures = [], files = new Map();
   let calls = 0;
+  let attempt=null;
   const db = {
+    async rpc(name,args) {
+      assert.equal(name,'document_signing_operation');
+      const response=()=>({data:{attempt:structuredClone(attempt),document:structuredClone(doc),signature:signatures[0]||null,claimed:false},error:null});
+      const denied=()=>({data:null,error:{code:'40001',message:'synthetic transaction denied'}});
+      if(args.p_action==='inspect')return response();
+      if(args.p_action==='acquire') {
+        if(lockError || !['DRAFT','FINALIZED','SIGNATURE_FAILED'].includes(doc.status))return denied();
+        attempt={id:'synthetic-attempt',document_id:doc.id,document_version:doc.version,clinic_id:actor.clinicId,user_id:actor.userId,session_id:active.id,signer_cpf:active.cpf,certificate_fingerprint:args.p_data.fingerprint,certificate_raw:active.certificate_raw,storage_path:'synthetic/attempt.pdf',state:'ACQUIRED',lease_until:'2099-01-01T00:00:00Z'};
+        doc.status='SIGNING';return {...response(),data:{...response().data,claimed:true}};
+      }
+      if(!attempt)return denied();
+      if(args.p_action==='preparation_failed' && ['ACQUIRED','PREPARED'].includes(attempt.state)){attempt.state='PREPARATION_FAILED';doc.status='SIGNATURE_FAILED';}
+      if(args.p_action==='uncertain' && attempt.state==='EXTERNAL_STARTED')attempt.state='UNCERTAIN';
+      if(args.p_action==='reject' && ['EXTERNAL_STARTED','UNCERTAIN'].includes(attempt.state))attempt.state='REJECTED';
+      if(args.p_action==='prepare')attempt.state='PREPARED';
+      if(args.p_action==='external')attempt.state='EXTERNAL_STARTED';
+      if(args.p_action==='receive') {
+        if(doc.version!==attempt.document_version)return denied();
+        attempt.state='ARTIFACT_RECEIVED';attempt.artifact_metadata=args.p_data.metadata;attempt.artifact_cipher=args.p_data.cipher;
+      }
+      if(args.p_action==='stored')attempt.state='ARTIFACT_STORED';
+      if(args.p_action==='finish') {
+        if(doc.version!==attempt.document_version || active.revoked || active.certificate_raw!==attempt.certificate_raw || registered.cpf!==attempt.signer_cpf)return denied();
+        signatures.push({...attempt.artifact_metadata,id:'synthetic-signature',signing_attempt_id:attempt.id,document_version:attempt.document_version,provider:active.provider,verification_status:'UNVERIFIED'});
+        attempt.state='COMPLETED';doc.status='SIGNED';doc.signed_pdf_path=attempt.storage_path;
+      }
+      return response();
+    },
     from(table) {
       let op = 'select', value;
       const filters = [];
@@ -65,7 +94,7 @@ function fixture({ kind = 'Receita', document = {}, session = {}, profile = {}, 
       };
       return q;
     },
-    storage: { from: () => ({ upload: async (path, bytes) => { files.set(path, bytes); return { error: null }; } }) },
+    storage: { from: () => ({ upload: async (path, bytes) => { files.set(path, bytes); return { error: null }; }, download:async path=>({data:files.has(path)?new Blob([files.get(path)]):null,error:null}) }) },
   };
   setCustomSignatureProvider({ signHash: async p => { calls++; await onSign?.(doc); return provider.signHash(p); } });
   return { actor, doc, session: active, profile: registered, audits, signatures, files, calls: () => calls, sign: () => new DocumentSigningService(() => db).signClinicalDocument({ db, ...actor, documentId: doc.id }) };

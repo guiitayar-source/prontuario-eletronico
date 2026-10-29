@@ -11,7 +11,9 @@ export const trustGuard =
 const migrations = new URL('../../supabase/migrations/', import.meta.url);
 export const oauthMigration = '20261029020000_signature_oauth_attempts.sql';
 export const oauthGuard = "do $$ begin\n raise exception 'Migração OAuth de assinatura em revisão: não aplicar';\nend $$;";
-export function createSignatureTrustDb({ baseline = false, oauth = false } = {}) {
+export const attemptsMigration = '20261029030000_document_signing_attempts.sql';
+export const attemptsGuard = "do $$ begin\n raise exception 'Migração de tentativas de assinatura em revisão: não aplicar';\nend $$;";
+export function createSignatureTrustDb({ baseline = false, oauth = false, attempts = false } = {}) {
   const inspect = JSON.parse(
     execFileSync(containerEngine, ['inspect', 'psywrite-sncr-3a-disposable'], {
       encoding: 'utf8',
@@ -99,7 +101,7 @@ export function createSignatureTrustDb({ baseline = false, oauth = false } = {})
       create function auth.uid() returns uuid language sql stable as $$ select nullif(auth.jwt()->>'sub','')::uuid $$;
       create function auth.role() returns text language sql stable as $$ select auth.jwt()->>'role' $$;
       create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
-      create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text references storage.buckets,name text,metadata jsonb);
+      create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text references storage.buckets,name text,metadata jsonb,user_metadata jsonb,unique(bucket_id,name));
       alter table storage.objects enable row level security;
       grant usage on schema public,auth,storage to anon,authenticated,service_role;
       grant select,insert,update,delete on storage.objects to anon,authenticated,service_role;
@@ -110,8 +112,9 @@ export function createSignatureTrustDb({ baseline = false, oauth = false } = {})
       "do $$ begin\n raise exception 'Migração de sessões SNCR em revisão: não aplicar';\nend $$;",
       "do $$ begin\n raise exception 'Migração de identidade de assinatura em revisão: não aplicar';\nend $$;",
     ];
+    const history = [];
     for (const file of readdirSync(migrations)
-      .filter((f) => f.endsWith('.sql') && ![trustMigration,oauthMigration].includes(f))
+      .filter((f) => f.endsWith('.sql') && ![trustMigration,oauthMigration,attemptsMigration].includes(f))
       .sort()) {
       let source = readFileSync(new URL(file, migrations), 'utf8');
       for (const guard of guards)
@@ -119,20 +122,20 @@ export function createSignatureTrustDb({ baseline = false, oauth = false } = {})
           assert.equal(source.split(guard).length, 2);
           source = source.replace(guard, '-- somente cópia descartável');
         }
-      try {
-        sql(`begin; ${source} commit;`);
-      } catch (error) {
-        throw new Error(
-          `Migração histórica ${file}: ${error.stderr || error.message}`,
-        );
-      }
+      history.push(`begin; ${source} commit;`);
       applied.push(file);
     }
+    sql(history.join('\n'));
     if (!baseline) applyTrust();
     if (oauth) {
       const source = readFileSync(new URL(oauthMigration, migrations), 'utf8');
       assert.equal(source.split(oauthGuard).length, 2);
       sql(`begin; ${source.replace(oauthGuard, '-- somente cópia descartável')} commit;`);
+    }
+    if (attempts) {
+      const source=readFileSync(new URL(attemptsMigration,migrations),'utf8');
+      assert.equal(source.split(attemptsGuard).length,2);
+      sql(`begin; ${source.replace(attemptsGuard,'-- somente cópia descartável')} commit;`);
     }
   } catch (error) {
     cleanup();

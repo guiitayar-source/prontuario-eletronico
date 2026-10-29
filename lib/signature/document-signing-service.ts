@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { adminClient } from '../supabase/admin.ts';
 import { HttpError } from '../supabase/server.ts';
-import { documentPdf } from '../document-pdf.ts';
 import { withPdfData } from '../supabase/document-pdf-data.ts';
 import {
   parsePrescriptionText,
@@ -20,11 +19,9 @@ import { getSignatureProvider } from './provider-factory.ts';
 import { oauthHash, oauthSecret, oauthRedirect, validSecret } from './oauth-context.ts';
 import { signatureProviderLabel, type SignatureProviderId } from './providers.ts';
 import { padesService } from './pades-service.ts';
+import { signDocumentAttempt } from './document-signing-attempts.ts';
 import {
   assertDocumentSigningAuthor,
-  authorizeSigningIdentity,
-  assertSigningCertificate,
-  assertAuthorizedDocumentVersion,
   SigningIdentityError,
   signingCpf,
 } from './signing-identity.ts';
@@ -225,6 +222,8 @@ export class DocumentSigningService {
     clinicId: string;
     userId: string;
     documentId: string;
+    documentVersion?: number;
+    idempotencyKey?: string;
   }): Promise<{
     success: boolean;
     documentId: string;
@@ -263,13 +262,6 @@ export class DocumentSigningService {
       throw error;
     }
 
-    if (docRecord.status === 'SIGNED' && !(docRecord.kind === 'Receita' && parsePrescriptionText(docRecord.text).modality !== 'simples')) {
-      throw new HttpError(
-        409,
-        'Este documento já foi assinado digitalmente e está imutável.'
-      );
-    }
-
     const doc = docRecord as ClinicalDocument;
 
     if (doc.kind==='Receita' && parsePrescriptionText(doc.text).modality==='simples' && parsePrescriptionText(doc.text).sncrNumber) throw new HttpError(422, 'Número SNCR manual incompatível com receita simples. Revise o rascunho.');
@@ -287,263 +279,7 @@ export class DocumentSigningService {
       }, {enrich: (d) => withPdfData(admin,params.clinicId,d)});
     }
 
-    if (!['DRAFT', 'FINALIZED', 'SIGNATURE_FAILED'].includes(doc.status || ''))
-      throw new HttpError(409, 'Assinatura já iniciada ou documento indisponível. Consulte o estado antes de repetir.');
-
-    // 1. Check active session
-    const { data: session, error: sessionErr } = await admin
-      .from('signature_sessions')
-      .select('*')
-      .eq('clinic_id', params.clinicId)
-      .eq('user_id', params.userId)
-      .eq('revoked', false)
-      .gt('expires_at', new Date().toISOString())
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (sessionErr || !session) {
-      throw new HttpError(
-        401,
-        'Nenhuma sessão ativa de certificado em nuvem. Conecte seu certificado digital para assinar.'
-      );
-    }
-
-    const { data: profile, error: profileError } = await admin.from('document_profiles')
-      .select('cpf,physician_registration').eq('clinic_id', params.clinicId).eq('user_id', params.userId).maybeSingle();
-    if (profileError) throw new HttpError(503, 'Não foi possível confirmar a identidade autorizada.');
-    let authorization;
-    try {
-      authorization = authorizeSigningIdentity(params, docRecord, session, profile);
-    } catch (error) {
-      await audit('document.signature_denied', error instanceof SigningIdentityError ? error.reason : 'identity_unavailable');
-      throw error;
-    }
-
-    const accessToken = decryptToken(session.access_token_encrypted);
-
-    const sncrNumber: string | undefined = undefined;
-    const prescriptionModality = doc.kind === 'Receita' ? 'simples' : undefined;
-
-    // Toda receita ou documento assinado digitalmente precisa ter data de emissão definida
-    const effectiveDate =
-      doc.document_date ||
-      new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Sao_Paulo',
-      }).format(new Date());
-    doc.document_date = effectiveDate;
-
-    // 3. Mark status as SIGNING
-    const { data: locked, error: lockError } = await admin
-      .from('clinical_documents')
-      .update({ status: 'SIGNING', document_date: effectiveDate })
-      .eq('id', params.documentId).eq('clinic_id', params.clinicId)
-      .eq('author_id', params.userId).eq('version', authorization.documentVersion)
-      .in('status', ['DRAFT', 'FINALIZED', 'SIGNATURE_FAILED'])
-      .select('*').maybeSingle();
-    if (lockError || !locked) throw new HttpError(409, 'Documento alterado ou assinatura já iniciada. Reabra o documento.');
-
-    const attemptId = crypto.randomUUID();
-    let externalStarted = false;
-    let requestedDigest: string | undefined;
-    let providerTransactionId: string | undefined;
-    let cmsHash: string | undefined;
-
-    try {
-      // 4. CPF e endereço do paciente (receitas) e timbre do autor
-      await withPdfData(admin, params.clinicId, doc);
-
-      // 5. Generate unsigned official PDF
-      const unsignedPdfBytes = await documentPdf(doc, { isDraft: false });
-      const unsignedPdfHash = crypto
-        .createHash('sha256')
-        .update(Buffer.from(unsignedPdfBytes))
-        .digest('hex');
-
-      // Extract signer name from CN
-      const cnMatch = session.certificate_subject.match(/CN=([^,\n/]+)/i);
-      const signerName = cnMatch
-        ? cnMatch[1].split(':')[0].trim()
-        : doc.physician_name;
-
-      // 6. Prepare PDF with PAdES placeholder (stamp + QR Code on all pages)
-      const prepared = await padesService.preparePdfForSignature(
-        unsignedPdfBytes,
-        {
-          signerName,
-          signerCpf: formatCpf(session.cpf),
-          doctorCrm: doc.physician_registration,
-          sncrNumber,
-          reason:
-            'Documento assinado digitalmente com certificado ICP-Brasil (RDC Anvisa 1.000/2025)',
-        }
-      );
-
-      // 7. Request signature on the document hash from the provider (HSM)
-      const provider = getSignatureProvider(session.provider);
-      requestedDigest = prepared.digestHex;
-      await audit('document.signature_started', 'authorized_identity', {
-        attempt_id: attemptId, session_id: authorization.sessionId, document_hash: requestedDigest,
-      });
-      externalStarted = true;
-      const signResult = await provider.signHash({
-        accessToken,
-        certificateAlias: session.certificate_alias,
-        hashHex: prepared.digestHex,
-        documentAlias: `${doc.kind} #${doc.id.slice(0, 8)}`,
-      });
-      if (signResult.providerTransactionId && /^[A-Za-z0-9._:-]{1,200}$/.test(signResult.providerTransactionId))
-        providerTransactionId = signResult.providerTransactionId;
-      cmsHash = crypto.createHash('sha256').update(signResult.cmsSignatureBase64).digest('hex');
-
-      // 8. Embed the CMS signature into the PDF
-      const signedPdfBuffer = padesService.embedSignature(
-        prepared,
-        signResult.cmsSignatureBase64
-      );
-      const signedPdfHash = crypto
-        .createHash('sha256')
-        .update(signedPdfBuffer)
-        .digest('hex');
-
-      // 9. Verify the final signed PDF locally
-      const verification =
-        await padesService.verifyPadesSignature(signedPdfBuffer);
-      if (!verification.isValid) {
-        throw new SigningIdentityError('cms_verification_failed', 409);
-      }
-      assertSigningCertificate(authorization, verification);
-
-      const { data: currentDoc, error: currentError } = await admin.from('clinical_documents')
-        .select('*').eq('clinic_id', params.clinicId).eq('id', params.documentId).maybeSingle();
-      if (currentError) throw new SigningIdentityError('document_recheck_unavailable', 409);
-      assertAuthorizedDocumentVersion(authorization, currentDoc);
-      const { data: currentSession, error: sessionRecheckError } = await admin.from('signature_sessions')
-        .select('*').eq('id', authorization.sessionId).eq('clinic_id', params.clinicId).eq('user_id', params.userId).maybeSingle();
-      const { data: currentProfile, error: profileRecheckError } = await admin.from('document_profiles')
-        .select('cpf,physician_registration').eq('clinic_id', params.clinicId).eq('user_id', params.userId).maybeSingle();
-      if (sessionRecheckError || profileRecheckError || !currentSession)
-        throw new SigningIdentityError('identity_recheck_unavailable', 409);
-      const currentAuthorization = authorizeSigningIdentity(params, currentDoc!, currentSession, currentProfile);
-      if (currentAuthorization.cpf !== authorization.cpf || currentAuthorization.certificateFingerprint !== authorization.certificateFingerprint)
-        throw new SigningIdentityError('authorized_identity_changed', 409);
-
-      // 10. Upload signed PDF to Storage
-      const storagePath = `${params.clinicId}/signatures/${params.documentId}_v${doc.version}_signed.pdf`;
-      const uploadRes = await admin.storage
-        .from('clinical-files')
-        .upload(storagePath, signedPdfBuffer, {
-          contentType: 'application/pdf',
-          upsert: false,
-        });
-
-      if (uploadRes.error) {
-        throw new Error(
-          `Falha ao salvar PDF assinado no Storage: ${uploadRes.error.message}`
-        );
-      }
-
-      // 11. Insert digital signature record
-      const signatureInsert = {
-        clinic_id: params.clinicId,
-        document_id: params.documentId,
-        document_version: doc.version,
-        signer_user_id: params.userId,
-        signer_doctor_id: params.userId,
-        provider: session.provider,
-        certificate_subject: verification.certificateSubject,
-        certificate_issuer: verification.certificateIssuer,
-        certificate_serial: verification.certificateSerial || '',
-        certificate_fingerprint: verification.certificateFingerprint || '',
-        cpf_from_certificate: authorization.cpf,
-        signature_algorithm: 'SHA256withRSA',
-        digest_algorithm: 'SHA-256',
-        signature_format: 'PAdES-B-B',
-        signed_at: new Date().toISOString(),
-        document_hash: prepared.digestHex,
-        unsigned_pdf_hash: unsignedPdfHash,
-        signed_pdf_hash: signedPdfHash,
-        signed_pdf_storage_path: storagePath,
-        status: 'SIGNED',
-        // Identidade/CMS correspondentes não demonstram cadeia ou revogação.
-        verification_status: 'UNVERIFIED',
-        provider_transaction_id: providerTransactionId || null,
-      };
-
-      const { data: sigRecord, error: sigInsertErr } = await admin
-        .from('digital_signatures')
-        .insert(signatureInsert)
-        .select()
-        .single();
-
-      if (sigInsertErr || !sigRecord) {
-        throw new Error(
-          `Erro ao registrar assinatura no banco: ${sigInsertErr?.message}`
-        );
-      }
-
-      // 12. Update clinical_documents status, text (if SNCR injected), document_date and path
-      const { data: completed, error: docUpdateErr } = await admin
-        .from('clinical_documents')
-        .update({
-          status: 'SIGNED',
-          text: doc.text,
-          document_date: effectiveDate,
-          signed_pdf_path: storagePath,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', params.documentId).eq('clinic_id', params.clinicId).eq('author_id', params.userId)
-        .eq('version', authorization.documentVersion).eq('status', 'SIGNING')
-        .select('*').maybeSingle();
-
-      if (docUpdateErr || !completed) throw new SigningIdentityError('document_completion_unconfirmed', 409);
-
-      // 13. Audit event
-      await admin.from('audit_events').insert({
-        clinic_id: params.clinicId,
-        actor_id: params.userId,
-        action: 'document.signed',
-        entity_type: 'clinical_documents',
-        entity_id: params.documentId,
-        context: {
-          document_id: params.documentId,
-          version: doc.version,
-          document_date: effectiveDate,
-          certificate_serial: verification.certificateSerial,
-          signed_pdf_hash: signedPdfHash,
-          storage_path: storagePath,
-          provider: session.provider,
-          ...(prescriptionModality ? { prescription_modality: prescriptionModality } : {}),
-          ...(sncrNumber ? { sncr_number: sncrNumber } : {}),
-        },
-      });
-
-      return {
-        success: true,
-        documentId: params.documentId,
-        signedPdfPath: storagePath,
-        verification,
-        signature: sigRecord as DigitalSignatureRecord,
-      };
-    } catch (error) {
-      // Depois da chamada externa, SIGNING é durável e bloqueia nova assinatura.
-      // Uma falha de auditoria também não autoriza repetir a operação externa.
-      if (!externalStarted) await admin.from('clinical_documents').update({ status: 'SIGNATURE_FAILED' })
-        .eq('id', params.documentId).eq('clinic_id', params.clinicId)
-        .eq('version', authorization.documentVersion).eq('status', 'SIGNING');
-      try {
-        await audit(externalStarted ? 'document.signature_pending' : 'document.signature_failed',
-          error instanceof SigningIdentityError ? error.reason : externalStarted ? 'external_result_unconfirmed' : 'preparation_failed', {
-            attempt_id: attemptId, session_id: authorization.sessionId,
-            ...(requestedDigest ? { document_hash: requestedDigest } : {}),
-            ...(providerTransactionId ? { provider_transaction_id: providerTransactionId } : {}),
-            ...(cmsHash ? { cms_hash: cmsHash } : {}),
-          });
-      } catch { /* O estado SIGNING continua bloqueando retry mesmo sem auditoria disponível. */ }
-      throw new HttpError(externalStarted ? 409 : 503, externalStarted
-        ? 'Assinatura pendente de reconciliação. Não foi confirmada para este documento. Não repita a assinatura.'
-        : 'Não foi possível preparar a assinatura. Nenhuma assinatura externa foi solicitada.');
-    }
+    return signDocumentAttempt(admin, params, docRecord);
   }
 
   /**
