@@ -193,5 +193,34 @@ INDETERMINATE/REVOCATION_UNAVAILABLE, gravado como UNVERIFIED, e a emissão segu
   certificado nunca comprova GOOD.
 - **Default da coluna.** `evolution_signatures.verification_status` ainda tem default `'VALID'`
   no banco (só o código mudou).
-- **Testes de banco não rodados.** As suítes que exigem Supabase local não rodaram (contêiner
-  ausente; subir o Supabase local aplicaria migrações, o que estava fora do escopo).
+- **Testes de banco.** Rodados em 29/10/2026 sobre 17af400 (seção 8). Nenhuma falha do lote.
+
+## 8. Execução das suítes de banco (29/10/2026)
+
+Ambiente: Supabase local (`http://127.0.0.1:54321`, URL lida de `supabase status`) e contêiner
+descartável `psywrite-sncr-3a-disposable` (`postgres:17.6.1.167`, `--network none`, rótulo
+`psywrite.test=lote-6c`). Variáveis de produção removidas do ambiente; nada com `--linked`.
+
+- Banco local: `supabase migration up --local` aplicou 20261012, 20261015 e 20261016. A
+  20261027 (SNCR) bloqueia a própria aplicação, por isso as migrações de assinatura só entram no
+  contêiner descartável, carregadas pelos helpers dos testes.
+- Sem banco (todas passam): pades-revocation-6f2c-r 22, pades-revocation-poe 20,
+  pades-rfc3161-poe 13, pades-x509-chain-trust 10, pades-pdf-integrity 13, digital-signature 25,
+  document-signing-identity 36, evolution-save-before-sign 12, document-signing-route 6,
+  signed-document-retrieval 12, signature-providers 6, signature-oauth-context 9,
+  signature-oauth-reproduction 4, sncr 6, sncr-safety 4, sncr-maintainer 8, platform 6.
+- PostgreSQL real (todas passam): signature-trust-permissions 24, signature-identity-db 3,
+  signature-persistence-local 46 (inclui o trigger `signing_attempt_metadata_guard`),
+  signature-trust-flow 10, signature-oauth-local 36, sncr-postgres-local 23, sncr-auth-local 36,
+  sncr-concurrency-local 4, sncr-integrated-local 32.
+- Supabase local e PGlite (passam): supabase-flow, document-ai, consultations, team,
+  invite-flow, clinical-context, imports, readiness, attachment-delete-db, clinic-features-db,
+  documents-date-db, exams-db, prescription-templates-db, anamnesator-native-db.
+- Falhas anteriores ao lote (iguais em ffa542a, mesma linha; fora do escopo):
+  - `supabase-local.test.mjs:83`: `permission denied for table clinic_members` ao inserir como
+    `authenticated`.
+  - `documents.mjs:25`: `action=pdf` devolve 500. Causa não investigada.
+- Esquema local: o CHECK de `evolution_signatures.verification_status` aceita `UNVERIFIED`, e a
+  tabela não tem trigger. O default continua `'VALID'` (ver seção 7).
+- `tsc --noEmit` sem erros. `npm run lint`: 3 erros `no-deprecated` antigos em
+  `tests/sncr.test.mjs` e `tests/sncr-safety.test.mjs`.
