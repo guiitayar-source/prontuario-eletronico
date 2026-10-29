@@ -1,0 +1,34 @@
+
+== P1: CRL emitida DEPOIS da POE (evidência LTV ideal) é rejeitada após seu nextUpdate
+P1a CRL [02-09,02-16] (emitida ANTES da POE)               | status= VALID | sub= undefined | rev= GOOD_AT_POE | isValid= true | src= CRL
+P1b CRL [02-10T15,02-17] (emitida DEPOIS da POE)           | status= INDETERMINATE | sub= REVOCATION_EVIDENCE_INVALID | rev= INVALID_EVIDENCE | isValid= true | src= CRL
+     signer summary: INVALID_EVIDENCE - CRL vencida ou inadequada para a data de referência (2026-02-10T14:00:00.000Z): janela [2026-02-10T15:00:00.000Z, 2026-02-17T15:00:00.000Z].
+
+== P2: CRL anterior à POE aceita como prova de GOOD apesar de revogação entre thisUpdate e POE
+P2a só a CRL antiga (thisUpdate 02-01 < revogação 02-05 < POE) | status= VALID | sub= undefined | rev= GOOD_AT_POE | isValid= true | src= CRL
+P2b CRL antiga + CRL nova (lista revogação em 02-05)       | status= INDETERMINATE | sub= REVOKED_NO_POE | rev= REVOKED_NO_POE | isValid= true | src= CRL
+
+== P3: invalidityDate anterior à POE ignorada para motivo != keyCompromise
+P3 reason=0 invalidityDate=01-15 < POE 02-10 < revoked 03-01 | status= VALID | sub= undefined | rev= GOOD_AT_POE | isValid= true | src= CRL
+P3 reason=undefined invalidityDate=01-15 < POE 02-10 < revoked 03-01 | status= VALID | sub= undefined | rev= GOOD_AT_POE | isValid= true | src= CRL
+P3 reason=4 invalidityDate=01-15 < POE 02-10 < revoked 03-01 | status= VALID | sub= undefined | rev= GOOD_AT_POE | isValid= true | src= CRL
+P3-ctrl reason=1 (keyCompromise), mesma invalidityDate     | status= INDETERMINATE | sub= REVOKED_KEY_COMPROMISE | rev= REVOKED_NO_POE | isValid= true | src= CRL
+
+== P4: OCSP tryLater (não assinado) é contado como evidência "MATCHED_VALID" de todos os certificados
+P4 CRLs válidas + OCSP tryLater sem assinatura             | status= VALID | sub= undefined | rev= GOOD_AT_POE | isValid= true | src= BOTH
+     sources por certificado: SIGNER:BOTH, SIGNER_CA:BOTH, TSA_SIGNER:BOTH, TSA_CA:BOTH
+
+== P5: carimbo com revogação da TSA indisponível piora o resultado em relação a NÃO ter carimbo
+P5a sem carimbo, CRLs atuais do signatário                 | status= VALID | sub= undefined | rev= GOOD | isValid= true | src= CRL
+P5b com carimbo, mesmas CRLs (sem CRL da TSA)              | status= INDETERMINATE | sub= TSA_REVOCATION_UNAVAILABLE | rev= GOOD | isValid= true | src= CRL
+
+== P6: OCSP sem nextUpdate (permitido pela RFC 6960 §2.4/§4.2.2.1) é rejeitado
+P6 OCSP good recente sem nextUpdate                        | status= INDETERMINATE | sub= REVOCATION_EVIDENCE_INVALID | rev= INVALID_EVIDENCE | isValid= true | src= CRL
+     signer summary: Período temporal (thisUpdate / nextUpdate / producedAt) da resposta OCSP ausente ou incompatível.
+
+== P7: certificado comprovadamente revogado (sem POE) => isValid=true no modo padrão
+P7a VERIFICATION (padrão), keyCompromise em 03-01          | status= INDETERMINATE | sub= REVOKED_NO_POE | rev= REVOKED_NO_POE | isValid= true | src= CRL
+P7b LIVE_ISSUANCE                                          | status= INVALID | sub= REVOKED_BEFORE_POE | rev= REVOKED_BEFORE_POE | isValid= false | src= CRL
+
+== P8: TSA revogada DEPOIS do genTime por motivo administrativo descarta a POE
+P8 TSA cessationOfOperation em 03-20 > genTime 02-10       | status= INDETERMINATE | sub= TSA_REVOKED | rev= INDETERMINATE | isValid= true | src= CRL
