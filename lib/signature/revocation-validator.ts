@@ -476,7 +476,7 @@ function parseIssuingDistributionPointExt(
   }
 }
 
-function extractCertCrlDistributionPointUris(cert: pkijs.Certificate): {
+export function extractCertCrlDistributionPointUris(cert: pkijs.Certificate): {
   present: boolean;
   uris: string[];
   hasIndirectCrlIssuerOnly: boolean;

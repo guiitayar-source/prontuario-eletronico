@@ -1,3 +1,5 @@
+import type { ParsedX509Node } from './icp-chain.ts';
+
 export type DocumentStatus =
   | 'DRAFT'
   | 'FINALIZED'
@@ -330,6 +332,33 @@ export interface PadesVerificationOptions {
     maxAgeWithoutNextUpdateSeconds?: number;
   };
   requireFullTrust?: boolean;
+  /**
+   * Lote 6F.2D (A1): busca LCR/OCSP na rede para as cadeias do signatário e da TSA, depois de
+   * validadas até uma âncora. O que vier entra como evidência injetada e passa pela mesma
+   * validação; falha de rede só deixa a evidência faltando (INDETERMINATE).
+   */
+  revocationEvidenceProvider?: RevocationEvidenceProvider;
+  /** Recebe o registro das buscas (URLs e resultado; sem dados do documento). */
+  onRevocationFetch?: (attempts: RevocationFetchAttempt[]) => void;
+}
+
+export interface RevocationFetchAttempt {
+  kind: 'CRL' | 'OCSP' | 'CHAIN';
+  subject: string;
+  url?: string;
+  outcome: 'FETCHED' | 'CACHED' | 'ERROR' | 'SKIPPED';
+  reason?: string;
+}
+
+export interface RevocationEvidenceProvider {
+  collect(
+    chain: ParsedX509Node[],
+    context: { now: Date },
+  ): Promise<{
+    crls: Buffer[];
+    ocspResponses: Buffer[];
+    attempts: RevocationFetchAttempt[];
+  }>;
 }
 
 export interface CertificateInfo {
