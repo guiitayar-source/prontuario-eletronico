@@ -40,6 +40,8 @@ import ts from 'typescript';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { documentPdf } from '../lib/document-pdf.ts';
+import { notificationApiType } from '../lib/sncr/notification-fields.ts';
+import { NOTIFICATION_CONSULTATION_URL } from '../lib/sncr/notification-pdf.ts';
 
 const keys = [
   'NODE_ENV',
@@ -574,20 +576,40 @@ try {
     assert.equal(again.reservation.state, 'signed');
     assert.equal(again.document.status, 'SIGNED');
   });
-  await test('notificação B usa seu próprio lote e modalidade no fluxo local', async () => {
-    const b = fixture({ modality: 'notificacao_b' }),
-      d = b.document({
-        text: 'Modalidade: Notificação de Receita B\n\nMED001',
+  for (const modality of ['notificacao_a', 'notificacao_b', 'notificacao_b2']) {
+    await test(`${notificationApiType[modality]} reserva, gera QR, assina e recupera o mesmo PDF`, async () => {
+      const batch = fixture({ modality });
+      const d = batch.document({
+        text: `Modalidade: Notificação de Receita ${notificationApiType[modality].slice(2)}\n${syntheticRceText}`,
       });
-    await reserveDocument(h.db, b.actor, d.id);
-    const result = await signReservedSimulation(h.db, b.actor, d.id, store, {
-      provider,
+      const reserved = await reserveDocument(h.db, batch.actor, d.id);
+      assert.equal(reserved.reservation.modality, modality);
+      assert.equal(reserved.reservation.prescriber_id, d.author_id);
+      const result = await signReservedSimulation(h.db, batch.actor, d.id, store, {
+        provider,
+        enrich: async doc => Object.assign(doc, syntheticRceData),
+      });
+      assert.equal(result.verification.isValid, true);
+      const ctx = await getNumberingContext(h.db, batch.actor, d.id);
+      assert.equal(ctx.reservation.state, 'signed');
+      assert.equal(ctx.reservation.number, reserved.reservation.number);
+      assert.equal(ctx.reservation.modality, modality);
+      const original = await store.get(result.signedPdfPath);
+      assert.deepEqual((await recoverSimulation(store, ctx)).bytes, original);
+      const pdfText = await textOf(original);
+      assert.ok(pdfText.includes(ctx.reservation.number));
+      assert.ok(pdfText.includes(notificationApiType[modality].slice(2)));
+      const qrPath = join(root, `${modality}-signed`);
+      await writeFile(`${qrPath}.pdf`, original);
+      execFileSync('pdftoppm', ['-f', '1', '-singlefile', '-scale-to', '1400', '-png', `${qrPath}.pdf`, qrPath]);
+      const qr = execFileSync('zbarimg', ['--quiet', '--raw', `${qrPath}.png`], { encoding: 'utf8' }).trim();
+      assert.equal(qr, `${NOTIFICATION_CONSULTATION_URL}?numero=${encodeURIComponent(ctx.reservation.number)}`);
+      const before = calls;
+      const replay = await signReservedSimulation(h.db, batch.actor, d.id, store, { provider });
+      assert.equal(replay.signedPdfPath, result.signedPdfPath);
+      assert.equal(calls, before);
     });
-    assert.equal(result.simulation, true);
-    const ctx = await getNumberingContext(h.db, b.actor, d.id);
-    assert.equal(ctx.reservation.modality, 'notificacao_b');
-    assert.equal(ctx.reservation.state, 'signed');
-  });
+  }
   await test('receita simples continua gerando PDF sem numeração nem reserva', async () => {
     const d = f.document({
       text: 'Modalidade: Receita simples\n\nMED001 - Uso sintético',

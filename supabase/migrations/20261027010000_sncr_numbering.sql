@@ -24,7 +24,7 @@ create table public.sncr_requests (
  clinic_id uuid not null references public.clinics(id) on delete restrict,
  prescriber_id uuid not null references auth.users(id) on delete restrict,
  environment text not null check (environment in ('hmg','prd')),
- modality text not null check (modality in ('controle_especial','retencao','notificacao_a','notificacao_b')),
+ modality text not null check (modality in ('controle_especial','retencao','notificacao_a','notificacao_b','notificacao_b2')),
  request_key uuid not null,
  origin text not null check (origin in ('anvisa_api','synthetic','manual','legacy')),
  state text not null check (state in ('pending','uncertain','completed','failed','quarantined')),
@@ -44,7 +44,7 @@ create table public.sncr_batches (
  clinic_id uuid not null references public.clinics(id) on delete restrict,
  prescriber_id uuid not null references auth.users(id) on delete restrict,
  environment text not null check (environment in ('hmg','prd')),
- modality text not null check (modality in ('controle_especial','retencao','notificacao_a','notificacao_b')),
+ modality text not null check (modality in ('controle_especial','retencao','notificacao_a','notificacao_b','notificacao_b2')),
  council text not null check (council in ('CRM','CRO','CRMV')),
  council_number text not null check (council_number ~ '^[0-9]{3,10}$'),
  council_uf text not null check (council_uf in ('AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO')),
@@ -89,8 +89,14 @@ begin
      or new.next_suffix not in (old.next_suffix,old.next_suffix+1) then
    raise exception 'Identidade, faixa e cursor SNCR não podem ser reutilizados ou reescritos.' using errcode='23514';
   end if;
- elsif new.next_suffix<>new.first_suffix then
-  raise exception 'Lote SNCR deve começar no início da faixa.' using errcode='23514';
+ else
+  -- Serializa inserções no mesmo domínio antes da restrição GiST. Não depende
+  -- do snapshot da transação; a restrição EXCLUDE continua sendo a garantia.
+  perform pg_advisory_xact_lock(hashtextextended('sncr-batch-range:' ||
+   jsonb_build_array(new.environment,new.number_prefix,new.suffix_width)::text,0));
+  if new.next_suffix<>new.first_suffix then
+   raise exception 'Lote SNCR deve começar no início da faixa.' using errcode='23514';
+  end if;
  end if;
  if not exists (select 1 from public.sncr_requests r where r.id=new.request_id
    and r.clinic_id=new.clinic_id and r.prescriber_id=new.prescriber_id
@@ -111,7 +117,7 @@ create table public.sncr_reservations (
  document_id uuid not null references public.clinical_documents(id) on delete restrict,
  document_version integer not null check (document_version > 0),
  environment text not null check (environment in ('hmg','prd')),
- modality text not null check (modality in ('controle_especial','retencao','notificacao_a','notificacao_b')),
+ modality text not null check (modality in ('controle_especial','retencao','notificacao_a','notificacao_b','notificacao_b2')),
  request_key uuid not null,
  number text collate "C" not null,
  state text not null default 'reserved' check (state in ('reserved','signing','uncertain','abandoned','signed')),
@@ -167,6 +173,7 @@ begin
     when header in ('controle especial','receituario de controle especial','receituário de controle especial','controle_especial') then 'controle_especial'
     when header in ('retencao','retenção','receita sujeita a retencao','receita sujeita a retenção','receituario sujeito a retencao','receituário sujeito a retenção') then 'retencao'
     when header in ('notificacao_b','notificação de receita b','notificacao de receita b','notificação b') then 'notificacao_b'
+    when header in ('notificacao_b2','notificação de receita b2','notificacao de receita b2','notificação b2') then 'notificacao_b2'
     when header in ('notificacao_a','notificação de receita a','notificacao de receita a','notificação a') then 'notificacao_a'
     else 'invalid' end;
    continue;
@@ -336,7 +343,7 @@ declare d public.clinical_documents; profile public.document_profiles; b public.
 begin
  if p_clinic is null or p_prescriber is null or p_document is null or p_request_key is null
     or p_synthetic is null or p_version is null or p_version<1 or p_environment is null or p_modality is null
-    or p_environment not in ('hmg','prd') or p_modality not in ('controle_especial','retencao','notificacao_a','notificacao_b') then
+    or p_environment not in ('hmg','prd') or p_modality not in ('controle_especial','retencao','notificacao_a','notificacao_b','notificacao_b2') then
   raise exception 'Parâmetros SNCR inválidos.' using errcode='22023';
  end if;
  if p_synthetic and (p_environment<>'hmg' or not exists(select 1 from public.sncr_local_sandboxes where clinic_id=p_clinic)) then

@@ -12,6 +12,7 @@ export type PrescriptionModality =
   | 'controle_especial'
   | 'retencao'
   | 'notificacao_b'
+  | 'notificacao_b2'
   | 'notificacao_a'
   | 'simples';
 
@@ -41,7 +42,7 @@ export const prescriptionModalities: {
   },
   {
     id: 'notificacao_b',
-    label: 'Notificação de Receita B / B2 (Psicotrópicos — SNCR digital)',
+    label: 'Notificação de Receita B (SNCR digital)',
     pdfTitle: 'Notificação de Receita B — Controle Especial',
     twoCopies: true,
     buyerSupplierBoxes: true,
@@ -53,6 +54,14 @@ export const prescriptionModalities: {
     pdfTitle: 'Notificação de Receita A — Controle Especial',
     twoCopies: true,
     buyerSupplierBoxes: true,
+    requiresSncrWhenSigned: true,
+  },
+  {
+    id: 'notificacao_b2',
+    label: 'Notificação de Receita B2 (SNCR digital)',
+    pdfTitle: 'Notificação de Receita B2',
+    twoCopies: false,
+    buyerSupplierBoxes: false,
     requiresSncrWhenSigned: true,
   },
   {
@@ -84,6 +93,10 @@ const MODALITY_BY_HEADER: Record<string, PrescriptionModality> = {
   'receituario sujeito a retencao': 'retencao',
   'receituário sujeito a retenção': 'retencao',
   notificacao_b: 'notificacao_b',
+  notificacao_b2: 'notificacao_b2',
+  'notificação de receita b2': 'notificacao_b2',
+  'notificacao de receita b2': 'notificacao_b2',
+  'notificação b2': 'notificacao_b2',
   'notificação de receita b': 'notificacao_b',
   'notificacao de receita b': 'notificacao_b',
   'notificação b': 'notificacao_b',
@@ -101,6 +114,7 @@ const MODALITY_HEADER_VALUE: Record<PrescriptionModality, string> = {
   controle_especial: 'Controle especial',
   retencao: 'Retenção',
   notificacao_b: 'Notificação de Receita B',
+  notificacao_b2: 'Notificação de Receita B2',
   notificacao_a: 'Notificação de Receita A',
   simples: 'Receita simples',
 };

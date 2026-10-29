@@ -154,6 +154,8 @@ export function assertSynthetic(ctx: NumberingContext) {
     r.document_id !== ctx.document.id ||
     r.prescriber_id !== ctx.document.author_id ||
     r.document_version !== ctx.document.version
+    || r.modality !== parsePrescriptionText(ctx.document.text).modality
+    || (ctx.document.prescription_modality && r.modality !== ctx.document.prescription_modality)
   ) {
     throw new HttpError(
       409,

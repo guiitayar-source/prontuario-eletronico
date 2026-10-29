@@ -14,6 +14,7 @@ import type { DocumentsController } from './use-documents';
 import { DocumentAiBox } from './ai-box';
 import { useFeature } from '../plan';
 import { rceElectronicTemplate } from '@/lib/sncr/rce-fields';
+import { notificationElectronicTemplate } from '@/lib/sncr/notification-fields';
 import {
   isSignatureProviderId,
   signatureProviderLabel,
@@ -227,7 +228,7 @@ export function DocumentEditor({
                 <select
                   id="prescription-modality"
                   value={rxMeta.modality}
-                  disabled={isSigned}
+                  disabled={frozen}
                   onChange={(e) => {
                     const nextModality = e.target.value as PrescriptionModality;
                     if (nextModality !== rxMeta.modality && rxMeta.sncrNumber) {
@@ -258,11 +259,14 @@ export function DocumentEditor({
                 </label>
                 <p role="status">{docs.numbering.loading ? 'Consultando numeração…' : docs.numbering.error ? docs.numbering.error : reservation ? `Numeração ${reservationLabels[reservation.state]} · ${reservation.environment} · versão ${reservation.document_version}` : rxMeta.sncrNumber ? 'Número manual/histórico não verificado. Não autoriza emissão.' : local ? 'Simulação local disponível. Nenhum número reservado.' : 'Emissão controlada bloqueada até autenticação oficial SNCR/gov.br.'}</p>
                 {local && <p>Estoque sintético disponível: {docs.sncrBatches.filter(b=>b.modality===rxMeta.modality).reduce((sum,b)=>sum+b.remaining,0)}</p>}
-                {local && rxMeta.modality === 'controle_especial' && <p>
-                  A simulação usa o formulário eletrônico da Anvisa, com um medicamento por documento.
+                {local && ['controle_especial','notificacao_a','notificacao_b','notificacao_b2'].includes(rxMeta.modality) && <p>
+                  A simulação usa o formulário eletrônico próprio da Anvisa, com um medicamento por documento.
                   Preencha nome do medicamento ou substância, concentração, forma farmacêutica, quantidade e posologia com esses rótulos, além da via de administração.
                   Informe a data, CPF ou passaporte do paciente estrangeiro, endereço do paciente e endereço e telefone do prescritor antes de reservar.
                   Conteúdo que exceda o formulário bloqueia a assinatura; a reserva congela o rascunho.
+                </p>}
+                {local && ['notificacao_a','notificacao_b','notificacao_b2'].includes(rxMeta.modality) && <p>
+                  O QR Code usa a consulta pública oficial da Anvisa para o número sintético desta simulação. Isso não valida nem autoriza a emissão real.
                 </p>}
                 {!reservation && <button type="button" className="secondary" disabled={!local || docs.numbering.loading || docs.busy} onClick={()=>void docs.requestSncrNumber()}>Reservar número sintético local</button>}
               </div>}
@@ -317,6 +321,14 @@ export function DocumentEditor({
               update({ text: rceElectronicTemplate + (d.text.trim() ? `\nTexto anterior para revisão do prescritor (remova este rótulo após conferir):\n${d.text}` : '') });
             }}>
               Inserir campos RCE eletrônica (simulação)
+            </button>
+          )}
+          {local && !frozen && d.kind === 'Receita' && ['notificacao_a','notificacao_b','notificacao_b2'].includes(parsePrescriptionText(d.text).modality) && (
+            <button type="button" className="secondary" onClick={() => {
+              const rx = parsePrescriptionText(d.text);
+              update({ text: buildPrescriptionText({ modality: rx.modality, viaAdmin: '[preencher]', bodyText: notificationElectronicTemplate.split('\n').slice(1).join('\n') + (rx.bodyText.trim() ? `\nTexto anterior para revisão do prescritor (remova este rótulo após conferir):\n${rx.bodyText}` : '') }) });
+            }}>
+              Inserir campos da Notificação eletrônica (simulação)
             </button>
           )}
           {!isSigned && (

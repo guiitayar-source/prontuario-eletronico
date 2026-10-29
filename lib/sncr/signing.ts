@@ -18,6 +18,7 @@ import {
 import type { ClinicalDocument } from '../document-fields.ts';
 import { parsePrescriptionText } from '../document-fields.ts';
 import { rceSimulationPdf } from './rce-pdf.ts';
+import { notificationSimulationPdf } from './notification-pdf.ts';
 
 export interface ArtifactStore {
   put(path: string, bytes: Uint8Array): Promise<void>;
@@ -28,6 +29,8 @@ export const sha256 = (bytes: Uint8Array) =>
 export async function simulationPdf(doc: ClinicalDocument) {
   if (doc.kind === 'Receita' && parsePrescriptionText(doc.text).modality === 'controle_especial')
     return rceSimulationPdf(doc);
+  if (doc.kind === 'Receita' && ['notificacao_a', 'notificacao_b', 'notificacao_b2'].includes(parsePrescriptionText(doc.text).modality))
+    return notificationSimulationPdf(doc);
   const bytes = await documentPdf(doc, { isDraft: true });
   const pdf = await PDFDocument.load(bytes);
   const font = await pdf.embedFont(StandardFonts.HelveticaBold);
