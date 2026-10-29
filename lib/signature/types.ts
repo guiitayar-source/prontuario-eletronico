@@ -317,6 +317,18 @@ export interface PadesVerificationOptions {
   ocspResponderCerts?: unknown[];
   ocspResponderPems?: string[];
   revocationEvidenceSourcePolicy?: RevocationEvidenceSourcePolicy;
+  /**
+   * Política de frescor da evidência de revogação (6F.2C-R; ver `RevocationFreshnessContext`).
+   * - `gracePeriodSeconds` (padrão 0): na validação histórica, a evidência de não revogação
+   *   precisa ter sido emitida em/depois de `poeTime + gracePeriodSeconds`.
+   * - `maxAgeSeconds` (padrão: sem limite além de nextUpdate): idade máxima na validação atual.
+   * - `maxAgeWithoutNextUpdateSeconds` (padrão 86400): validade de OCSP sem nextUpdate.
+   */
+  revocationFreshness?: {
+    gracePeriodSeconds?: number;
+    maxAgeSeconds?: number;
+    maxAgeWithoutNextUpdateSeconds?: number;
+  };
   requireFullTrust?: boolean;
 }
 

@@ -1375,8 +1375,15 @@ export async function evaluateTemporalValidityAndPoe(
 
   // 4. If we have at least one trusted POE, evaluate the earliest trusted POE against signer validity
   if (trustedPoeCandidates.length > 0) {
+    // 6F.2C-R: entre POEs confiáveis, prefere as completas (TSA com revogação comprovada ou POE
+    // externa autenticada); só então a mais antiga. Uma POE incompleta mais antiga não pode
+    // esconder uma completa posterior.
+    const isComplete = (c: (typeof trustedPoeCandidates)[number]) =>
+      c.poeSource === 'EXTERNAL_POE' || c.diag.tsaTrustComplete === true;
     trustedPoeCandidates.sort(
-      (a, b) => a.poeTime.getTime() - b.poeTime.getTime(),
+      (a, b) =>
+        Number(isComplete(b)) - Number(isComplete(a)) ||
+        a.poeTime.getTime() - b.poeTime.getTime(),
     );
     const bestPoe = trustedPoeCandidates[0];
     const poeTime = bestPoe.poeTime;

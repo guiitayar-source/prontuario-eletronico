@@ -1145,7 +1145,12 @@ export class PadesService {
             claimedSigningTime: primaryClaimedSigningTime,
             verificationTime,
             options,
-            tsaRevocationSummaries: temporalValidity.tsaRevocationSummaries,
+            // 6F.2C-R: só a TSA da POE efetivamente usada interessa à revogação do documento.
+            tsaRevocationSummaries:
+              temporalValidity.poeSource === 'RFC3161_SIGNATURE_TIMESTAMP' ||
+              temporalValidity.poeSource === 'RFC3161_DOC_TIMESTAMP'
+                ? temporalValidity.tsaRevocationSummaries
+                : undefined,
           })
         : {
             status: 'INDETERMINATE',

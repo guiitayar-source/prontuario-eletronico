@@ -657,10 +657,110 @@ function parseEntryReasonAndInvalidity(
   };
 }
 
+/**
+ * Política de frescor (Lote 6F.2C-R) — ver docs/auditorias/6f2c/CORRECAO-6F2C-R.md.
+ *
+ * - CURRENT (sem POE confiável completa; referência = instante da verificação): a evidência de
+ *   não revogação precisa estar vigente agora — `thisUpdate ≤ agora ≤ nextUpdate`
+ *   (RFC 5280 §6.3.3; RFC 6960 §4.2.2.1). OCSP sem nextUpdate vale até `maxAgeWithoutNextUpdateMs`
+ *   após thisUpdate. Se `maxAgeMs` for definido, limita a idade de qualquer evidência
+ *   (ETSI EN 319 102-1 §5.2.5.4, "maximum accepted revocation freshness").
+ * - HISTORICAL (POE confiável completa; referência = poeTime): só prova não revogação na POE a
+ *   evidência emitida em/depois de `poeTime + gracePeriodMs` e antes do vencimento do certificado.
+ *   Ela NÃO precisa estar vigente no instante da verificação (validação de longo prazo).
+ *   Evidência emitida antes da POE nunca comprova GOOD na POE, ainda que siga vigente.
+ * - COVERING_OR_LATER: uso interno (status do respondente OCSP delegado em producedAt): aceita
+ *   evidência vigente em `ref` ou emitida depois dele.
+ *
+ * Evidência de revogação/suspensão é fato autêntico e não depende de frescor.
+ */
+export interface RevocationFreshnessContext {
+  mode: 'CURRENT' | 'HISTORICAL' | 'COVERING_OR_LATER';
+  gracePeriodMs: number;
+  maxAgeMs?: number;
+  maxAgeWithoutNextUpdateMs: number;
+}
+
+export const DEFAULT_OCSP_MAX_AGE_WITHOUT_NEXT_UPDATE_SECONDS = 24 * 60 * 60;
+
+export function freshnessContextFromOptions(
+  options: PadesVerificationOptions,
+  mode: RevocationFreshnessContext['mode'],
+): RevocationFreshnessContext {
+  const f = options.revocationFreshness ?? {};
+  const seconds = (v: number | undefined, fallback?: number) =>
+    typeof v === 'number' && Number.isFinite(v) && v >= 0
+      ? v * 1000
+      : fallback === undefined
+        ? undefined
+        : fallback * 1000;
+  return {
+    mode,
+    gracePeriodMs: seconds(f.gracePeriodSeconds, 0)!,
+    maxAgeMs: seconds(f.maxAgeSeconds),
+    maxAgeWithoutNextUpdateMs: seconds(
+      f.maxAgeWithoutNextUpdateSeconds,
+      DEFAULT_OCSP_MAX_AGE_WITHOUT_NEXT_UPDATE_SECONDS,
+    )!,
+  };
+}
+
+/**
+ * Decide se uma evidência AUTÊNTICA de "não revogado" comprova o estado no instante de referência.
+ * Retorna `null` quando comprova, ou a explicação de por que não comprova.
+ */
+function goodEvidenceFreshnessProblem(params: {
+  thisUpdate: Date;
+  nextUpdate?: Date;
+  referenceTime: Date;
+  verificationTime: Date;
+  targetValidTo: Date;
+  freshness: RevocationFreshnessContext;
+}): string | null {
+  const { thisUpdate, nextUpdate, referenceTime, verificationTime, freshness } =
+    params;
+  // A AC pode retirar da lista certificados vencidos: evidência posterior ao vencimento não prova nada.
+  if (thisUpdate > params.targetValidTo)
+    return `emitida (${thisUpdate.toISOString()}) depois do vencimento do certificado (${params.targetValidTo.toISOString()})`;
+
+  const coversReference =
+    thisUpdate <= referenceTime &&
+    (nextUpdate
+      ? referenceTime <= nextUpdate
+      : referenceTime.getTime() - thisUpdate.getTime() <=
+        freshness.maxAgeWithoutNextUpdateMs);
+
+  if (freshness.mode === 'CURRENT') {
+    if (!coversReference)
+      return `não vigente no instante da verificação (${referenceTime.toISOString()})`;
+    if (
+      freshness.maxAgeMs !== undefined &&
+      verificationTime.getTime() - thisUpdate.getTime() > freshness.maxAgeMs
+    )
+      return `mais antiga que a idade máxima aceita (${Math.round(freshness.maxAgeMs / 1000)} s)`;
+    return null;
+  }
+
+  const issuedAfterReference =
+    thisUpdate.getTime() >= referenceTime.getTime() + freshness.gracePeriodMs;
+  if (freshness.mode === 'HISTORICAL') {
+    return issuedAfterReference
+      ? null
+      : `emitida (${thisUpdate.toISOString()}) antes de POE + carência (${new Date(referenceTime.getTime() + freshness.gracePeriodMs).toISOString()}); não comprova a ausência de revogação na POE`;
+  }
+  return coversReference || thisUpdate >= referenceTime
+    ? null
+    : `não cobre o instante de referência (${referenceTime.toISOString()})`;
+}
+
 export interface SingleEvidenceEvaluation {
   source: 'CRL' | 'OCSP';
   matchKind:
     | 'MATCHED_VALID'
+    /** Autêntica e aplicável, mas não comprova não revogação no instante de referência. */
+    | 'NOT_FRESH'
+    /** Resposta sem conteúdo autenticado (ex.: OCSP tryLater): não é evidência. */
+    | 'UNAVAILABLE'
     | 'SCOPE_INCOMPATIBLE'
     | 'INVALID_EVIDENCE'
     | 'UNRELATED_ISSUER';
@@ -686,7 +786,7 @@ export async function evaluateCrlForCertificate(params: {
   issuerNode: ParsedX509Node;
   referenceTime: Date;
   verificationTime: Date;
-  hasHistoricalPoeReference: boolean;
+  freshness: RevocationFreshnessContext;
 }): Promise<SingleEvidenceEvaluation> {
   const {
     rawCrl,
@@ -694,7 +794,7 @@ export async function evaluateCrlForCertificate(params: {
     issuerNode,
     referenceTime,
     verificationTime,
-    hasHistoricalPoeReference,
+    freshness,
   } = params;
 
   let der: Buffer;
@@ -1012,32 +1112,27 @@ export async function evaluateCrlForCertificate(params: {
     serialNumbersEqual(entry.userCertificate, targetNode.pkiCert.serialNumber),
   );
 
-  // Validate temporal freshness for the reference date
-  const coversReferenceDirectly =
-    thisUpdate <= referenceTime && referenceTime <= nextUpdate;
-  const coversAtVerificationAfterReference =
-    hasHistoricalPoeReference &&
-    referenceTime <= thisUpdate &&
-    thisUpdate <= verificationTime &&
-    verificationTime <= nextUpdate &&
-    (matchingEntry !== undefined || thisUpdate <= targetNode.validTo);
-
-  // Also ensure that if not revoked, the CRL was not issued after targetNode expired (RFC 5280 §5)
-  const validBeforeTargetExpiryForGood =
-    matchingEntry !== undefined || thisUpdate <= targetNode.validTo;
-
-  if (
-    (!coversReferenceDirectly && !coversAtVerificationAfterReference) ||
-    !validBeforeTargetExpiryForGood
-  ) {
-    return {
-      source: 'CRL',
-      matchKind: 'INVALID_EVIDENCE',
+  if (!matchingEntry) {
+    // Frescor só se aplica à prova de NÃO revogação (política em RevocationFreshnessContext).
+    const problem = goodEvidenceFreshnessProblem({
       thisUpdate,
       nextUpdate,
-      subIndication: 'REVOCATION_EVIDENCE_INVALID',
-      error: `CRL vencida ou inadequada para a data de referência (${referenceTime.toISOString()}): janela [${thisUpdate.toISOString()}, ${nextUpdate.toISOString()}].`,
-    };
+      referenceTime,
+      verificationTime,
+      targetValidTo: targetNode.validTo,
+      freshness,
+    });
+    if (problem) {
+      return {
+        source: 'CRL',
+        matchKind: 'NOT_FRESH',
+        certStatus: 'GOOD',
+        thisUpdate,
+        nextUpdate,
+        subIndication: 'TRY_LATER',
+        error: `CRL autêntica sem frescor suficiente para "${targetNode.commonName}": ${problem}.`,
+      };
+    }
   }
 
   if (!matchingEntry) {
@@ -1060,6 +1155,16 @@ export async function evaluateCrlForCertificate(params: {
       nextUpdate,
       subIndication: 'REVOCATION_EVIDENCE_INVALID',
       error: 'Entrada de revogação na CRL possui revocationDate inválido.',
+    };
+  }
+  if (revokedAt > thisUpdate) {
+    return {
+      source: 'CRL',
+      matchKind: 'INVALID_EVIDENCE',
+      thisUpdate,
+      nextUpdate,
+      subIndication: 'REVOCATION_EVIDENCE_INVALID',
+      error: 'Entrada de revogação com revocationDate posterior ao thisUpdate da própria CRL.',
     };
   }
 
@@ -1121,6 +1226,7 @@ async function ocspResponderStatusFromCrls(params: {
   rawCrls: Array<Buffer | Uint8Array | string>;
   producedAt: Date;
   verificationTime: Date;
+  freshness: RevocationFreshnessContext;
 }): Promise<'GOOD' | 'REVOKED' | 'UNKNOWN'> {
   let sawGood = false;
   for (const rawCrl of params.rawCrls) {
@@ -1130,14 +1236,17 @@ async function ocspResponderStatusFromCrls(params: {
       issuerNode: params.issuerNode,
       referenceTime: params.producedAt,
       verificationTime: params.verificationTime,
-      hasHistoricalPoeReference: true,
+      freshness: { ...params.freshness, mode: 'COVERING_OR_LATER' },
     });
     if (evalRes.matchKind !== 'MATCHED_VALID') continue;
     if (
       (evalRes.certStatus === 'REVOKED' ||
         evalRes.certStatus === 'CERTIFICATE_HOLD') &&
       evalRes.revokedAt &&
-      evalRes.revokedAt <= params.producedAt
+      // Chave do respondente comprometida torna qualquer producedAt suspeito (pode ser retroativo).
+      (requiresConservativeRevocationTime(evalRes.reasonCode) ||
+        effectiveRevocationTime(evalRes.revokedAt, evalRes.invalidityDate) <=
+          params.producedAt)
     ) {
       return 'REVOKED';
     }
@@ -1164,7 +1273,7 @@ export async function evaluateOcspForCertificate(params: {
   rawCrls?: Array<Buffer | Uint8Array | string>;
   referenceTime: Date;
   verificationTime: Date;
-  hasHistoricalPoeReference: boolean;
+  freshness: RevocationFreshnessContext;
 }): Promise<SingleEvidenceEvaluation> {
   const {
     rawOcsp,
@@ -1174,7 +1283,7 @@ export async function evaluateOcspForCertificate(params: {
     rawCrls = [],
     referenceTime,
     verificationTime,
-    hasHistoricalPoeReference,
+    freshness,
   } = params;
 
   let der: Buffer;
@@ -1212,12 +1321,14 @@ export async function evaluateOcspForCertificate(params: {
     const ocspResp = new pkijs.OCSPResponse({ schema: asn1.result });
     const statusCode = ocspResp.responseStatus.valueBlock.valueDec;
     if (statusCode === 3) {
+      // RFC 6960 §2.3: respostas de erro não são assinadas; não identificam certificado nem
+      // emissor e por isso não são evidência de nada (6F.2C-R).
       return {
         source: 'OCSP',
-        matchKind: 'MATCHED_VALID',
+        matchKind: 'UNAVAILABLE',
         certStatus: 'TRY_LATER',
         subIndication: 'TRY_LATER',
-        error: 'O servidor OCSP retornou status tryLater (3).',
+        error: 'O servidor OCSP retornou status tryLater (3), sem resposta assinada.',
       };
     }
     if (statusCode !== 0) {
@@ -1633,6 +1744,7 @@ export async function evaluateOcspForCertificate(params: {
       rawCrls,
       producedAt,
       verificationTime,
+      freshness,
     });
     if (responderStatus === 'REVOKED') {
       return {
@@ -1665,14 +1777,14 @@ export async function evaluateOcspForCertificate(params: {
       ? matchedSingleResponse.nextUpdate
       : undefined;
 
+  // nextUpdate é opcional (RFC 6960 §2.4); sem ele a política de frescor limita a idade.
   if (
     !(thisUpdate instanceof Date) ||
     Number.isNaN(thisUpdate.getTime()) ||
     thisUpdate.getTime() === defaultZeroDateMs ||
-    !nextUpdate ||
-    nextUpdate < thisUpdate ||
+    (nextUpdate !== undefined && nextUpdate < thisUpdate) ||
     producedAt < thisUpdate ||
-    producedAt > nextUpdate
+    (nextUpdate !== undefined && producedAt > nextUpdate)
   ) {
     return {
       source: 'OCSP',
@@ -1739,32 +1851,27 @@ export async function evaluateOcspForCertificate(params: {
 
   const statusTag = cs.idBlock.tagNumber;
 
-  // Validate freshness for referenceTime
-  const coversReferenceDirectly =
-    thisUpdate <= referenceTime && referenceTime <= nextUpdate;
-  const coversAtVerificationAfterReference =
-    hasHistoricalPoeReference &&
-    referenceTime <= thisUpdate &&
-    thisUpdate <= verificationTime &&
-    verificationTime <= nextUpdate &&
-    (statusTag === 1 || thisUpdate <= targetNode.validTo);
-
-  const validBeforeTargetExpiryForGood =
-    statusTag === 1 || thisUpdate <= targetNode.validTo;
-
-  if (
-    (!coversReferenceDirectly && !coversAtVerificationAfterReference) ||
-    !validBeforeTargetExpiryForGood
-  ) {
-    return {
-      source: 'OCSP',
-      matchKind: 'INVALID_EVIDENCE',
+  if (statusTag === 0) {
+    const problem = goodEvidenceFreshnessProblem({
       thisUpdate,
       nextUpdate,
-      producedAt,
-      subIndication: 'REVOCATION_EVIDENCE_INVALID',
-      error: `Resposta OCSP vencida ou inadequada para a data de referência (${referenceTime.toISOString()}): janela [${thisUpdate.toISOString()}, ${nextUpdate.toISOString()}].`,
-    };
+      referenceTime,
+      verificationTime,
+      targetValidTo: targetNode.validTo,
+      freshness,
+    });
+    if (problem) {
+      return {
+        source: 'OCSP',
+        matchKind: 'NOT_FRESH',
+        certStatus: 'GOOD',
+        thisUpdate,
+        nextUpdate,
+        producedAt,
+        subIndication: 'TRY_LATER',
+        error: `Resposta OCSP autêntica sem frescor suficiente para "${targetNode.commonName}": ${problem}.`,
+      };
+    }
   }
 
   if (statusTag === 0) {
@@ -1804,7 +1911,7 @@ export async function evaluateOcspForCertificate(params: {
         revokedAt = d;
       }
     }
-    if (!revokedAt) {
+    if (!revokedAt || revokedAt > producedAt) {
       return {
         source: 'OCSP',
         matchKind: 'INVALID_EVIDENCE',
@@ -1812,7 +1919,9 @@ export async function evaluateOcspForCertificate(params: {
         nextUpdate,
         producedAt,
         subIndication: 'REVOCATION_EVIDENCE_INVALID',
-        error: 'Campo revocationTime ausente ou inválido em RevokedInfo OCSP.',
+        error: revokedAt
+          ? 'revocationTime posterior ao producedAt da resposta OCSP.'
+          : 'Campo revocationTime ausente ou inválido em RevokedInfo OCSP.',
       };
     }
 
@@ -1872,6 +1981,8 @@ export async function evaluateSingleCertificateRevocation(params: {
   verificationTime: Date;
   hasTrustedCompletePoe: boolean;
   poeTime?: Date;
+  /** Política de frescor; padrão: HISTORICAL com POE confiável completa, senão CURRENT. */
+  freshness?: RevocationFreshnessContext;
   /** Informational only: signer-declared signingTime is never used as temporal proof. */
   claimedSigningTime?: Date;
   validationContext?: 'VERIFICATION' | 'LIVE_ISSUANCE';
@@ -1892,57 +2003,67 @@ export async function evaluateSingleCertificateRevocation(params: {
     poeTime,
     validationContext = 'VERIFICATION',
   } = params;
+  const freshness =
+    params.freshness ??
+    freshnessContextFromOptions(
+      {},
+      hasTrustedCompletePoe && poeTime ? 'HISTORICAL' : 'CURRENT',
+    );
 
   const isCaRole = role === 'SIGNER_CA' || role === 'TSA_CA';
-  const validEvaluations: SingleEvidenceEvaluation[] = [];
-  const scopeIncompatibleEvaluations: SingleEvidenceEvaluation[] = [];
-  const invalidEvaluations: SingleEvidenceEvaluation[] = [];
-  let sawCertIdMismatchOnOcsp = false;
-  let certIdMismatchError: string | undefined;
+  const isTsaRole = role === 'TSA_SIGNER' || role === 'TSA_CA';
+  const base = {
+    subject: targetNode.subject,
+    issuer: targetNode.issuer,
+    serialNumber: targetNode.serialNumber,
+    role,
+  };
 
+  const evaluations: SingleEvidenceEvaluation[] = [];
   for (const rawCrl of rawCrls) {
-    const res = await evaluateCrlForCertificate({
-      rawCrl,
-      targetNode,
-      issuerNode,
-      referenceTime,
-      verificationTime,
-      hasHistoricalPoeReference: hasTrustedCompletePoe,
-    });
-    if (res.matchKind === 'MATCHED_VALID') {
-      validEvaluations.push(res);
-    } else if (res.matchKind === 'SCOPE_INCOMPATIBLE') {
-      scopeIncompatibleEvaluations.push(res);
-    } else if (res.matchKind === 'INVALID_EVIDENCE') {
-      invalidEvaluations.push(res);
-    }
+    evaluations.push(
+      await evaluateCrlForCertificate({
+        rawCrl,
+        targetNode,
+        issuerNode,
+        referenceTime,
+        verificationTime,
+        freshness,
+      }),
+    );
+  }
+  for (const rawOcsp of rawOcspResponses) {
+    evaluations.push(
+      await evaluateOcspForCertificate({
+        rawOcsp,
+        targetNode,
+        issuerNode,
+        extraResponderCerts,
+        rawCrls,
+        referenceTime,
+        verificationTime,
+        freshness,
+      }),
+    );
   }
 
-  for (const rawOcsp of rawOcspResponses) {
-    const res = await evaluateOcspForCertificate({
-      rawOcsp,
-      targetNode,
-      issuerNode,
-      extraResponderCerts,
-      rawCrls,
-      referenceTime,
-      verificationTime,
-      hasHistoricalPoeReference: hasTrustedCompletePoe,
-    });
-    if (res.matchKind === 'MATCHED_VALID') {
-      validEvaluations.push(res);
-    } else if (res.matchKind === 'SCOPE_INCOMPATIBLE') {
-      scopeIncompatibleEvaluations.push(res);
-    } else if (res.matchKind === 'INVALID_EVIDENCE') {
-      invalidEvaluations.push(res);
-    } else if (
-      res.matchKind === 'UNRELATED_ISSUER' &&
-      res.subIndication === 'OCSP_CERT_ID_MISMATCH'
-    ) {
-      sawCertIdMismatchOnOcsp = true;
-      certIdMismatchError = res.error;
-    }
-  }
+  // 6F.2C-R: a ordem de apresentação das evidências nunca influencia o resultado nem a mensagem.
+  evaluations.sort(compareEvaluations);
+  const byKind = (kind: SingleEvidenceEvaluation['matchKind']) =>
+    evaluations.filter((e) => e.matchKind === kind);
+  const validEvaluations = byKind('MATCHED_VALID');
+  const notFreshEvaluations = byKind('NOT_FRESH');
+  const invalidEvaluations = byKind('INVALID_EVIDENCE');
+  const scopeIncompatibleEvaluations = byKind('SCOPE_INCOMPATIBLE');
+  const unavailableEvaluations = byKind('UNAVAILABLE');
+  const certIdMismatch = evaluations.find(
+    (e) =>
+      e.matchKind === 'UNRELATED_ISSUER' &&
+      e.subIndication === 'OCSP_CERT_ID_MISMATCH',
+  );
+  const unavailableSubIndication = isTsaRole
+    ? 'TSA_REVOCATION_UNAVAILABLE'
+    : 'REVOCATION_UNAVAILABLE';
 
   const usedCrl = validEvaluations.some((e) => e.source === 'CRL');
   const usedOcsp = validEvaluations.some((e) => e.source === 'OCSP');
@@ -1955,16 +2076,13 @@ export async function evaluateSingleCertificateRevocation(params: {
           ? 'OCSP'
           : 'NONE';
 
-  // If no valid evidence matched this certificate:
+  // No authentic, applicable and sufficient evidence for this certificate:
   if (validEvaluations.length === 0) {
     if (invalidEvaluations.length > 0) {
       const firstErr = invalidEvaluations[0];
       return {
         summary: {
-          subject: targetNode.subject,
-          issuer: targetNode.issuer,
-          serialNumber: targetNode.serialNumber,
-          role,
+          ...base,
           status: 'INVALID_EVIDENCE',
           source: 'NONE',
           thisUpdate: firstErr.thisUpdate,
@@ -1977,14 +2095,32 @@ export async function evaluateSingleCertificateRevocation(params: {
       };
     }
 
+    // Authentic "not revoked" evidence that is not fresh enough for the reference time
+    // (ETSI EN 319 102-1 §5.2.5.4: INDETERMINATE / TRY_LATER).
+    if (notFreshEvaluations.length > 0) {
+      const latest = notFreshEvaluations.reduce((a, b) =>
+        (b.thisUpdate?.getTime() ?? 0) > (a.thisUpdate?.getTime() ?? 0) ? b : a,
+      );
+      return {
+        summary: {
+          ...base,
+          status: 'INDETERMINATE',
+          source: 'NONE',
+          thisUpdate: latest.thisUpdate,
+          nextUpdate: latest.nextUpdate,
+          producedAt: latest.producedAt,
+          subIndication: 'TRY_LATER',
+          error: latest.error,
+        },
+        rejectedCount: 0,
+      };
+    }
+
     if (scopeIncompatibleEvaluations.length > 0) {
       const firstScope = scopeIncompatibleEvaluations[0];
       return {
         summary: {
-          subject: targetNode.subject,
-          issuer: targetNode.issuer,
-          serialNumber: targetNode.serialNumber,
-          role,
+          ...base,
           status: 'INDETERMINATE',
           source: 'NONE',
           thisUpdate: firstScope.thisUpdate,
@@ -1996,24 +2132,31 @@ export async function evaluateSingleCertificateRevocation(params: {
       };
     }
 
-    if (sawCertIdMismatchOnOcsp) {
+    if (unavailableEvaluations.length > 0) {
+      return {
+        summary: {
+          ...base,
+          status: 'INDETERMINATE',
+          source: 'NONE',
+          subIndication: 'TRY_LATER',
+          error: unavailableEvaluations[0].error,
+        },
+        rejectedCount: 0,
+      };
+    }
+
+    if (certIdMismatch) {
       // An OCSP response about another certificate/issuer is simply not applicable evidence
       // for this certificate (it may legitimately cover another chain member). It is never
       // accepted as substitute evidence; the status stays INDETERMINATE for lack of evidence.
       return {
         summary: {
-          subject: targetNode.subject,
-          issuer: targetNode.issuer,
-          serialNumber: targetNode.serialNumber,
-          role,
+          ...base,
           status: 'INDETERMINATE',
           source: 'NONE',
-          subIndication:
-            role === 'TSA_SIGNER' || role === 'TSA_CA'
-              ? 'TSA_REVOCATION_UNAVAILABLE'
-              : 'REVOCATION_UNAVAILABLE',
+          subIndication: unavailableSubIndication,
           error:
-            certIdMismatchError ||
+            certIdMismatch.error ||
             `Resposta OCSP refere-se a outro certificado ou emissor, não a "${targetNode.commonName}".`,
         },
         rejectedCount: 0,
@@ -2022,23 +2165,16 @@ export async function evaluateSingleCertificateRevocation(params: {
 
     return {
       summary: {
-        subject: targetNode.subject,
-        issuer: targetNode.issuer,
-        serialNumber: targetNode.serialNumber,
-        role,
+        ...base,
         status: 'INDETERMINATE',
         source: 'NONE',
-        subIndication:
-          role === 'TSA_SIGNER' || role === 'TSA_CA'
-            ? 'TSA_REVOCATION_UNAVAILABLE'
-            : 'REVOCATION_UNAVAILABLE',
+        subIndication: unavailableSubIndication,
         error: `Evidência de revogação (CRL/OCSP) ausente para "${targetNode.commonName}".`,
       },
       rejectedCount: 0,
     };
   }
 
-  // Analyze valid evaluations for status, contradictions, holds, unknown, and revocations
   const goodEvals = validEvaluations.filter((e) => e.certStatus === 'GOOD');
   const revokedEvals = validEvaluations.filter(
     (e) => e.certStatus === 'REVOKED',
@@ -2047,30 +2183,23 @@ export async function evaluateSingleCertificateRevocation(params: {
     (e) => e.certStatus === 'CERTIFICATE_HOLD',
   );
   const unknownEvals = validEvaluations.filter(
-    (e) => e.certStatus === 'UNKNOWN' || e.certStatus === 'TRY_LATER',
+    (e) => e.certStatus === 'UNKNOWN',
   );
 
-  // Detect contradictory authentic evidences:
-  // 1) One authentic evidence says GOOD at thisUpdate >= revokedAt of a permanent REVOKED evidence,
-  //    or GOOD and REVOKED/HOLD coexist for overlapping coverage, or
-  // 2) Two REVOKED evidences report different revocation timestamps or conflicting permanent vs hold status.
-  let hasContradictoryEvidence = false;
-  if (revokedEvals.length > 0 && goodEvals.length > 0) {
-    for (const rev of revokedEvals) {
-      for (const gd of goodEvals) {
-        // If a GOOD evidence was issued at or after the revocation date (or within the same window),
-        // it directly contradicts permanent X.509 revocation.
-        // NOTE: a GOOD evidence whose window merely overlaps revokedAt (thisUpdate < revokedAt < nextUpdate)
-        // is NOT contradictory: the revocation simply happened after that evidence was produced.
-        if (!rev.revokedAt || !gd.thisUpdate || gd.thisUpdate >= rev.revokedAt) {
-          hasContradictoryEvidence = true;
-        }
-      }
-    }
-  }
-  if (holdEvals.length > 0 && goodEvals.length > 0) {
-    hasContradictoryEvidence = true;
-  }
+  // Contradictory authentic evidence: a "not revoked" statement issued at/after a revocation or
+  // suspension date. Stale GOOD evidence counts too (it is authentic), except when issued after
+  // the certificate expired (the CA may legitimately drop expired entries).
+  const authenticGood = [
+    ...goodEvals,
+    ...notFreshEvaluations.filter(
+      (e) => e.thisUpdate && e.thisUpdate <= targetNode.validTo,
+    ),
+  ];
+  const goodIssuedAtOrAfter = (t: Date) =>
+    authenticGood.some((gd) => !gd.thisUpdate || gd.thisUpdate >= t);
+  let hasContradictoryEvidence =
+    revokedEvals.some((rev) => goodIssuedAtOrAfter(rev.revokedAt!)) ||
+    holdEvals.some((hold) => goodIssuedAtOrAfter(hold.revokedAt!));
   if (revokedEvals.length > 1) {
     const firstRevTime = revokedEvals[0].revokedAt?.getTime();
     const firstReason = revokedEvals[0].reasonCode;
@@ -2087,52 +2216,62 @@ export async function evaluateSingleCertificateRevocation(params: {
     }
   }
 
+  const graceMs = freshness.gracePeriodMs;
+  const poeProvesBefore = (t: Date): boolean =>
+    hasTrustedCompletePoe &&
+    poeTime !== undefined &&
+    poeTime.getTime() + graceMs < t.getTime();
+
   // Priority 1: Permanent revocation (`REVOKED`)
   if (revokedEvals.length > 0) {
-    // Choose the earliest revocation date among authentic revocation evidences
-    revokedEvals.sort(
-      (a, b) => (a.revokedAt?.getTime() ?? 0) - (b.revokedAt?.getTime() ?? 0),
-    );
-    const primaryRev = revokedEvals[0];
+    // Earliest effective revocation instant among authentic revocation evidences.
+    const primaryRev = [...revokedEvals].sort(
+      (a, b) =>
+        effectiveRevocationTime(a.revokedAt!, a.invalidityDate).getTime() -
+          effectiveRevocationTime(b.revokedAt!, b.invalidityDate).getTime() ||
+        a.revokedAt!.getTime() - b.revokedAt!.getTime() ||
+        (a.reasonCode ?? -1) - (b.reasonCode ?? -1),
+    )[0];
     const revokedAt = primaryRev.revokedAt!;
     const invalidityDate = primaryRev.invalidityDate;
     const reasonCode = primaryRev.reasonCode;
     const reasonName = primaryRev.reasonName;
+    // RFC 5280 §5.3.2: invalidityDate, when present, is the date the certificate became invalid,
+    // whatever the reason. The effective instant is the earliest of the two dates.
+    const effectiveAt = effectiveRevocationTime(revokedAt, invalidityDate);
     const isKeyCompromise =
       reasonCode === 1 || reasonCode === 2 || reasonCode === 10;
+    const conservativeReason = requiresConservativeRevocationTime(reasonCode);
+    const revFields = {
+      source,
+      thisUpdate: primaryRev.thisUpdate,
+      nextUpdate: primaryRev.nextUpdate,
+      producedAt: primaryRev.producedAt,
+      revokedAt,
+      invalidityDate,
+      reasonCode,
+      reasonName,
+      isHold: false,
+      isKeyCompromise,
+    };
 
     // Positive proof that the signature was created AT/AFTER revocationDate. Only:
     // - LIVE_ISSUANCE: the signature is being produced now (verificationTime) and authentic evidence
     //   shows the certificate was already revoked at or before verificationTime; or
     // - revokedAt <= notBefore: no valid signing instant ever existed for this certificate.
     // `revokedAt <= poeTime` is NEVER proof, since a POE only bounds creation from above.
-    const isSigningProvenAfterRevocation = (): boolean =>
-      (validationContext === 'LIVE_ISSUANCE' && revokedAt <= verificationTime) ||
+    const provenSignedAfterRevocation =
+      (validationContext === 'LIVE_ISSUANCE' &&
+        effectiveAt <= verificationTime) ||
       revokedAt <= targetNode.validFrom;
 
-    // If contradictory authentic evidence was supplied, never allow promotion to GOOD_AT_POE!
     if (hasContradictoryEvidence) {
-      // Check if it is proven that the signature was created at/after revocationDate
-      const provenSignedAfterRevocation = isSigningProvenAfterRevocation();
-
-      if (provenSignedAfterRevocation && role !== 'TSA_SIGNER' && role !== 'TSA_CA') {
+      if (provenSignedAfterRevocation && !isTsaRole) {
         return {
           summary: {
-            subject: targetNode.subject,
-            issuer: targetNode.issuer,
-            serialNumber: targetNode.serialNumber,
-            role,
+            ...base,
+            ...revFields,
             status: 'REVOKED_BEFORE_POE',
-            source,
-            thisUpdate: primaryRev.thisUpdate,
-            nextUpdate: primaryRev.nextUpdate,
-            producedAt: primaryRev.producedAt,
-            revokedAt,
-            invalidityDate,
-            reasonCode,
-            reasonName,
-            isHold: false,
-            isKeyCompromise,
             hasContradictoryEvidence: true,
             subIndication: isCaRole
               ? 'REVOKED_CA_BEFORE_POE'
@@ -2142,24 +2281,11 @@ export async function evaluateSingleCertificateRevocation(params: {
           rejectedCount: invalidEvaluations.length,
         };
       }
-
       return {
         summary: {
-          subject: targetNode.subject,
-          issuer: targetNode.issuer,
-          serialNumber: targetNode.serialNumber,
-          role,
+          ...base,
+          ...revFields,
           status: 'REVOKED_NO_POE',
-          source,
-          thisUpdate: primaryRev.thisUpdate,
-          nextUpdate: primaryRev.nextUpdate,
-          producedAt: primaryRev.producedAt,
-          revokedAt,
-          invalidityDate,
-          reasonCode,
-          reasonName,
-          isHold: false,
-          isKeyCompromise,
           hasContradictoryEvidence: true,
           subIndication: 'CONTRADICTORY_REVOCATION_EVIDENCE',
           error: `Evidências de revogação contraditórias para "${targetNode.commonName}" (conflito entre estado GOOD e REVOKED).`,
@@ -2168,174 +2294,72 @@ export async function evaluateSingleCertificateRevocation(params: {
       };
     }
 
-    // For TSA certificates: a timestamp token's genTime is self-declared by the TSA;
-    // without an external/subsequent POE over the timestamp token itself, any revocation of the TSA
-    // (especially revokedAt <= referenceTime, or keyCompromise, or no independent POE for the TSA)
-    // invalidates the TSA's complete trust.
-    if (role === 'TSA_SIGNER' || role === 'TSA_CA') {
+    // TSA certificates: genTime is self-declared by the TSA; without a POE over the timestamp
+    // token itself, any revocation of the TSA chain removes its trust (policy, see report A9).
+    if (isTsaRole) {
       return {
         summary: {
-          subject: targetNode.subject,
-          issuer: targetNode.issuer,
-          serialNumber: targetNode.serialNumber,
-          role,
+          ...base,
+          ...revFields,
           status:
-            revokedAt <= referenceTime ? 'REVOKED_BEFORE_POE' : 'REVOKED_NO_POE',
-          source,
-          thisUpdate: primaryRev.thisUpdate,
-          nextUpdate: primaryRev.nextUpdate,
-          producedAt: primaryRev.producedAt,
-          revokedAt,
-          invalidityDate,
-          reasonCode,
-          reasonName,
-          isHold: false,
-          isKeyCompromise,
-          subIndication:
-            role === 'TSA_CA' ? 'TSA_CA_REVOKED' : 'TSA_REVOKED',
+            effectiveAt <= referenceTime ? 'REVOKED_BEFORE_POE' : 'REVOKED_NO_POE',
+          subIndication: role === 'TSA_CA' ? 'TSA_CA_REVOKED' : 'TSA_REVOKED',
           error: `Certificado da cadeia da TSA ("${targetNode.commonName}") encontra-se revogado desde ${revokedAt.toISOString()}.`,
         },
         rejectedCount: invalidEvaluations.length,
       };
     }
 
-    // Fundamental Temporal Rule (Section 4 & ETSI EN 319 102-1):
-    // 1. Check if there is POSITIVE PROOF that the signature was performed AT or AFTER revocationDate:
-    //    - validationContext === 'LIVE_ISSUANCE' (signing live with an already-revoked cert), OR
-    //    - revokedAt <= targetNode.validFrom (revoked at or before certificate validity start), OR
-    //    NOTE: the signer-declared signingTime is NOT trusted time (ETSI EN 319 102-1) and is never used as proof.
-    //    NOTE: `revokedAt <= poeTime` alone NEVER proves the signature was created after `revokedAt`,
-    //    because POE only proves `t_sig <= poeTime`, NOT `t_sig == poeTime`!
-    const provenSignedAfterRevocation = isSigningProvenAfterRevocation();
-
     if (provenSignedAfterRevocation) {
       return {
         summary: {
-          subject: targetNode.subject,
-          issuer: targetNode.issuer,
-          serialNumber: targetNode.serialNumber,
-          role,
+          ...base,
+          ...revFields,
           status: 'REVOKED_BEFORE_POE',
-          source,
-          thisUpdate: primaryRev.thisUpdate,
-          nextUpdate: primaryRev.nextUpdate,
-          producedAt: primaryRev.producedAt,
-          revokedAt,
-          invalidityDate,
-          reasonCode,
-          reasonName,
-          isHold: false,
-          isKeyCompromise,
           subIndication: isCaRole
             ? 'REVOKED_CA_BEFORE_POE'
             : 'REVOKED_BEFORE_POE',
-          error: `Prova suficiente de que a assinatura foi realizada após a revogação de "${targetNode.commonName}" (${revokedAt.toISOString()}).`,
+          error: `Prova suficiente de que a assinatura foi realizada após a revogação de "${targetNode.commonName}" (${effectiveAt.toISOString()}).`,
         },
         rejectedCount: invalidEvaluations.length,
       };
     }
 
-    // 2. Check if a trusted, complete POE proves the signature already existed strictly BEFORE revocationDate (`poeTime < revokedAt`):
-    if (hasTrustedCompletePoe && poeTime && poeTime < revokedAt) {
-      // Policy for keyCompromise (1), cACompromise (2), aACompromise (10):
-      // When a key is compromised, the compromise may have occurred prior to the administrative revocationDate.
-      // Unless an explicit `invalidityDate` (2.5.29.24) is present and `poeTime < invalidityDate`,
-      // conservative policy preserves INDETERMINATE (`REVOKED_KEY_COMPROMISE`).
-      if (isKeyCompromise) {
-        if (invalidityDate && poeTime < invalidityDate) {
-          return {
-            summary: {
-              subject: targetNode.subject,
-              issuer: targetNode.issuer,
-              serialNumber: targetNode.serialNumber,
-              role,
-              status: 'GOOD_AT_POE',
-              source,
-              thisUpdate: primaryRev.thisUpdate,
-              nextUpdate: primaryRev.nextUpdate,
-              producedAt: primaryRev.producedAt,
-              revokedAt,
-              invalidityDate,
-              reasonCode,
-              reasonName,
-              isHold: false,
-              isKeyCompromise: true,
-            },
-            rejectedCount: invalidEvaluations.length,
-          };
-        }
-
+    // A trusted, complete POE proves `t_sig <= poeTime`; it suffices when
+    // `poeTime (+ grace) < effective revocation instant`.
+    if (poeProvesBefore(effectiveAt)) {
+      // keyCompromise / cACompromise / aACompromise / unrecognized reasons: the compromise may
+      // predate the administrative revocationDate. Only an explicit invalidityDate (already folded
+      // into effectiveAt) bounds it; without it the order stays unproven.
+      if (conservativeReason && !invalidityDate) {
         return {
           summary: {
-            subject: targetNode.subject,
-            issuer: targetNode.issuer,
-            serialNumber: targetNode.serialNumber,
-            role,
+            ...base,
+            ...revFields,
             status: 'REVOKED_NO_POE',
-            source,
-            thisUpdate: primaryRev.thisUpdate,
-            nextUpdate: primaryRev.nextUpdate,
-            producedAt: primaryRev.producedAt,
-            revokedAt,
-            invalidityDate,
-            reasonCode,
-            reasonName,
-            isHold: false,
-            isKeyCompromise: true,
             subIndication: 'REVOKED_KEY_COMPROMISE',
-            error: `Certificado "${targetNode.commonName}" revogado por comprometimento de chave (${reasonName}) sem prova de que a assinatura antecede a data efetiva do comprometimento.`,
+            error: `Certificado "${targetNode.commonName}" revogado por comprometimento de chave (${reasonName ?? 'motivo não reconhecido'}) sem invalidityDate que comprove que a assinatura antecede o comprometimento.`,
           },
           rejectedCount: invalidEvaluations.length,
         };
       }
-
-      // Non-compromise revocation with poeTime < revokedAt:
-      // Proven that `t_sig <= poeTime < revokedAt`!
       return {
-        summary: {
-          subject: targetNode.subject,
-          issuer: targetNode.issuer,
-          serialNumber: targetNode.serialNumber,
-          role,
-          status: 'GOOD_AT_POE',
-          source,
-          thisUpdate: primaryRev.thisUpdate,
-          nextUpdate: primaryRev.nextUpdate,
-          producedAt: primaryRev.producedAt,
-          revokedAt,
-          invalidityDate,
-          reasonCode,
-          reasonName,
-          isHold: false,
-          isKeyCompromise: false,
-        },
+        summary: { ...base, ...revFields, status: 'GOOD_AT_POE' },
         rejectedCount: invalidEvaluations.length,
       };
     }
 
-    // 3. Otherwise (either no trusted POE, or `revokedAt <= poeTime` without lower-bound proof that `t_sig >= revokedAt`):
-    // Order of events between signature creation and revocation is NOT proven -> INDETERMINATE!
+    // Otherwise (no trusted POE, or effective revocation <= poeTime): order of events between
+    // signature creation and revocation is NOT proven -> INDETERMINATE.
     return {
       summary: {
-        subject: targetNode.subject,
-        issuer: targetNode.issuer,
-        serialNumber: targetNode.serialNumber,
-        role,
+        ...base,
+        ...revFields,
         status: 'REVOKED_NO_POE',
-        source,
-        thisUpdate: primaryRev.thisUpdate,
-        nextUpdate: primaryRev.nextUpdate,
-        producedAt: primaryRev.producedAt,
-        revokedAt,
-        invalidityDate,
-        reasonCode,
-        reasonName,
-        isHold: false,
-        isKeyCompromise,
         subIndication: isCaRole ? 'REVOKED_CA_NO_POE' : 'REVOKED_NO_POE',
         error: poeTime
-          ? `Certificado "${targetNode.commonName}" revogado em ${revokedAt.toISOString()} (<= poeTime ${poeTime.toISOString()}); como a POE comprova apenas que a assinatura existia até poeTime e não o instante exato de sua criação, a ordem temporal permanece INDETERMINATE.`
-          : `Certificado "${targetNode.commonName}" revogado em ${revokedAt.toISOString()} sem Prova de Existência (POE) confiável anterior à revogação.`,
+          ? `Certificado "${targetNode.commonName}" revogado com efeito em ${effectiveAt.toISOString()} (<= poeTime ${poeTime.toISOString()}); como a POE comprova apenas que a assinatura existia até poeTime e não o instante exato de sua criação, a ordem temporal permanece INDETERMINATE.`
+          : `Certificado "${targetNode.commonName}" revogado com efeito em ${effectiveAt.toISOString()} sem Prova de Existência (POE) confiável anterior à revogação.`,
       },
       rejectedCount: invalidEvaluations.length,
     };
@@ -2343,26 +2367,35 @@ export async function evaluateSingleCertificateRevocation(params: {
 
   // Priority 2: Certificate Suspension (`CERTIFICATE_HOLD`, reasonCode === 6)
   if (holdEvals.length > 0) {
-    const primaryHold = holdEvals[0];
+    const primaryHold = [...holdEvals].sort(
+      (a, b) =>
+        effectiveRevocationTime(a.revokedAt!, a.invalidityDate).getTime() -
+        effectiveRevocationTime(b.revokedAt!, b.invalidityDate).getTime(),
+    )[0];
     const holdAt = primaryHold.revokedAt!;
+    const holdEffective = effectiveRevocationTime(
+      holdAt,
+      primaryHold.invalidityDate,
+    );
+    const holdFields = {
+      source,
+      thisUpdate: primaryHold.thisUpdate,
+      nextUpdate: primaryHold.nextUpdate,
+      producedAt: primaryHold.producedAt,
+      revokedAt: holdAt,
+      invalidityDate: primaryHold.invalidityDate,
+      reasonCode: 6,
+      reasonName: 'certificateHold' as const,
+      isHold: true,
+      isKeyCompromise: false,
+    };
 
     if (hasContradictoryEvidence) {
       return {
         summary: {
-          subject: targetNode.subject,
-          issuer: targetNode.issuer,
-          serialNumber: targetNode.serialNumber,
-          role,
+          ...base,
+          ...holdFields,
           status: 'CERTIFICATE_HOLD',
-          source,
-          thisUpdate: primaryHold.thisUpdate,
-          nextUpdate: primaryHold.nextUpdate,
-          producedAt: primaryHold.producedAt,
-          revokedAt: holdAt,
-          reasonCode: 6,
-          reasonName: 'certificateHold',
-          isHold: true,
-          isKeyCompromise: false,
           hasContradictoryEvidence: true,
           subIndication: 'CONTRADICTORY_REVOCATION_EVIDENCE',
           error: `Evidências contraditórias entre suspensão (certificateHold) e estado GOOD para "${targetNode.commonName}".`,
@@ -2371,51 +2404,19 @@ export async function evaluateSingleCertificateRevocation(params: {
       };
     }
 
-    if (
-      hasTrustedCompletePoe &&
-      poeTime &&
-      poeTime < holdAt &&
-      role !== 'TSA_SIGNER' &&
-      role !== 'TSA_CA'
-    ) {
+    if (poeProvesBefore(holdEffective) && !isTsaRole) {
       return {
-        summary: {
-          subject: targetNode.subject,
-          issuer: targetNode.issuer,
-          serialNumber: targetNode.serialNumber,
-          role,
-          status: 'GOOD_AT_POE',
-          source,
-          thisUpdate: primaryHold.thisUpdate,
-          nextUpdate: primaryHold.nextUpdate,
-          producedAt: primaryHold.producedAt,
-          revokedAt: holdAt,
-          reasonCode: 6,
-          reasonName: 'certificateHold',
-          isHold: true,
-          isKeyCompromise: false,
-        },
+        summary: { ...base, ...holdFields, status: 'GOOD_AT_POE' },
         rejectedCount: invalidEvaluations.length,
       };
     }
 
-    // Per ETSI EN 319 102-1 §5.2.5.4: a certificate on hold (`certificateHold`) without prior POE yields INDETERMINATE / TRY_LATER
+    // Per ETSI EN 319 102-1 §5.2.5.4: a certificate on hold without prior POE yields INDETERMINATE / TRY_LATER
     return {
       summary: {
-        subject: targetNode.subject,
-        issuer: targetNode.issuer,
-        serialNumber: targetNode.serialNumber,
-        role,
+        ...base,
+        ...holdFields,
         status: 'CERTIFICATE_HOLD',
-        source,
-        thisUpdate: primaryHold.thisUpdate,
-        nextUpdate: primaryHold.nextUpdate,
-        producedAt: primaryHold.producedAt,
-        revokedAt: holdAt,
-        reasonCode: 6,
-        reasonName: 'certificateHold',
-        isHold: true,
-        isKeyCompromise: false,
         subIndication: 'TRY_LATER',
         error: `Certificado "${targetNode.commonName}" encontra-se suspenso (certificateHold) desde ${holdAt.toISOString()}; validação retorna INDETERMINATE (TRY_LATER).`,
       },
@@ -2423,45 +2424,34 @@ export async function evaluateSingleCertificateRevocation(params: {
     };
   }
 
-  // Priority 3: Only UNKNOWN / TRY_LATER evaluations (and no GOOD evaluation)
-  if (goodEvals.length === 0 && unknownEvals.length > 0) {
+  // Priority 3: Only UNKNOWN evaluations (and no GOOD evaluation)
+  if (goodEvals.length === 0) {
     const firstUnknown = unknownEvals[0];
     return {
       summary: {
-        subject: targetNode.subject,
-        issuer: targetNode.issuer,
-        serialNumber: targetNode.serialNumber,
-        role,
+        ...base,
         status: 'INDETERMINATE',
         source,
-        thisUpdate: firstUnknown.thisUpdate,
-        nextUpdate: firstUnknown.nextUpdate,
-        producedAt: firstUnknown.producedAt,
-        subIndication:
-          firstUnknown.certStatus === 'TRY_LATER'
-            ? 'TRY_LATER'
-            : 'OCSP_STATUS_UNKNOWN',
+        thisUpdate: firstUnknown?.thisUpdate,
+        nextUpdate: firstUnknown?.nextUpdate,
+        producedAt: firstUnknown?.producedAt,
+        subIndication: 'OCSP_STATUS_UNKNOWN',
         error:
-          firstUnknown.error ||
-          `Estado de revogação desconhecido (OCSP unknown/tryLater) para "${targetNode.commonName}".`,
+          firstUnknown?.error ||
+          `Estado de revogação desconhecido (OCSP unknown) para "${targetNode.commonName}".`,
       },
       rejectedCount: invalidEvaluations.length,
     };
   }
 
-  // If UNKNOWN and GOOD coexist for the same certificate, treat as valid GOOD only if not contradictory,
-  // or if GOOD is proven by a complete CRL/OCSP.
-  const bestGood = goodEvals[0];
-  const goodStatus =
-    hasTrustedCompletePoe && poeTime ? 'GOOD_AT_POE' : 'GOOD';
-
+  // Fresh, authentic GOOD evidence (UNKNOWN from another source does not override it).
+  const bestGood = goodEvals.reduce((a, b) =>
+    (b.thisUpdate?.getTime() ?? 0) > (a.thisUpdate?.getTime() ?? 0) ? b : a,
+  );
   return {
     summary: {
-      subject: targetNode.subject,
-      issuer: targetNode.issuer,
-      serialNumber: targetNode.serialNumber,
-      role,
-      status: goodStatus,
+      ...base,
+      status: freshness.mode === 'HISTORICAL' ? 'GOOD_AT_POE' : 'GOOD',
       source,
       thisUpdate: bestGood.thisUpdate,
       nextUpdate: bestGood.nextUpdate,
@@ -2472,6 +2462,68 @@ export async function evaluateSingleCertificateRevocation(params: {
 }
 
 /**
+ * Instante efetivo de revogação: o menor entre revocationDate e invalidityDate
+ * (RFC 5280 §5.3.2), qualquer que seja o motivo.
+ */
+export function effectiveRevocationTime(
+  revokedAt: Date,
+  invalidityDate?: Date,
+): Date {
+  return invalidityDate && invalidityDate < revokedAt
+    ? invalidityDate
+    : revokedAt;
+}
+
+/**
+ * Motivos em que o comprometimento pode anteceder a data administrativa de revogação:
+ * keyCompromise (1), cACompromise (2), aACompromise (10) e códigos não reconhecidos (7, > 10).
+ */
+export function requiresConservativeRevocationTime(
+  reasonCode: number | undefined,
+): boolean {
+  if (reasonCode === undefined) return false;
+  return (
+    reasonCode === 1 ||
+    reasonCode === 2 ||
+    reasonCode === 10 ||
+    mapCrlReasonCodeToName(reasonCode) === 'unknown'
+  );
+}
+
+const EVALUATION_KIND_ORDER: Record<SingleEvidenceEvaluation['matchKind'], number> = {
+  MATCHED_VALID: 0,
+  NOT_FRESH: 1,
+  INVALID_EVIDENCE: 2,
+  SCOPE_INCOMPATIBLE: 3,
+  UNAVAILABLE: 4,
+  UNRELATED_ISSUER: 5,
+};
+
+/** Ordem total e estável, independente da ordem em que as evidências foram fornecidas. */
+function compareEvaluations(
+  a: SingleEvidenceEvaluation,
+  b: SingleEvidenceEvaluation,
+): number {
+  const key = (e: SingleEvidenceEvaluation) =>
+    [
+      String(EVALUATION_KIND_ORDER[e.matchKind]),
+      e.source,
+      e.certStatus ?? '',
+      e.thisUpdate?.toISOString() ?? '',
+      e.revokedAt?.toISOString() ?? '',
+      e.invalidityDate?.toISOString() ?? '',
+      String(e.reasonCode ?? ''),
+      e.producedAt?.toISOString() ?? '',
+      e.subIndication ?? '',
+      e.error ?? '',
+    ].join('|');
+  const ka = key(a);
+  const kb = key(b);
+  return ka < kb ? -1 : ka > kb ? 1 : 0;
+}
+
+/**
+
  * Evaluates revocation across all non-root certificates in a TSA certification chain
  * (`[tsaSignerNode, ...tsaIntermediates, tsaRootAnchor]`) at `genTime` / `verificationTime`.
  *
@@ -2566,6 +2618,8 @@ export async function evaluateTsaChainRevocation(params: {
       verificationTime,
       hasTrustedCompletePoe: true,
       poeTime: genTime,
+      // genTime é a referência histórica da própria TSA: exige evidência emitida depois dele.
+      freshness: freshnessContextFromOptions(options, 'HISTORICAL'),
       validationContext: options.validationContext,
     });
 
@@ -2761,6 +2815,10 @@ export async function evaluateDocumentRevocation(params: {
         verificationTime,
         hasTrustedCompletePoe,
         poeTime: effectivePoeTime,
+        freshness: freshnessContextFromOptions(
+          options,
+          hasTrustedCompletePoe ? 'HISTORICAL' : 'CURRENT',
+        ),
         claimedSigningTime,
         validationContext: options.validationContext,
       });
