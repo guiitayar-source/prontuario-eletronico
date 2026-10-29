@@ -8,7 +8,8 @@
 // Proteções (CORRECAO-6F2C-R.md, Fase 3):
 // - endereços só de CDP/AIA de certificados de uma cadeia já validada até uma raiz ICP-Brasil
 //   oficial (icp-brasil-certs.ts);
-// - só http/https, sem credenciais na URL, portas 80/443 e hosts da allowlist;
+// - qualquer host do CDP/AIA dessa cadeia, salvo nomes internos e a lista de bloqueio opcional
+//   (PSYWRITE_REVOCATION_BLOCKED_HOSTS); só http/https, portas 80/443, sem credenciais nem IP;
 // - DNS resolvido aqui, com recusa de IP privado, loopback, link-local, CGNAT, metadados de
 //   nuvem e afins; a conexão usa o IP conferido (sem nova resolução, contra DNS rebinding);
 // - redirecionamento manual, no máximo 2, cada destino conferido de novo;
@@ -43,32 +44,26 @@ const OID_AUTHORITY_INFO_ACCESS = '1.3.6.1.5.5.7.1.1';
 const OID_AD_OCSP = '1.3.6.1.5.5.7.48.1';
 
 /**
- * Domínios dos CDP/AIA dos certificados oficiais em icp-brasil-certs.ts (raiz e ACs de 1º nível),
- * levantados em 29/10/2026. O teste tests/revocation-fetch.test.mjs confere que todo host
- * daqueles certificados continua coberto. Hosts adicionais: PSYWRITE_REVOCATION_EXTRA_HOSTS
- * (lista separada por vírgula; cada item vale para o domínio e seus subdomínios).
+ * Nomes que nunca são consultados, qualquer que seja o certificado: rede interna por convenção.
+ * O bloqueio de IP após o DNS continua sendo a proteção principal.
  */
-export const ICP_BRASIL_REVOCATION_HOST_SUFFIXES: readonly string[] = [
-  'icpbrasil.gov.br',
-  'acraiz.gov.br',
-  'acsoluti.com.br',
-  'serpro.gov.br',
-  'certisign.com.br',
-  'outralcr.com.br',
-  'syngularid.com.br',
-  'validcertificadora.com.br',
-  'acjus.jus.br',
-  'certificados.com.br',
-  'certificadodigital.com.br',
-  'prodesp.sp.gov.br',
-  'acdigital.com.br',
-  'acsafeweb.com.br',
-  'digitalsigncertificadora.com.br',
-  'receita.fazenda.gov.br',
+const INTERNAL_HOST_SUFFIXES: readonly string[] = [
+  'localhost',
+  'local',
+  'internal',
+  'intranet',
+  'lan',
+  'home.arpa',
 ];
 
 export interface RevocationFetchPolicy {
-  allowedHostSuffixes: readonly string[];
+  /**
+   * Restrição opcional de hosts. Ausente (padrão), vale qualquer host que conste no CDP/AIA de
+   * um certificado cuja cadeia já foi validada até uma raiz ICP-Brasil oficial.
+   */
+  allowedHostSuffixes?: readonly string[];
+  /** Hosts nunca consultados (PSYWRITE_REVOCATION_BLOCKED_HOSTS, separados por vírgula). */
+  blockedHostSuffixes: readonly string[];
   allowedPorts: readonly number[];
   maxCrlBytes: number;
   maxOcspBytes: number;
@@ -86,12 +81,12 @@ export interface RevocationFetchPolicy {
 export function defaultRevocationFetchPolicy(
   env: Record<string, string | undefined> = process.env,
 ): RevocationFetchPolicy {
-  const extra = (env.PSYWRITE_REVOCATION_EXTRA_HOSTS || '')
+  const blocked = (env.PSYWRITE_REVOCATION_BLOCKED_HOSTS || '')
     .split(',')
     .map((h) => normalizeHost(h))
-    .filter((h): h is string => Boolean(h) && !net.isIP(h!));
+    .filter((h): h is string => Boolean(h));
   return {
-    allowedHostSuffixes: [...ICP_BRASIL_REVOCATION_HOST_SUFFIXES, ...extra],
+    blockedHostSuffixes: blocked,
     allowedPorts: [80, 443],
     maxCrlBytes: 10 * 1024 * 1024,
     maxOcspBytes: 64 * 1024,
@@ -116,7 +111,10 @@ export type UrlCheck = { ok: true; url: URL } | { ok: false; reason: string };
 
 export function checkRevocationUrl(
   raw: string,
-  policy: Pick<RevocationFetchPolicy, 'allowedHostSuffixes' | 'allowedPorts'>,
+  policy: Pick<
+    RevocationFetchPolicy,
+    'allowedHostSuffixes' | 'blockedHostSuffixes' | 'allowedPorts'
+  >,
   base?: URL,
 ): UrlCheck {
   let url: URL;
@@ -140,10 +138,14 @@ export function checkRevocationUrl(
   if (net.isIP(bare)) return { ok: false, reason: 'IP literal na URL' };
   const host = normalizeHost(bare);
   if (!host) return { ok: false, reason: 'host inválido' };
-  const allowed = policy.allowedHostSuffixes.some(
-    (suffix) => host === suffix || host.endsWith(`.${suffix}`),
-  );
-  if (!allowed) return { ok: false, reason: `host fora da lista (${host})` };
+  const under = (suffixes: readonly string[]) =>
+    suffixes.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+  if (!host.includes('.') || under(INTERNAL_HOST_SUFFIXES))
+    return { ok: false, reason: `host interno (${host})` };
+  if (under(policy.blockedHostSuffixes))
+    return { ok: false, reason: `host bloqueado (${host})` };
+  if (policy.allowedHostSuffixes && !under(policy.allowedHostSuffixes))
+    return { ok: false, reason: `host fora da lista (${host})` };
   return { ok: true, url };
 }
 

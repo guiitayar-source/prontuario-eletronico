@@ -11,7 +11,6 @@ import {
   ICP_BRASIL_INTERMEDIATES,
 } from '../lib/signature/icp-brasil-certs.ts';
 import {
-  ICP_BRASIL_REVOCATION_HOST_SUFFIXES,
   RevocationEvidenceCache,
   checkRevocationUrl,
   createNodeRevocationTransport,
@@ -318,13 +317,15 @@ const signerResult = (r) =>
 
 describe('6F.2D — política de URL', () => {
   const ok = (u) => checkRevocationUrl(u, policy).ok;
-  it('aceita http/https em host da lista, portas padrão', () => {
+  it('aceita qualquer host público de CDP/AIA (inclusive fora da antiga lista de 16 domínios)', () => {
     assert.ok(ok('http://acraiz.icpbrasil.gov.br/LCRacraizv10.crl'));
     assert.ok(ok('https://ccd.acsoluti.com.br/lcr/ac-soluti-v5.crl'));
     assert.ok(ok('http://repositorio.serpro.gov.br:80/lcr/acserprov5.crl'));
     assert.ok(ok('http://ICP-BRASIL.CERTISIGN.COM.BR./x.crl'));
+    assert.ok(ok('http://lcr.uma-ac-nova.com.br/ac-final.crl'));
+    assert.ok(ok('http://ocsp.example.org/'));
   });
-  it('recusa esquema, credenciais, porta, IP literal e host fora da lista', () => {
+  it('recusa esquema, credenciais, porta, IP literal e nome interno', () => {
     for (const u of [
       'ftp://acraiz.icpbrasil.gov.br/x.crl',
       'file:///etc/passwd',
@@ -335,23 +336,34 @@ describe('6F.2D — política de URL', () => {
       'http://127.0.0.1/x.crl',
       'http://169.254.169.254/latest/meta-data/',
       'http://[::1]/x.crl',
+      'http://[fd00:ec2::254]/x.crl',
       'http://2130706433/x.crl', // 127.0.0.1 em decimal
-      'http://evil.example/x.crl',
-      'http://icpbrasil.gov.br.evil.example/x.crl',
-      'http://evilicpbrasil.gov.br/x.crl',
+      'http://0x7f000001/x.crl',
+      'http://localhost/x.crl',
+      'http://lcr.localhost/x.crl',
+      'http://metadata.google.internal/x.crl',
+      'http://servidor.local/x.crl',
+      'http://intranet/x.crl',
       'não é url',
     ])
       assert.equal(ok(u), false, u);
   });
-  it('PSYWRITE_REVOCATION_EXTRA_HOSTS amplia a lista (sem aceitar IP)', () => {
+  it('PSYWRITE_REVOCATION_BLOCKED_HOSTS bloqueia o domínio e seus subdomínios', () => {
     const p = defaultRevocationFetchPolicy({
-      PSYWRITE_REVOCATION_EXTRA_HOSTS: 'lcr.nova-ac.com.br, 10.0.0.1',
+      PSYWRITE_REVOCATION_BLOCKED_HOSTS: 'ac-suspeita.com.br, outra.example',
     });
-    assert.ok(checkRevocationUrl('http://lcr.nova-ac.com.br/a.crl', p).ok);
-    assert.ok(checkRevocationUrl('http://x.lcr.nova-ac.com.br/a.crl', p).ok);
-    assert.equal(checkRevocationUrl('http://10.0.0.1/a.crl', p).ok, false);
+    assert.equal(
+      checkRevocationUrl('http://ac-suspeita.com.br/a.crl', p).ok,
+      false,
+    );
+    assert.equal(
+      checkRevocationUrl('http://lcr.ac-suspeita.com.br/a.crl', p).ok,
+      false,
+    );
+    assert.ok(checkRevocationUrl('http://nao-ac-suspeita.com.br/a.crl', p).ok);
+    assert.ok(checkRevocationUrl('http://acraiz.icpbrasil.gov.br/a.crl', p).ok);
   });
-  it('a lista cobre todos os CDP/AIA dos certificados ICP-Brasil oficiais do pacote', () => {
+  it('os CDP/AIA dos certificados ICP-Brasil oficiais do pacote passam pela política', () => {
     const ders = [
       ...ICP_BRASIL_ROOTS.map((r) => r.der),
       ...ICP_BRASIL_INTERMEDIATES,
@@ -364,11 +376,10 @@ describe('6F.2D — política de URL', () => {
       const urls = revocationUrlsForCertificate(cert);
       for (const u of [...urls.crl, ...urls.ocsp]) {
         count += 1;
-        assert.ok(checkRevocationUrl(u, policy).ok, `não coberto: ${u}`);
+        assert.ok(checkRevocationUrl(u, policy).ok, `recusado: ${u}`);
       }
     }
     assert.ok(count > 10);
-    assert.ok(ICP_BRASIL_REVOCATION_HOST_SUFFIXES.length > 0);
   });
 });
 
@@ -688,6 +699,73 @@ describe('6F.2D — coleta ponta a ponta na verificação PAdES', () => {
     assert.ok(attempts.some((a) => /host fora da lista/.test(a.reason)));
     assert.ok(attempts.some((a) => /redirecionamentos demais/.test(a.reason)));
     assert.ok(!hits.includes('lcr.ac.test/r3'));
+  });
+
+  it('redirecionamento para IP interno (literal ou via DNS): recusado', async () => {
+    const p = await serveGoodChain();
+    const redirect = (to) => (q, res) => {
+      res.writeHead(302, { Location: to });
+      res.end();
+    };
+    route(
+      'lcr.ac.test',
+      '/inter.crl',
+      redirect(`http://interno.ac.test:${port}/inter.crl`),
+    );
+    route(
+      'lcr.ac.test',
+      '/raiz.crl',
+      redirect(`http://127.0.0.1:${port}/raiz.crl`),
+    );
+    const provider = createOnlineRevocationProvider({
+      transport: createNodeRevocationTransport({
+        resolve: async (host) => [
+          {
+            address: host === 'interno.ac.test' ? '10.0.0.5' : '127.0.0.1',
+            family: 4,
+          },
+        ],
+        // Só o servidor de teste é "público" aqui; 10.0.0.5 cai na regra real.
+        isAddressAllowed: (a) => a === '127.0.0.1' || isPublicAddress(a),
+      }),
+      policy: testPolicy(),
+      allowNonIcpBrasilAnchor: true,
+    });
+    hits.length = 0;
+    const attempts = [];
+    const r = await verify(p.pdf, provider, {
+      onRevocationFetch: (a) => attempts.push(...a),
+    });
+    assert.ok(
+      attempts.some((a) =>
+        /endereço não permitido \(10\.0\.0\.5\)/.test(a.reason),
+      ),
+      JSON.stringify(attempts),
+    );
+    assert.ok(attempts.some((a) => /IP literal/.test(a.reason)));
+    assert.equal(hitsFor('interno.ac.test').length, 0);
+    assert.equal(r.revocation.status, 'INDETERMINATE');
+  });
+
+  it('URL vinda do PDF: cadeia não confiável nunca aciona a busca', async () => {
+    const p = await serveGoodChain();
+    let called = 0;
+    const spy = {
+      collect: async (...args) => {
+        called += 1;
+        return testProvider().collect(...args);
+      },
+    };
+    hits.length = 0;
+    // O PDF traz signatário e AC com CDP/AIA, mas a raiz confiável informada é outra.
+    const r = await padesService.verifyPadesSignature(p.pdf, {
+      trustedRootPems: [p.tsaRoot.pem],
+      verificationTime: VERIFY_AT,
+      revocationEvidenceProvider: spy,
+    });
+    assert.equal(called, 0);
+    assert.equal(hits.length, 0);
+    assert.equal(r.revocation.checked, false);
   });
 
   it('host do CDP fora da lista: nenhuma requisição', async () => {
