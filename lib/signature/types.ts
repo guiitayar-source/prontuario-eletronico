@@ -8,6 +8,193 @@ export type DocumentStatus =
 
 export type VerificationStatus = 'VALID' | 'INVALID' | 'UNVERIFIED';
 
+export type VerificationGlobalStatus = 'VALID' | 'INDETERMINATE' | 'INVALID';
+
+export type PdfRevisionPolicy =
+  | 'PADES_LTV_ALLOWED'
+  | 'STRICT_SINGLE_REVISION_AT_SIGNING';
+
+export type ValidationContextMode = 'VERIFICATION' | 'LIVE_ISSUANCE';
+
+export type PdfRevisionKind =
+  | 'PRE_SIGNATURE_REVISION'
+  | 'SIGNED_REVISION'
+  | 'SUBSEQUENT_SIGNATURE_REVISION'
+  | 'PADES_LTV_DSS_REVISION'
+  | 'PADES_DOC_TIMESTAMP_REVISION'
+  | 'UNAUTHORIZED_POST_SIGNATURE_MODIFICATION';
+
+export interface PdfIncrementalRevisionClassification {
+  revisionIndex: number;
+  startByte: number;
+  endByte: number;
+  eofOffset: number;
+  kind: PdfRevisionKind;
+  coveredByFinalSignature: boolean;
+  modifiedObjectNumbers: number[];
+  reason?: string;
+}
+
+export interface PdfSignatureRevisionSummary {
+  signatureIndex: number;
+  fieldName: string | null;
+  filter: string | null;
+  subFilter: string | null;
+  type: 'Sig' | 'DocTimeStamp';
+  byteRange: [number, number, number, number];
+  revisionEndByte: number;
+  valid: boolean;
+  contentsHexValid: boolean;
+  contentsPaddingValid: boolean;
+  coversUntilRevisionEof: boolean;
+  cmsDerBytes?: Buffer;
+  signedContentBytes?: Buffer;
+  asn1ByteLength?: number;
+  paddingByteLength?: number;
+  error?: string;
+}
+
+export interface PadesPdfIntegrityResult {
+  valid: boolean;
+  policy: PdfRevisionPolicy;
+  byteRange: [number, number, number, number] | null;
+  coversWholeDocument: boolean;
+  unsignedTrailingBytes: number;
+  contentsHexValid: boolean;
+  contentsPaddingValid: boolean;
+  totalRevisionsCount: number;
+  preSignatureRevisionsCount: number;
+  signatureRevisionsCount: number;
+  postSignatureLtvRevisionsCount: number;
+  hasUnauthorizedPostSignatureUpdate: boolean;
+  revisions: PdfIncrementalRevisionClassification[];
+  signatures: PdfSignatureRevisionSummary[];
+  error?: string;
+}
+
+export interface PadesCmsIntegrityResult {
+  valid: boolean;
+  signerInfoCount: number;
+  signatureVerified: boolean;
+  signedAttrsPresent: boolean;
+  contentTypeValid: boolean;
+  digestAlgorithm: string;
+  signatureAlgorithm: string;
+  messageDigestAttrHex: string;
+  calculatedDigestHex: string;
+  digestMatches: boolean;
+  signingCertificateAttrPresent: boolean;
+  signingCertificateAttrValid: boolean;
+  allSignaturesCmsValid: boolean;
+  error?: string;
+}
+
+export interface PadesSignerIdentityResult {
+  extracted: boolean;
+  commonName: string;
+  cpf: string | null;
+  cpfMatchesCommonName: boolean;
+  subject: string;
+  issuer: string;
+  serialNumber: string;
+  fingerprint256: string;
+  validFrom: Date;
+  validTo: Date;
+  isCa: boolean;
+  keyUsageValid: boolean;
+  icpBrasilAttrsPresent: boolean;
+  error?: string;
+}
+
+export interface PadesChainValidationResult {
+  status:
+    | 'VALID'
+    | 'SELF_SIGNED'
+    | 'INCOMPLETE_CHAIN'
+    | 'UNTRUSTED_ROOT'
+    | 'INVALID';
+  valid: boolean;
+  isSelfSigned: boolean;
+  chainLength: number;
+  chainSubjects: string[];
+  error?: string;
+}
+
+export interface PadesRootTrustResult {
+  trusted: boolean;
+  rootSubject: string | null;
+  rootFingerprint256: string | null;
+  error?: string;
+}
+
+export interface ExternalPoeEvidence {
+  poeTime: Date;
+  targetHashHex: string;
+  targetType:
+    | 'SIGNED_PDF_SHA256'
+    | 'SIGNATURE_VALUE_SHA256'
+    | 'DOCUMENT_HASH_SHA256';
+  sourceId: string;
+  authenticator?: string;
+}
+
+export interface PadesTemporalValidityResult {
+  status:
+    | 'VALID_AT_POE'
+    | 'WITHIN_CURRENT_VALIDITY_NO_TIMESTAMP'
+    | 'OUT_OF_BOUNDS_NO_POE'
+    | 'OUT_OF_BOUNDS_AT_POE'
+    | 'NOT_YET_VALID'
+    | 'CLAIMED_TIME_OUTSIDE_VALIDITY'
+    | 'EXPIRED_AT_ISSUANCE'
+    | 'INVALID_TIMESTAMP';
+  valid: boolean;
+  currentlyValid: boolean;
+  hasTrustedPoe: boolean;
+  poeSource:
+    | 'RFC3161_SIGNATURE_TIMESTAMP'
+    | 'RFC3161_DOC_TIMESTAMP'
+    | 'EXTERNAL_POE'
+    | 'NONE';
+  poeTime?: Date;
+  claimedSigningTime?: Date;
+  verificationTime: Date;
+  tsaChainValid?: boolean;
+  tsaRootTrusted?: boolean;
+  error?: string;
+}
+
+export interface PadesRevocationResult {
+  status:
+    | 'GOOD'
+    | 'GOOD_AT_POE'
+    | 'REVOKED_BEFORE_POE'
+    | 'REVOKED_NO_POE'
+    | 'INDETERMINATE'
+    | 'INVALID_EVIDENCE';
+  checked: boolean;
+  source: 'CRL' | 'OCSP' | 'BOTH' | 'NONE';
+  revokedAt?: Date;
+  reasonCode?: number;
+  error?: string;
+}
+
+export interface PadesVerificationOptions {
+  trustedCerts?: unknown[];
+  trustedRootPems?: string[];
+  trustedTsaRootPems?: string[];
+  intermediateCerts?: unknown[];
+  intermediatePems?: string[];
+  allowCustomTrustAnchors?: boolean;
+  pdfRevisionPolicy?: PdfRevisionPolicy;
+  validationContext?: ValidationContextMode;
+  verificationTime?: Date;
+  externalPoe?: ExternalPoeEvidence;
+  crls?: Array<Buffer | Uint8Array | string>;
+  ocspResponses?: Array<Buffer | Uint8Array>;
+  requireFullTrust?: boolean;
+}
+
 export interface CertificateInfo {
   alias: string;
   rawPem: string;
@@ -111,7 +298,18 @@ export interface PreparedPdf {
 }
 
 export interface PadesVerificationResult {
+  /**
+   * Indicador de retrocompatibilidade: true quando `cryptographicIntegrity === true`
+   * e `status !== 'INVALID'` (ou `status === 'VALID'` quando `requireFullTrust === true`).
+   * NUNCA equivale isoladamente a confiança plena ICP-Brasil (`isTrusted` / `status === 'VALID'`).
+   */
   isValid: boolean;
+  status: VerificationGlobalStatus;
+  subIndication?: string;
+  persistenceStatus: VerificationStatus;
+  cryptographicIntegrity: boolean;
+  certificateTrust: boolean;
+  isTrusted: boolean;
   signerName: string;
   signerCpf: string | null;
   certificateSubject: string;
@@ -124,6 +322,15 @@ export interface PadesVerificationResult {
   messageDigestHex: string;
   calculatedDigestHex: string;
   signedAt?: Date;
+  claimedSigningTime?: Date;
+  poeTime?: Date;
+  cmsIntegrity: PadesCmsIntegrityResult;
+  pdfIntegrity: PadesPdfIntegrityResult;
+  signerIdentity: PadesSignerIdentityResult;
+  chainValidation: PadesChainValidationResult;
+  rootTrust: PadesRootTrustResult;
+  temporalValidity: PadesTemporalValidityResult;
+  revocation: PadesRevocationResult;
   error?: string;
 }
 
@@ -156,6 +363,12 @@ export interface EvolutionSignatureRecord {
 
 export interface EvolutionVerificationResult {
   isValid: boolean;
+  status?: VerificationGlobalStatus;
+  subIndication?: string;
+  persistenceStatus?: VerificationStatus;
+  cryptographicIntegrity?: boolean;
+  certificateTrust?: boolean;
+  isTrusted?: boolean;
   evolutionId: string;
   signatureId?: string;
   provider?: string;
@@ -178,6 +391,8 @@ export interface EvolutionVerificationResult {
   chainPath?: string[];
   chainError?: string;
   signedAt: Date;
+  claimedSigningTime?: Date;
+  poeTime?: Date;
   canonicalData?: Record<string, unknown>;
   error?: string;
 }

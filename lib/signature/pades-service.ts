@@ -8,10 +8,27 @@ import {
   SUBFILTER_ETSI_CADES_DETACHED,
   findByteRange,
   removeTrailingNewLine,
-  extractSignature,
 } from '@signpdf/utils';
-import { parseX509Certificate } from './crypto-utils.ts';
-import type { PadesVerificationResult, PreparedPdf } from './types.ts';
+import {
+  evaluateX509ChainAndTrust,
+  resolveCmsSignerCertificate,
+  type X509ChainEvaluationResult,
+} from './icp-chain.ts';
+import { validatePadesPdfStructure } from './pdf-structure-validator.ts';
+import type {
+  PadesChainValidationResult,
+  PadesCmsIntegrityResult,
+  PadesPdfIntegrityResult,
+  PadesRevocationResult,
+  PadesRootTrustResult,
+  PadesSignerIdentityResult,
+  PadesTemporalValidityResult,
+  PadesVerificationOptions,
+  PadesVerificationResult,
+  PreparedPdf,
+  VerificationGlobalStatus,
+  VerificationStatus,
+} from './types.ts';
 
 // Ensure pkijs has WebCrypto engine initialized
 try {
@@ -22,6 +39,232 @@ try {
   pkijs.setEngine('NodeJS', cryptoEngine);
 } catch {
   // Already set
+}
+
+const OID_SIGNED_DATA = '1.2.840.113549.1.7.2';
+const OID_DATA = '1.2.840.113549.1.7.1';
+const OID_CONTENT_TYPE = '1.2.840.113549.1.9.3';
+const OID_SIGNING_TIME = '1.2.840.113549.1.9.5';
+const OID_MESSAGE_DIGEST = '1.2.840.113549.1.9.4';
+const OID_SIGNING_CERTIFICATE = '1.2.840.113549.1.9.16.2.12';
+const OID_SIGNING_CERTIFICATE_V2 = '1.2.840.113549.1.9.16.2.47';
+
+const ALLOWED_DIGEST_OIDS: Record<
+  string,
+  { name: string; nodeAlg: 'sha256' | 'sha384' | 'sha512' }
+> = {
+  '2.16.840.1.101.3.4.2.1': { name: 'SHA-256', nodeAlg: 'sha256' },
+  '2.16.840.1.101.3.4.2.2': { name: 'SHA-384', nodeAlg: 'sha384' },
+  '2.16.840.1.101.3.4.2.3': { name: 'SHA-512', nodeAlg: 'sha512' },
+};
+
+const ALLOWED_SIGNATURE_OIDS: Record<string, string> = {
+  '1.2.840.113549.1.1.1': 'RSA',
+  '1.2.840.113549.1.1.10': 'RSASSA-PSS',
+  '1.2.840.113549.1.1.11': 'SHA256withRSA',
+  '1.2.840.113549.1.1.12': 'SHA384withRSA',
+  '1.2.840.113549.1.1.13': 'SHA512withRSA',
+  '1.2.840.10045.4.3.2': 'ECDSAwithSHA256',
+  '1.2.840.10045.4.3.3': 'ECDSAwithSHA384',
+  '1.2.840.10045.4.3.4': 'ECDSAwithSHA512',
+};
+
+function normalizeOptions(
+  optionsOrTrustedCerts?: pkijs.Certificate[] | PadesVerificationOptions,
+): PadesVerificationOptions {
+  if (!optionsOrTrustedCerts) return {};
+  if (Array.isArray(optionsOrTrustedCerts)) {
+    return { trustedCerts: optionsOrTrustedCerts };
+  }
+  return optionsOrTrustedCerts;
+}
+
+function parseAsn1Time(value: unknown): Date | undefined {
+  if (value instanceof asn1js.UTCTime || value instanceof asn1js.GeneralizedTime) {
+    const d = value.toDate();
+    if (d instanceof Date && !Number.isNaN(d.getTime())) {
+      return d;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Validates RFC 5035 `signingCertificate` / `signingCertificateV2` attribute against `signerCertDer`.
+ */
+function verifySigningCertificateAttr(
+  signedAttrs: pkijs.SignedAndUnsignedAttributes,
+  signerCertDer: Buffer,
+): { present: boolean; valid: boolean; error?: string } {
+  const attrV2 = signedAttrs.attributes.find(
+    (a) => a.type === OID_SIGNING_CERTIFICATE_V2,
+  );
+  const attrV1 = signedAttrs.attributes.find(
+    (a) => a.type === OID_SIGNING_CERTIFICATE,
+  );
+
+  if (!attrV2 && !attrV1) {
+    return { present: false, valid: true };
+  }
+
+  try {
+    if (attrV2) {
+      if (!attrV2.values || attrV2.values.length === 0) {
+        return {
+          present: true,
+          valid: false,
+          error: 'Atributo signingCertificateV2 vazio.',
+        };
+      }
+      const seq = attrV2.values[0];
+      if (!(seq instanceof asn1js.Sequence) || seq.valueBlock.value.length === 0) {
+        return {
+          present: true,
+          valid: false,
+          error: 'Estrutura ASN.1 de signingCertificateV2 inválida.',
+        };
+      }
+      const certsSeq = seq.valueBlock.value[0];
+      if (
+        !(certsSeq instanceof asn1js.Sequence) ||
+        certsSeq.valueBlock.value.length === 0
+      ) {
+        return {
+          present: true,
+          valid: false,
+          error: 'Lista de ESSCertIDv2 vazia em signingCertificateV2.',
+        };
+      }
+      const firstEssCertId = certsSeq.valueBlock.value[0];
+      if (!(firstEssCertId instanceof asn1js.Sequence)) {
+        return {
+          present: true,
+          valid: false,
+          error: 'ESSCertIDv2 malformado.',
+        };
+      }
+      const items = firstEssCertId.valueBlock.value;
+      let hashAlgOid = '2.16.840.1.101.3.4.2.1'; // Default SHA-256 per RFC 5035
+      let certHashOctet: asn1js.OctetString | null = null;
+
+      if (items[0] instanceof asn1js.OctetString) {
+        certHashOctet = items[0];
+      } else if (
+        items[0] instanceof asn1js.Sequence &&
+        items[1] instanceof asn1js.OctetString
+      ) {
+        const algId = new pkijs.AlgorithmIdentifier({ schema: items[0] });
+        hashAlgOid = algId.algorithmId;
+        certHashOctet = items[1];
+      }
+
+      if (!certHashOctet) {
+        return {
+          present: true,
+          valid: false,
+          error: 'certHash ausente em ESSCertIDv2.',
+        };
+      }
+
+      const algEntry = ALLOWED_DIGEST_OIDS[hashAlgOid];
+      if (!algEntry) {
+        return {
+          present: true,
+          valid: false,
+          error: `Algoritmo de hash não suportado em ESSCertIDv2 (${hashAlgOid}).`,
+        };
+      }
+
+      const attrHashBytes = Buffer.from(certHashOctet.valueBlock.valueHexView);
+      const expectedHashBytes = crypto
+        .createHash(algEntry.nodeAlg)
+        .update(signerCertDer)
+        .digest();
+
+      if (
+        attrHashBytes.length !== expectedHashBytes.length ||
+        !crypto.timingSafeEqual(attrHashBytes, expectedHashBytes)
+      ) {
+        return {
+          present: true,
+          valid: false,
+          error:
+            'Hash do certificado em signingCertificateV2 diverge do certificado utilizado na verificação CMS.',
+        };
+      }
+
+      return { present: true, valid: true };
+    }
+
+    if (attrV1) {
+      if (!attrV1.values || attrV1.values.length === 0) {
+        return {
+          present: true,
+          valid: false,
+          error: 'Atributo signingCertificate vazio.',
+        };
+      }
+      const seq = attrV1.values[0];
+      if (!(seq instanceof asn1js.Sequence) || seq.valueBlock.value.length === 0) {
+        return {
+          present: true,
+          valid: false,
+          error: 'Estrutura ASN.1 de signingCertificate inválida.',
+        };
+      }
+      const certsSeq = seq.valueBlock.value[0];
+      if (
+        !(certsSeq instanceof asn1js.Sequence) ||
+        certsSeq.valueBlock.value.length === 0
+      ) {
+        return {
+          present: true,
+          valid: false,
+          error: 'Lista de ESSCertID vazia em signingCertificate.',
+        };
+      }
+      const firstEssCertId = certsSeq.valueBlock.value[0];
+      if (
+        !(firstEssCertId instanceof asn1js.Sequence) ||
+        !(firstEssCertId.valueBlock.value[0] instanceof asn1js.OctetString)
+      ) {
+        return {
+          present: true,
+          valid: false,
+          error: 'ESSCertID malformado em signingCertificate.',
+        };
+      }
+      const attrHashBytes = Buffer.from(
+        firstEssCertId.valueBlock.value[0].valueBlock.valueHexView,
+      );
+      const expectedSha1 = crypto
+        .createHash('sha1')
+        .update(signerCertDer)
+        .digest();
+      if (
+        attrHashBytes.length !== expectedSha1.length ||
+        !crypto.timingSafeEqual(attrHashBytes, expectedSha1)
+      ) {
+        return {
+          present: true,
+          valid: false,
+          error:
+            'Hash do certificado em signingCertificate diverge do certificado do signatário.',
+        };
+      }
+      return { present: true, valid: true };
+    }
+  } catch (err) {
+    return {
+      present: true,
+      valid: false,
+      error: `Erro ao validar atributo signingCertificate: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
+
+  return { present: false, valid: true };
 }
 
 export interface PreparePdfOptions {
@@ -294,117 +537,715 @@ export class PadesService {
   }
 
   /**
-   * Cryptographically verifies a PAdES signed PDF:
-   * - Extracts ByteRange and /Contents.
-   * - Reconstructs the signed byte stream and computes its SHA-256 hash.
-   * - Parses the CMS SignedData structure and X.509 signer certificate.
-   * - Verifies the signature using pkijs / WebCrypto.
-   * - Confirms that no byte outside the signature was altered.
+   * Cryptographically and structurally verifies a PAdES signed PDF:
+   * - Validates the PDF object graph, ByteRange, decoded /Contents padding, and incremental revisions (ETSI EN 319 142-1).
+   * - Verifies each signature's CMS SignedData structure, signedAttrs, messageDigest, signingCertificateV2, and cryptographic signature (RFC 5652).
+   * - Evaluates certificate identity, chain, temporal validity, and revocation status (ETSI EN 319 102-1).
    */
   async verifyPadesSignature(
     pdfBuffer: Buffer,
-    trustedCerts?: pkijs.Certificate[]
+    optionsOrTrustedCerts?: pkijs.Certificate[] | PadesVerificationOptions
   ): Promise<PadesVerificationResult> {
+    const options = normalizeOptions(optionsOrTrustedCerts);
+    const policy = options.pdfRevisionPolicy ?? 'PADES_LTV_ALLOWED';
+    const verificationTime = options.verificationTime ?? new Date();
+    const validationContext = options.validationContext ?? 'VERIFICATION';
+
+    const emptyCmsIntegrity: PadesCmsIntegrityResult = {
+      valid: false,
+      signerInfoCount: 0,
+      signatureVerified: false,
+      signedAttrsPresent: false,
+      contentTypeValid: false,
+      digestAlgorithm: 'SHA-256',
+      signatureAlgorithm: '',
+      messageDigestAttrHex: '',
+      calculatedDigestHex: '',
+      digestMatches: false,
+      signingCertificateAttrPresent: false,
+      signingCertificateAttrValid: false,
+      allSignaturesCmsValid: false,
+    };
+
+    const emptySignerIdentity: PadesSignerIdentityResult = {
+      extracted: false,
+      commonName: 'Desconhecido',
+      cpf: null,
+      cpfMatchesCommonName: false,
+      subject: '',
+      issuer: '',
+      serialNumber: '',
+      fingerprint256: '',
+      validFrom: new Date(0),
+      validTo: new Date(0),
+      isCa: false,
+      keyUsageValid: false,
+      icpBrasilAttrsPresent: false,
+    };
+
+    const emptyChainValidation: PadesChainValidationResult = {
+      status: 'INVALID',
+      valid: false,
+      isSelfSigned: false,
+      chainLength: 0,
+      chainSubjects: [],
+    };
+
+    const emptyRootTrust: PadesRootTrustResult = {
+      trusted: false,
+      rootSubject: null,
+      rootFingerprint256: null,
+    };
+
+    const emptyTemporalValidity: PadesTemporalValidityResult = {
+      status: 'OUT_OF_BOUNDS_NO_POE',
+      valid: false,
+      currentlyValid: false,
+      hasTrustedPoe: false,
+      poeSource: 'NONE',
+      verificationTime,
+    };
+
+    const emptyRevocation: PadesRevocationResult = {
+      status: 'INDETERMINATE',
+      checked: false,
+      source: 'NONE',
+    };
+
+    const buildInvalidResult = (
+      error: string,
+      pdfIntegrity: PadesPdfIntegrityResult,
+      cmsIntegrity: PadesCmsIntegrityResult = emptyCmsIntegrity,
+      subIndication = 'FORMAT_FAILURE',
+    ): PadesVerificationResult => ({
+      isValid: false,
+      status: 'INVALID',
+      subIndication,
+      persistenceStatus: 'INVALID',
+      cryptographicIntegrity: false,
+      certificateTrust: false,
+      isTrusted: false,
+      signerName: 'Desconhecido',
+      signerCpf: null,
+      certificateSubject: '',
+      certificateIssuer: '',
+      certificateSerial: '',
+      certificateFingerprint: '',
+      validFrom: new Date(0),
+      validTo: new Date(0),
+      digestAlgorithm: cmsIntegrity.digestAlgorithm || 'SHA-256',
+      messageDigestHex: cmsIntegrity.messageDigestAttrHex,
+      calculatedDigestHex: cmsIntegrity.calculatedDigestHex,
+      cmsIntegrity: { ...cmsIntegrity, error: cmsIntegrity.error ?? error },
+      pdfIntegrity,
+      signerIdentity: emptySignerIdentity,
+      chainValidation: emptyChainValidation,
+      rootTrust: emptyRootTrust,
+      temporalValidity: emptyTemporalValidity,
+      revocation: emptyRevocation,
+      error,
+    });
+
     try {
-      const extracted = extractSignature(pdfBuffer);
-      const calculatedDigestHex = crypto
-        .createHash('sha256')
-        .update(extracted.signedData)
-        .digest('hex');
+      // 1. Structural PDF & Revision Integrity Check
+      const pdfIntegrity = await validatePadesPdfStructure(pdfBuffer, policy);
+      if (!pdfIntegrity.valid) {
+        return buildInvalidResult(
+          pdfIntegrity.error || 'Estrutura PAdES do PDF inválida.',
+          pdfIntegrity,
+          emptyCmsIntegrity,
+          pdfIntegrity.hasUnauthorizedPostSignatureUpdate
+            ? 'HASH_FAILURE_POST_SIGNATURE_MODIFICATION'
+            : 'FORMAT_FAILURE',
+        );
+      }
 
-      const sigDer = Buffer.from(extracted.signature, 'binary');
-      const sigAsn1 = asn1js.fromBER(
-        sigDer.buffer.slice(
-          sigDer.byteOffset,
-          sigDer.byteOffset + sigDer.byteLength
-        )
-      );
+      // 2. Verify CMS SignedData for each /Type /Sig signature in the document
+      const sigEntries = pdfIntegrity.signatures.filter((s) => s.type === 'Sig');
+      if (sigEntries.length === 0) {
+        return buildInvalidResult(
+          'Nenhuma assinatura /Type /Sig encontrada no documento.',
+          pdfIntegrity,
+        );
+      }
 
-      if (!sigAsn1.result) {
-        return {
-          isValid: false,
-          signerName: 'Desconhecido',
-          signerCpf: null,
-          certificateSubject: '',
-          certificateIssuer: '',
-          certificateSerial: '',
-          certificateFingerprint: '',
-          validFrom: new Date(0),
-          validTo: new Date(0),
-          digestAlgorithm: 'SHA-256',
-          messageDigestHex: '',
+      let primaryCmsResult: PadesCmsIntegrityResult = emptyCmsIntegrity;
+      let primaryChainEval: X509ChainEvaluationResult | null = null;
+      let primaryClaimedSigningTime: Date | undefined;
+
+      for (let i = 0; i < sigEntries.length; i += 1) {
+        const sigEntry = sigEntries[i];
+        const sigDer = sigEntry.cmsDerBytes!;
+        const signedBytes = sigEntry.signedContentBytes!;
+
+        const sigAsn1 = asn1js.fromBER(new Uint8Array(sigDer).buffer);
+
+        if (!sigAsn1.result || sigAsn1.offset === -1) {
+          sigEntry.valid = false;
+          sigEntry.error = 'Falha ao decodificar ASN.1 da assinatura CMS.';
+          return buildInvalidResult(sigEntry.error, pdfIntegrity);
+        }
+
+        let contentInfo: pkijs.ContentInfo;
+        let signedData: pkijs.SignedData;
+        try {
+          contentInfo = new pkijs.ContentInfo({ schema: sigAsn1.result });
+          if (contentInfo.contentType !== OID_SIGNED_DATA) {
+            throw new Error(
+              `ContentInfo.contentType inválido (${contentInfo.contentType}).`,
+            );
+          }
+          signedData = new pkijs.SignedData({ schema: contentInfo.content });
+        } catch (err) {
+          const msg = `Estrutura CMS SignedData inválida: ${
+            err instanceof Error ? err.message : String(err)
+          }`;
+          sigEntry.valid = false;
+          sigEntry.error = msg;
+          return buildInvalidResult(msg, pdfIntegrity);
+        }
+
+        // Adjustment 4: Each individual CMS SignedData must have exactly 1 SignerInfo
+        const signerInfoCount = signedData.signerInfos.length;
+        if (signerInfoCount !== 1) {
+          const msg = `CMS exige exatamente 1 SignerInfo por assinatura, mas encontrou ${signerInfoCount}.`;
+          sigEntry.valid = false;
+          sigEntry.error = msg;
+          return buildInvalidResult(
+            msg,
+            pdfIntegrity,
+            {
+              ...emptyCmsIntegrity,
+              signerInfoCount,
+              error: msg,
+            },
+            'FORMAT_FAILURE_MULTIPLE_SIGNER_INFOS',
+          );
+        }
+
+        const signerInfo = signedData.signerInfos[0];
+        const digestOid = signerInfo.digestAlgorithm?.algorithmId || '';
+        const sigOid = signerInfo.signatureAlgorithm?.algorithmId || '';
+
+        const digestAlgInfo = ALLOWED_DIGEST_OIDS[digestOid];
+        if (!digestAlgInfo) {
+          const msg = `Algoritmo de digest CMS não permitido ou inseguro (${digestOid || 'desconhecido'}).`;
+          sigEntry.valid = false;
+          sigEntry.error = msg;
+          return buildInvalidResult(
+            msg,
+            pdfIntegrity,
+            {
+              ...emptyCmsIntegrity,
+              signerInfoCount: 1,
+              digestAlgorithm: digestOid,
+              error: msg,
+            },
+            'CRYPTO_CONSTRAINTS_FAILURE',
+          );
+        }
+
+        const sigAlgName = ALLOWED_SIGNATURE_OIDS[sigOid];
+        if (!sigAlgName) {
+          const msg = `Algoritmo de assinatura CMS não permitido ou inseguro (${sigOid || 'desconhecido'}).`;
+          sigEntry.valid = false;
+          sigEntry.error = msg;
+          return buildInvalidResult(
+            msg,
+            pdfIntegrity,
+            {
+              ...emptyCmsIntegrity,
+              signerInfoCount: 1,
+              digestAlgorithm: digestAlgInfo.name,
+              signatureAlgorithm: sigOid,
+              error: msg,
+            },
+            'CRYPTO_CONSTRAINTS_FAILURE',
+          );
+        }
+
+        const calculatedDigestBuffer = crypto
+          .createHash(digestAlgInfo.nodeAlg)
+          .update(signedBytes)
+          .digest();
+        const calculatedDigestHex = calculatedDigestBuffer.toString('hex');
+
+        // Validate mandatory signedAttrs (RFC 5652 & ETSI EN 319 142-1)
+        const signedAttrs = signerInfo.signedAttrs;
+        if (!signedAttrs || !Array.isArray(signedAttrs.attributes) || signedAttrs.attributes.length === 0) {
+          const msg = 'Assinatura CMS não contém atributos assinados obrigatórios (signedAttrs ausente).';
+          sigEntry.valid = false;
+          sigEntry.error = msg;
+          return buildInvalidResult(msg, pdfIntegrity, {
+            ...emptyCmsIntegrity,
+            signerInfoCount: 1,
+            digestAlgorithm: digestAlgInfo.name,
+            signatureAlgorithm: sigAlgName,
+            calculatedDigestHex,
+            signedAttrsPresent: false,
+            error: msg,
+          });
+        }
+
+        // Check contentType attribute (1.2.840.113549.1.9.3) == id-data (1.2.840.113549.1.7.1)
+        const contentTypeAttrs = signedAttrs.attributes.filter(
+          (a) => a.type === OID_CONTENT_TYPE,
+        );
+        let contentTypeValid = false;
+        if (
+          contentTypeAttrs.length === 1 &&
+          contentTypeAttrs[0].values?.length === 1 &&
+          contentTypeAttrs[0].values[0] instanceof asn1js.ObjectIdentifier
+        ) {
+          contentTypeValid =
+            contentTypeAttrs[0].values[0].valueBlock.toString() === OID_DATA;
+        }
+        if (!contentTypeValid) {
+          const msg = 'Atributo assinado contentType ausente ou diferente de id-data (1.2.840.113549.1.7.1).';
+          sigEntry.valid = false;
+          sigEntry.error = msg;
+          return buildInvalidResult(msg, pdfIntegrity, {
+            ...emptyCmsIntegrity,
+            signerInfoCount: 1,
+            signedAttrsPresent: true,
+            contentTypeValid: false,
+            digestAlgorithm: digestAlgInfo.name,
+            signatureAlgorithm: sigAlgName,
+            calculatedDigestHex,
+            error: msg,
+          });
+        }
+
+        // Check messageDigest attribute (1.2.840.113549.1.9.4)
+        const msgDigestAttrs = signedAttrs.attributes.filter(
+          (a) => a.type === OID_MESSAGE_DIGEST,
+        );
+        let messageDigestAttrHex = '';
+        let digestMatches = false;
+        if (
+          msgDigestAttrs.length === 1 &&
+          msgDigestAttrs[0].values?.length === 1 &&
+          msgDigestAttrs[0].values[0] instanceof asn1js.OctetString
+        ) {
+          const attrBytes = Buffer.from(
+            msgDigestAttrs[0].values[0].valueBlock.valueHexView,
+          );
+          messageDigestAttrHex = attrBytes.toString('hex');
+          if (attrBytes.length === calculatedDigestBuffer.length) {
+            digestMatches = crypto.timingSafeEqual(
+              attrBytes,
+              calculatedDigestBuffer,
+            );
+          }
+        }
+
+        if (!digestMatches) {
+          const msg =
+            'O atributo messageDigest do CMS não corresponde ao hash calculado sobre o ByteRange do PDF.';
+          sigEntry.valid = false;
+          sigEntry.error = msg;
+          return buildInvalidResult(
+            msg,
+            pdfIntegrity,
+            {
+              ...emptyCmsIntegrity,
+              signerInfoCount: 1,
+              signedAttrsPresent: true,
+              contentTypeValid: true,
+              digestAlgorithm: digestAlgInfo.name,
+              signatureAlgorithm: sigAlgName,
+              messageDigestAttrHex,
+              calculatedDigestHex,
+              digestMatches: false,
+              error: msg,
+            },
+            'HASH_FAILURE',
+          );
+        }
+
+        // Extract optional claimedSigningTime (1.2.840.113549.1.9.5) — Adjustment 2
+        let claimedSigningTime: Date | undefined;
+        const signingTimeAttr = signedAttrs.attributes.find(
+          (a) => a.type === OID_SIGNING_TIME,
+        );
+        if (signingTimeAttr?.values?.length) {
+          claimedSigningTime = parseAsn1Time(signingTimeAttr.values[0]);
+        }
+
+        // Requirement 1 (6F.2A): Identify the exact certificate associated with SignerInfo.sid
+        const resolvedSigner = await resolveCmsSignerCertificate(
+          signedData,
+          signerInfo,
+        );
+        if (
+          !resolvedSigner.found ||
+          !resolvedSigner.certificate ||
+          !resolvedSigner.der
+        ) {
+          const msg =
+            resolvedSigner.error ||
+            'Certificado associado ao SignerInfo não encontrado no CMS.';
+          sigEntry.valid = false;
+          sigEntry.error = msg;
+          return buildInvalidResult(
+            msg,
+            pdfIntegrity,
+            {
+              ...emptyCmsIntegrity,
+              signerInfoCount: 1,
+              signedAttrsPresent: true,
+              contentTypeValid: true,
+              digestAlgorithm: digestAlgInfo.name,
+              signatureAlgorithm: sigAlgName,
+              messageDigestAttrHex,
+              calculatedDigestHex,
+              digestMatches: true,
+              signatureVerified: false,
+              error: msg,
+            },
+            'SIGNER_CERTIFICATE_NOT_FOUND',
+          );
+        }
+
+        // Cryptographically verify the CMS signature using pkijs (without conflating chain validation)
+        let signatureVerified = false;
+        let signerCert: pkijs.Certificate | undefined;
+        let verifyError = '';
+        try {
+          const result = await signedData.verify({
+            signer: 0,
+            data: new Uint8Array(signedBytes).buffer,
+            checkChain: false,
+            extendedMode: true,
+          });
+          signatureVerified = Boolean(result.signatureVerified);
+          if (
+            signatureVerified &&
+            result.signerCertificate instanceof pkijs.Certificate
+          ) {
+            const verifiedDer = Buffer.from(
+              result.signerCertificate.toSchema().toBER(),
+            );
+            if (!verifiedDer.equals(resolvedSigner.der)) {
+              signatureVerified = false;
+              verifyError =
+                'Certificado utilizado na verificação criptográfica CMS diverge do certificado identificado por SignerInfo.sid.';
+            } else {
+              signerCert = resolvedSigner.certificate;
+            }
+          }
+          if (!signatureVerified && !verifyError) {
+            verifyError = result.message || 'Assinatura criptográfica CMS inválida.';
+          }
+        } catch (err) {
+          verifyError =
+            (err as { message?: string })?.message ||
+            'Assinatura criptográfica CMS inválida.';
+        }
+
+        if (!signatureVerified || !signerCert) {
+          const msg =
+            verifyError ||
+            'Certificado do signatário não identificado ou verificação criptográfica CMS falhou.';
+          sigEntry.valid = false;
+          sigEntry.error = msg;
+          return buildInvalidResult(
+            msg,
+            pdfIntegrity,
+            {
+              ...emptyCmsIntegrity,
+              signerInfoCount: 1,
+              signedAttrsPresent: true,
+              contentTypeValid: true,
+              digestAlgorithm: digestAlgInfo.name,
+              signatureAlgorithm: sigAlgName,
+              messageDigestAttrHex,
+              calculatedDigestHex,
+              digestMatches: true,
+              signatureVerified: false,
+              error: msg,
+            },
+            'SIG_CRYPTO_FAILURE',
+          );
+        }
+
+        // Verify signingCertificate / signingCertificateV2 against resolvedSigner.der
+        const signerCertDer = resolvedSigner.der;
+        const sigCertAttrCheck = verifySigningCertificateAttr(
+          signedAttrs,
+          signerCertDer,
+        );
+        if (!sigCertAttrCheck.valid) {
+          const msg =
+            sigCertAttrCheck.error ||
+            'Atributo signingCertificate/signingCertificateV2 inválido.';
+          sigEntry.valid = false;
+          sigEntry.error = msg;
+          return buildInvalidResult(
+            msg,
+            pdfIntegrity,
+            {
+              ...emptyCmsIntegrity,
+              signerInfoCount: 1,
+              signedAttrsPresent: true,
+              contentTypeValid: true,
+              digestAlgorithm: digestAlgInfo.name,
+              signatureAlgorithm: sigAlgName,
+              messageDigestAttrHex,
+              calculatedDigestHex,
+              digestMatches: true,
+              signatureVerified: true,
+              signingCertificateAttrPresent: sigCertAttrCheck.present,
+              signingCertificateAttrValid: false,
+              error: msg,
+            },
+            'SIG_CONSTRAINTS_FAILURE',
+          );
+        }
+
+        const currentCmsResult: PadesCmsIntegrityResult = {
+          valid: true,
+          signerInfoCount: 1,
+          signatureVerified: true,
+          signedAttrsPresent: true,
+          contentTypeValid: true,
+          digestAlgorithm: digestAlgInfo.name,
+          signatureAlgorithm: sigAlgName,
+          messageDigestAttrHex,
           calculatedDigestHex,
-          error: 'Falha ao decodificar estrutura ASN.1 da assinatura CMS',
+          digestMatches: true,
+          signingCertificateAttrPresent: sigCertAttrCheck.present,
+          signingCertificateAttrValid: sigCertAttrCheck.valid,
+          allSignaturesCmsValid: true,
         };
-      }
 
-      const contentInfo = new pkijs.ContentInfo({ schema: sigAsn1.result });
-      const signedData = new pkijs.SignedData({ schema: contentInfo.content });
-
-      // Um único signatário neste fluxo. O certificado deve ser o efetivamente
-      // usado por pkijs (issuer + serial ou SKI), nunca o primeiro da lista.
-      if (signedData.signerInfos.length !== 1) throw new Error('CMS exige um signatário identificável.');
-      let signerCert: pkijs.Certificate | undefined;
-
-      // Verifica a assinatura CMS: messageDigest dos bytes assinados e assinatura
-      // sobre os atributos assinados, com a chave do certificado do signatário.
-      // Não há alternativa que dispense essa conferência criptográfica.
-      let isValid = false;
-      let verifyError = '';
-      try {
-        const result = await signedData.verify({
-          signer: 0,
-          data: extracted.signedData.buffer.slice(
-            extracted.signedData.byteOffset,
-            extracted.signedData.byteOffset + extracted.signedData.byteLength
-          ),
-          checkChain: Boolean(trustedCerts?.length),
-          trustedCerts: trustedCerts?.length ? trustedCerts : undefined,
-          extendedMode: true,
+        // Evaluate X.509 certificate constraints, chain & trust anchors (Lote 6F.2A)
+        const chainEval = await evaluateX509ChainAndTrust({
+          signerCert,
+          cmsCertificates: resolvedSigner.cmsCertificates,
+          intermediateCerts: options.intermediateCerts,
+          intermediatePems: options.intermediatePems,
+          trustedCerts: options.trustedCerts,
+          trustedRootPems: options.trustedRootPems,
+          allowCustomTrustAnchors: options.allowCustomTrustAnchors,
         });
-        isValid = Boolean(result.signatureVerified);
-        if (isValid && result.signerCertificate instanceof pkijs.Certificate) signerCert = result.signerCertificate;
-        if (!isValid) verifyError = result.message || 'Assinatura inválida';
-      } catch (err) {
-        verifyError =
-          (err as { message?: string })?.message || 'Assinatura inválida';
+
+        // If an earlier signature in a multi-signature PDF has an INVALID certificate/chain, fail immediately
+        if (
+          i < sigEntries.length - 1 &&
+          (chainEval.chainValidation.status === 'INVALID' ||
+            !chainEval.signerIdentity.keyUsageValid ||
+            chainEval.signerIdentity.isCa ||
+            !chainEval.signerIdentity.cpfMatchesCommonName)
+        ) {
+          const errMsg =
+            chainEval.chainValidation.error ||
+            chainEval.signerIdentity.error ||
+            'Cadeia de certificados inválida em assinatura anterior do documento.';
+          sigEntry.valid = false;
+          sigEntry.error = errMsg;
+          return {
+            ...buildInvalidResult(
+              errMsg,
+              pdfIntegrity,
+              currentCmsResult,
+              chainEval.subIndication || 'CERTIFICATE_CHAIN_INVALID',
+            ),
+            cryptographicIntegrity: true,
+            signerName: chainEval.signerIdentity.commonName,
+            signerCpf: chainEval.signerIdentity.cpf,
+            certificateSubject: chainEval.signerIdentity.subject,
+            certificateIssuer: chainEval.signerIdentity.issuer,
+            certificateSerial: chainEval.signerIdentity.serialNumber,
+            certificateFingerprint: chainEval.signerIdentity.fingerprint256,
+            validFrom: chainEval.signerIdentity.validFrom,
+            validTo: chainEval.signerIdentity.validTo,
+            signerIdentity: chainEval.signerIdentity,
+            chainValidation: chainEval.chainValidation,
+            rootTrust: chainEval.rootTrust,
+          };
+        }
+
+        primaryCmsResult = currentCmsResult;
+        primaryChainEval = chainEval;
+        primaryClaimedSigningTime = claimedSigningTime;
       }
 
-      if (!isValid || !signerCert) throw new Error(verifyError || 'Certificado do signatário não identificado criptograficamente.');
-      const certInfo = parseX509Certificate(Buffer.from(signerCert.toSchema().toBER()));
+      const { signerIdentity, chainValidation, rootTrust } = primaryChainEval!;
+      const isSelfSigned = chainValidation.isSelfSigned;
+      const currentlyValid =
+        verificationTime >= signerIdentity.validFrom &&
+        verificationTime <= signerIdentity.validTo;
+
+      // Temporal validity evaluation (Adjustment 1 & Adjustment 2: claimedSigningTime is NEVER used as POE)
+      let temporalStatus: PadesTemporalValidityResult['status'] =
+        'WITHIN_CURRENT_VALIDITY_NO_TIMESTAMP';
+      let temporalValid = true;
+      let temporalError: string | undefined;
+
+      if (
+        primaryClaimedSigningTime &&
+        (primaryClaimedSigningTime < signerIdentity.validFrom ||
+          primaryClaimedSigningTime > signerIdentity.validTo)
+      ) {
+        temporalStatus = 'CLAIMED_TIME_OUTSIDE_VALIDITY';
+        temporalValid = false;
+        temporalError =
+          'O atributo signingTime declarado pelo signatário está fora da janela de validade do certificado.';
+      } else if (verificationTime < signerIdentity.validFrom) {
+        temporalStatus = 'NOT_YET_VALID';
+        temporalValid = false;
+        temporalError =
+          'O certificado do signatário ainda não entrou em vigência.';
+      } else if (verificationTime > signerIdentity.validTo) {
+        if (validationContext === 'LIVE_ISSUANCE') {
+          temporalStatus = 'EXPIRED_AT_ISSUANCE';
+          temporalValid = false;
+          temporalError =
+            'O certificado do signatário está expirado no momento da emissão.';
+        } else {
+          temporalStatus = 'OUT_OF_BOUNDS_NO_POE';
+          temporalValid = false;
+          temporalError =
+            'Certificado expirado no instante da verificação e sem prova confiável de existência (POE) anterior ao vencimento.';
+        }
+      }
+
+      const temporalValidity: PadesTemporalValidityResult = {
+        status: temporalStatus,
+        valid: temporalValid,
+        currentlyValid,
+        hasTrustedPoe: false,
+        poeSource: 'NONE',
+        claimedSigningTime: primaryClaimedSigningTime,
+        verificationTime,
+        error: temporalError,
+      };
+
+      const revocation: PadesRevocationResult = {
+        status: 'INDETERMINATE',
+        checked: false,
+        source: 'NONE',
+      };
+
+      const cryptographicIntegrity =
+        pdfIntegrity.valid && primaryCmsResult.valid;
+      const chainOrCertInvalid =
+        chainValidation.status === 'INVALID' ||
+        !signerIdentity.keyUsageValid ||
+        signerIdentity.isCa ||
+        !signerIdentity.cpfMatchesCommonName;
+
+      const certificateTrust =
+        !chainOrCertInvalid &&
+        chainValidation.valid &&
+        rootTrust.trusted &&
+        temporalValidity.valid &&
+        (revocation.status === 'GOOD' || revocation.status === 'GOOD_AT_POE');
+
+      let status: VerificationGlobalStatus;
+      let subIndication: string | undefined;
+      let errorMsg: string | undefined;
+
+      if (!cryptographicIntegrity) {
+        status = 'INVALID';
+        subIndication = 'SIG_CRYPTO_FAILURE';
+        errorMsg = primaryCmsResult.error || pdfIntegrity.error;
+      } else if (chainOrCertInvalid) {
+        status = 'INVALID';
+        subIndication =
+          primaryChainEval?.subIndication || 'CERTIFICATE_CHAIN_INVALID';
+        errorMsg =
+          chainValidation.error ||
+          signerIdentity.error ||
+          'Cadeia de certificados ou restrições X.509 inválidas.';
+      } else if (
+        temporalStatus === 'NOT_YET_VALID' ||
+        temporalStatus === 'CLAIMED_TIME_OUTSIDE_VALIDITY' ||
+        temporalStatus === 'EXPIRED_AT_ISSUANCE'
+      ) {
+        status = 'INVALID';
+        subIndication = temporalStatus;
+        errorMsg = temporalError;
+      } else if (certificateTrust) {
+        status = 'VALID';
+      } else {
+        // Requirement 8: Preserve global status INDETERMINATE while revocation & remaining requirements are not demonstrated
+        status = 'INDETERMINATE';
+        if (temporalStatus === 'OUT_OF_BOUNDS_NO_POE') {
+          subIndication = 'OUT_OF_BOUNDS_NO_POE';
+        } else if (isSelfSigned || chainValidation.status === 'SELF_SIGNED') {
+          subIndication = 'NO_CERTIFICATE_CHAIN_FOUND_SELF_SIGNED';
+        } else if (chainValidation.status === 'INCOMPLETE_CHAIN') {
+          subIndication = 'INCOMPLETE_CERTIFICATE_CHAIN';
+        } else if (chainValidation.status === 'UNTRUSTED_ROOT') {
+          subIndication = 'UNTRUSTED_ROOT_CA';
+        } else {
+          subIndication = 'REVOCATION_UNAVAILABLE';
+        }
+      }
+
+      const persistenceStatus: VerificationStatus =
+        status === 'VALID'
+          ? 'VALID'
+          : status === 'INVALID'
+            ? 'INVALID'
+            : 'UNVERIFIED';
+
+      const isTrusted = status === 'VALID';
+      const isValid = options.requireFullTrust
+        ? status === 'VALID'
+        : cryptographicIntegrity && status !== 'INVALID';
 
       return {
-        isValid: Boolean(isValid),
-        signerName: certInfo.commonName,
-        signerCpf: certInfo.cpf,
-        certificateSubject: certInfo.subject,
-        certificateIssuer: certInfo.issuer,
-        certificateSerial: certInfo.serialNumber,
-        certificateFingerprint: certInfo.fingerprint256,
-        validFrom: certInfo.validFrom,
-        validTo: certInfo.validTo,
-        digestAlgorithm: 'SHA-256',
-        messageDigestHex: calculatedDigestHex,
-        calculatedDigestHex,
-        signedAt: new Date(),
-        error: isValid ? undefined : verifyError,
+        isValid,
+        status,
+        subIndication,
+        persistenceStatus,
+        cryptographicIntegrity,
+        certificateTrust,
+        isTrusted,
+        signerName: signerIdentity.commonName,
+        signerCpf: signerIdentity.cpf,
+        certificateSubject: signerIdentity.subject,
+        certificateIssuer: signerIdentity.issuer,
+        certificateSerial: signerIdentity.serialNumber,
+        certificateFingerprint: signerIdentity.fingerprint256,
+        validFrom: signerIdentity.validFrom,
+        validTo: signerIdentity.validTo,
+        digestAlgorithm: primaryCmsResult.digestAlgorithm,
+        messageDigestHex: primaryCmsResult.messageDigestAttrHex,
+        calculatedDigestHex: primaryCmsResult.calculatedDigestHex,
+        signedAt: primaryClaimedSigningTime,
+        claimedSigningTime: primaryClaimedSigningTime,
+        cmsIntegrity: primaryCmsResult,
+        pdfIntegrity,
+        signerIdentity,
+        chainValidation,
+        rootTrust,
+        temporalValidity,
+        revocation,
+        error: status === 'INVALID' ? errorMsg : undefined,
       };
     } catch (err) {
-      return {
-        isValid: false,
-        signerName: 'Desconhecido',
-        signerCpf: null,
-        certificateSubject: '',
-        certificateIssuer: '',
-        certificateSerial: '',
-        certificateFingerprint: '',
-        validFrom: new Date(0),
-        validTo: new Date(0),
-        digestAlgorithm: 'SHA-256',
-        messageDigestHex: '',
-        calculatedDigestHex: '',
-        error: err instanceof Error ? err.message : String(err),
-      };
+      const msg = err instanceof Error ? err.message : String(err);
+      return buildInvalidResult(msg, {
+        valid: false,
+        policy,
+        byteRange: null,
+        coversWholeDocument: false,
+        unsignedTrailingBytes: 0,
+        contentsHexValid: false,
+        contentsPaddingValid: false,
+        totalRevisionsCount: 0,
+        preSignatureRevisionsCount: 0,
+        signatureRevisionsCount: 0,
+        postSignatureLtvRevisionsCount: 0,
+        hasUnauthorizedPostSignatureUpdate: false,
+        revisions: [],
+        signatures: [],
+        error: msg,
+      });
     }
   }
 }
