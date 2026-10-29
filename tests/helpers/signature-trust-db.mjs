@@ -13,7 +13,9 @@ export const oauthMigration = '20261029020000_signature_oauth_attempts.sql';
 export const oauthGuard = "do $$ begin\n raise exception 'Migração OAuth de assinatura em revisão: não aplicar';\nend $$;";
 export const attemptsMigration = '20261029030000_document_signing_attempts.sql';
 export const attemptsGuard = "do $$ begin\n raise exception 'Migração de tentativas de assinatura em revisão: não aplicar';\nend $$;";
-export function createSignatureTrustDb({ baseline = false, oauth = false, attempts = false } = {}) {
+export const evidenceMigration = '20261029040000_revocation_evidence.sql';
+export const evidenceGuard = "do $$ begin\n raise exception 'Migração de evidências de revogação em revisão: não aplicar';\nend $$;";
+export function createSignatureTrustDb({ baseline = false, oauth = false, attempts = false, revocationEvidence = false } = {}) {
   const inspect = JSON.parse(
     execFileSync(containerEngine, ['inspect', 'psywrite-sncr-3a-disposable'], {
       encoding: 'utf8',
@@ -114,7 +116,7 @@ export function createSignatureTrustDb({ baseline = false, oauth = false, attemp
     ];
     const history = [];
     for (const file of readdirSync(migrations)
-      .filter((f) => f.endsWith('.sql') && ![trustMigration,oauthMigration,attemptsMigration].includes(f))
+      .filter((f) => f.endsWith('.sql') && ![trustMigration,oauthMigration,attemptsMigration,evidenceMigration].includes(f))
       .sort()) {
       let source = readFileSync(new URL(file, migrations), 'utf8');
       for (const guard of guards)
@@ -136,6 +138,12 @@ export function createSignatureTrustDb({ baseline = false, oauth = false, attemp
       const source=readFileSync(new URL(attemptsMigration,migrations),'utf8');
       assert.equal(source.split(attemptsGuard).length,2);
       sql(`begin; ${source.replace(attemptsGuard,'-- somente cópia descartável')} commit;`);
+    }
+    if (revocationEvidence) {
+      assert.ok(attempts, 'A migração de evidências depende da de tentativas.');
+      const source=readFileSync(new URL(evidenceMigration,migrations),'utf8');
+      assert.equal(source.split(evidenceGuard).length,2);
+      sql(`begin; ${source.replace(evidenceGuard,'-- somente cópia descartável')} commit;`);
     }
   } catch (error) {
     cleanup();
