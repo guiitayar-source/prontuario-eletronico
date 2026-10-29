@@ -15,6 +15,7 @@ import {
   type X509ChainEvaluationResult,
 } from './icp-chain.ts';
 import { validatePadesPdfStructure } from './pdf-structure-validator.ts';
+import { evaluateTemporalValidityAndPoe } from './rfc3161-timestamp.ts';
 import type {
   PadesChainValidationResult,
   PadesCmsIntegrityResult,
@@ -549,7 +550,6 @@ export class PadesService {
     const options = normalizeOptions(optionsOrTrustedCerts);
     const policy = options.pdfRevisionPolicy ?? 'PADES_LTV_ALLOWED';
     const verificationTime = options.verificationTime ?? new Date();
-    const validationContext = options.validationContext ?? 'VERIFICATION';
 
     const emptyCmsIntegrity: PadesCmsIntegrityResult = {
       valid: false,
@@ -672,6 +672,9 @@ export class PadesService {
       let primaryCmsResult: PadesCmsIntegrityResult = emptyCmsIntegrity;
       let primaryChainEval: X509ChainEvaluationResult | null = null;
       let primaryClaimedSigningTime: Date | undefined;
+      let primarySignerInfo: pkijs.SignerInfo | null = null;
+      let primarySigEntry = sigEntries[sigEntries.length - 1];
+      let primaryCmsCertificates: pkijs.Certificate[] = [];
 
       for (let i = 0; i < sigEntries.length; i += 1) {
         const sigEntry = sigEntries[i];
@@ -1069,58 +1072,30 @@ export class PadesService {
         primaryCmsResult = currentCmsResult;
         primaryChainEval = chainEval;
         primaryClaimedSigningTime = claimedSigningTime;
+        primarySignerInfo = signerInfo;
+        primarySigEntry = sigEntry;
+        primaryCmsCertificates = resolvedSigner.cmsCertificates;
       }
 
-      const { signerIdentity, chainValidation, rootTrust } = primaryChainEval!;
+      const { signerIdentity, chainValidation, rootTrust, chainNodes } =
+        primaryChainEval!;
       const isSelfSigned = chainValidation.isSelfSigned;
-      const currentlyValid =
-        verificationTime >= signerIdentity.validFrom &&
-        verificationTime <= signerIdentity.validTo;
 
-      // Temporal validity evaluation (Adjustment 1 & Adjustment 2: claimedSigningTime is NEVER used as POE)
-      let temporalStatus: PadesTemporalValidityResult['status'] =
-        'WITHIN_CURRENT_VALIDITY_NO_TIMESTAMP';
-      let temporalValid = true;
-      let temporalError: string | undefined;
-
-      if (
-        primaryClaimedSigningTime &&
-        (primaryClaimedSigningTime < signerIdentity.validFrom ||
-          primaryClaimedSigningTime > signerIdentity.validTo)
-      ) {
-        temporalStatus = 'CLAIMED_TIME_OUTSIDE_VALIDITY';
-        temporalValid = false;
-        temporalError =
-          'O atributo signingTime declarado pelo signatário está fora da janela de validade do certificado.';
-      } else if (verificationTime < signerIdentity.validFrom) {
-        temporalStatus = 'NOT_YET_VALID';
-        temporalValid = false;
-        temporalError =
-          'O certificado do signatário ainda não entrou em vigência.';
-      } else if (verificationTime > signerIdentity.validTo) {
-        if (validationContext === 'LIVE_ISSUANCE') {
-          temporalStatus = 'EXPIRED_AT_ISSUANCE';
-          temporalValid = false;
-          temporalError =
-            'O certificado do signatário está expirado no momento da emissão.';
-        } else {
-          temporalStatus = 'OUT_OF_BOUNDS_NO_POE';
-          temporalValid = false;
-          temporalError =
-            'Certificado expirado no instante da verificação e sem prova confiável de existência (POE) anterior ao vencimento.';
-        }
-      }
-
-      const temporalValidity: PadesTemporalValidityResult = {
-        status: temporalStatus,
-        valid: temporalValid,
-        currentlyValid,
-        hasTrustedPoe: false,
-        poeSource: 'NONE',
+      // Evaluate temporal validity, RFC 3161 timestamps, and authenticated External POE (Lote 6F.2B)
+      const temporalValidity = await evaluateTemporalValidityAndPoe({
+        pdfBuffer,
+        primarySignerInfo: primarySignerInfo!,
+        primarySignatureEntry: primarySigEntry,
+        allSignatureEntries: pdfIntegrity.signatures,
+        primaryCmsCertificates,
+        signerChainNodes: chainNodes,
         claimedSigningTime: primaryClaimedSigningTime,
         verificationTime,
-        error: temporalError,
-      };
+        options,
+        calculatedDigestHex: primaryCmsResult.calculatedDigestHex,
+      });
+      const temporalStatus = temporalValidity.status;
+      const temporalError = temporalValidity.error;
 
       const revocation: PadesRevocationResult = {
         status: 'INDETERMINATE',
@@ -1136,11 +1111,18 @@ export class PadesService {
         signerIdentity.isCa ||
         !signerIdentity.cpfMatchesCommonName;
 
+      const tsaTrustSatisfiedIfApplicable =
+        temporalValidity.poeSource === 'RFC3161_SIGNATURE_TIMESTAMP' ||
+        temporalValidity.poeSource === 'RFC3161_DOC_TIMESTAMP'
+          ? temporalValidity.tsaTrustComplete === true
+          : true;
+
       const certificateTrust =
         !chainOrCertInvalid &&
         chainValidation.valid &&
         rootTrust.trusted &&
         temporalValidity.valid &&
+        tsaTrustSatisfiedIfApplicable &&
         (revocation.status === 'GOOD' || revocation.status === 'GOOD_AT_POE');
 
       let status: VerificationGlobalStatus;
@@ -1160,19 +1142,31 @@ export class PadesService {
           signerIdentity.error ||
           'Cadeia de certificados ou restrições X.509 inválidas.';
       } else if (
+        temporalStatus === 'INVALID_TIMESTAMP' ||
         temporalStatus === 'NOT_YET_VALID' ||
         temporalStatus === 'CLAIMED_TIME_OUTSIDE_VALIDITY' ||
         temporalStatus === 'EXPIRED_AT_ISSUANCE'
       ) {
         status = 'INVALID';
-        subIndication = temporalStatus;
+        subIndication = temporalValidity.subIndication || temporalStatus;
         errorMsg = temporalError;
+      } else if (revocation.status === 'REVOKED_BEFORE_POE') {
+        status = 'INVALID';
+        subIndication = 'REVOKED_BEFORE_POE';
+        errorMsg =
+          revocation.error ||
+          'Certificado do signatário estava revogado no instante comprovado da assinatura.';
       } else if (certificateTrust) {
         status = 'VALID';
       } else {
-        // Requirement 8: Preserve global status INDETERMINATE while revocation & remaining requirements are not demonstrated
+        // Requirement 8 & 9: Preserve global status INDETERMINATE while POE, TSA revocation, or signer revocation is insufficient/unavailable.
+        // Point 4 (6F.2C contract): Corrupted/unusable CRL or OCSP evidence (INVALID_EVIDENCE) NEVER forces INVALID; it stays INDETERMINATE.
         status = 'INDETERMINATE';
-        if (temporalStatus === 'OUT_OF_BOUNDS_NO_POE') {
+        if (temporalValidity.subIndication) {
+          subIndication = temporalValidity.subIndication;
+        } else if (temporalStatus === 'OUT_OF_BOUNDS_AT_POE') {
+          subIndication = 'OUT_OF_BOUNDS_AT_POE';
+        } else if (temporalStatus === 'OUT_OF_BOUNDS_NO_POE') {
           subIndication = 'OUT_OF_BOUNDS_NO_POE';
         } else if (isSelfSigned || chainValidation.status === 'SELF_SIGNED') {
           subIndication = 'NO_CERTIFICATE_CHAIN_FOUND_SELF_SIGNED';
@@ -1180,6 +1174,10 @@ export class PadesService {
           subIndication = 'INCOMPLETE_CERTIFICATE_CHAIN';
         } else if (chainValidation.status === 'UNTRUSTED_ROOT') {
           subIndication = 'UNTRUSTED_ROOT_CA';
+        } else if (revocation.status === 'INVALID_EVIDENCE') {
+          subIndication = 'REVOCATION_EVIDENCE_INVALID';
+        } else if (revocation.status === 'REVOKED_NO_POE') {
+          subIndication = 'REVOKED_NO_POE';
         } else {
           subIndication = 'REVOCATION_UNAVAILABLE';
         }
@@ -1218,6 +1216,9 @@ export class PadesService {
         calculatedDigestHex: primaryCmsResult.calculatedDigestHex,
         signedAt: primaryClaimedSigningTime,
         claimedSigningTime: primaryClaimedSigningTime,
+        poeTime: temporalValidity.hasTrustedPoe
+          ? temporalValidity.poeTime
+          : undefined,
         cmsIntegrity: primaryCmsResult,
         pdfIntegrity,
         signerIdentity,

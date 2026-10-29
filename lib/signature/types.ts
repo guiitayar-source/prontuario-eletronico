@@ -127,7 +127,17 @@ export interface PadesRootTrustResult {
   error?: string;
 }
 
+/**
+ * Representa uma Prova Externa de Existência (POE) independente e pré-existente
+ * (ex.: recibo imutável do SNCR/Anvisa ou registro de auditoria externo).
+ *
+ * IMPORTANTE (Lote 6F.2B):
+ * - Uma data fornecida pelo chamador NÃO adquire confiança apenas por receber HMAC.
+ * - A POE externa deve referenciar um registro independente (`evidenceRecordId`) emitido
+ *   por uma fonte autorizada (`sourceId`) no instante `poeTime` sobre o hash `targetHashHex`.
+ */
 export interface ExternalPoeEvidence {
+  evidenceRecordId: string;
   poeTime: Date;
   targetHashHex: string;
   targetType:
@@ -138,6 +148,17 @@ export interface ExternalPoeEvidence {
   authenticator?: string;
 }
 
+/**
+ * Resultado da avaliação de validade temporal e Prova de Existência (POE) conforme ETSI EN 319 102-1 e RFC 3161.
+ *
+ * Semântica de `VALID_AT_POE`:
+ * - A POE em `poeTime` comprova um limite superior (`t_criacao <= poeTime`), demonstrando que
+ *   a assinatura já existia até aquele instante (antes de `notAfter`: `provenExistedBeforeExpiration = true`).
+ * - A POE NÃO demonstra que a assinatura foi criada exatamente em `poeTime` (`exactCreationTimeProven = false`),
+ *   nem demonstra isoladamente um limite inferior posterior a `notBefore` (`lowerBoundAfterNotBeforeProven = false`).
+ * - A confiança temporal completa (`tsaTrustComplete`) permanece `false` enquanto a verificação de
+ *   revogação da cadeia da TSA (`tsaRevocationChecked`) estiver pendente (Lote 6F.2C).
+ */
 export interface PadesTemporalValidityResult {
   status:
     | 'VALID_AT_POE'
@@ -151,6 +172,9 @@ export interface PadesTemporalValidityResult {
   valid: boolean;
   currentlyValid: boolean;
   hasTrustedPoe: boolean;
+  provenExistedBeforeExpiration?: boolean;
+  exactCreationTimeProven?: boolean;
+  lowerBoundAfterNotBeforeProven?: boolean;
   poeSource:
     | 'RFC3161_SIGNATURE_TIMESTAMP'
     | 'RFC3161_DOC_TIMESTAMP'
@@ -159,11 +183,40 @@ export interface PadesTemporalValidityResult {
   poeTime?: Date;
   claimedSigningTime?: Date;
   verificationTime: Date;
+  timestampPresent?: boolean;
+  timestampSignatureValid?: boolean;
+  timestampMessageImprintValid?: boolean;
+  timestampGenTime?: Date;
+  tsaSignerSubject?: string;
+  tsaKeyUsageValid?: boolean;
+  tsaExtendedKeyUsageValid?: boolean;
+  tsaExtendedKeyUsageCritical?: boolean;
+  tsaChainStatus?:
+    | 'VALID'
+    | 'SELF_SIGNED'
+    | 'INCOMPLETE_CHAIN'
+    | 'UNTRUSTED_ROOT'
+    | 'INVALID';
   tsaChainValid?: boolean;
   tsaRootTrusted?: boolean;
+  tsaRevocationChecked?: boolean;
+  tsaTrustComplete?: boolean;
+  externalPoeValid?: boolean;
+  subIndication?: string;
   error?: string;
 }
 
+/**
+ * Resultado da verificação de revogação (CRL / OCSP) — contrato preparado para o Lote 6F.2C.
+ *
+ * Regra de segurança para evidência de revogação inválida (`INVALID_EVIDENCE`):
+ * - Uma CRL ou resposta OCSP corrompida, adulterada, expirada ou sem cadeia válida deve ser
+ *   rejeitada como evidência inutilizável (`status: 'INVALID_EVIDENCE'`), mas NÃO demonstra
+ *   que a assinatura do documento seja inválida.
+ * - Quando `revocation.status === 'INVALID_EVIDENCE'`, o status global da assinatura DEVE
+ *   permanecer `'INDETERMINATE'` (`subIndication: 'REVOCATION_EVIDENCE_INVALID'`), impedindo
+ *   que terceiros forcem um falso `INVALID` injetando CRL/OCSP adulterados.
+ */
 export interface PadesRevocationResult {
   status:
     | 'GOOD'
@@ -182,14 +235,23 @@ export interface PadesRevocationResult {
 export interface PadesVerificationOptions {
   trustedCerts?: unknown[];
   trustedRootPems?: string[];
+  trustedTsaCerts?: unknown[];
   trustedTsaRootPems?: string[];
   intermediateCerts?: unknown[];
   intermediatePems?: string[];
+  tsaIntermediateCerts?: unknown[];
+  tsaIntermediatePems?: string[];
   allowCustomTrustAnchors?: boolean;
   pdfRevisionPolicy?: PdfRevisionPolicy;
   validationContext?: ValidationContextMode;
   verificationTime?: Date;
   externalPoe?: ExternalPoeEvidence;
+  externalPoeHmacKey?: string;
+  externalPoeVerifier?: (
+    evidence: ExternalPoeEvidence,
+    expectedTargetHashHex: string,
+  ) => boolean | Promise<boolean>;
+  trustedExternalPoeSources?: string[];
   crls?: Array<Buffer | Uint8Array | string>;
   ocspResponses?: Array<Buffer | Uint8Array>;
   requireFullTrust?: boolean;

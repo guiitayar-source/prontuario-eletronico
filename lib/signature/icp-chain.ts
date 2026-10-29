@@ -760,18 +760,22 @@ export interface EvaluateX509ChainParams {
   trustedCerts?: unknown[];
   trustedRootPems?: string[];
   allowCustomTrustAnchors?: boolean;
+  purpose?: 'DOCUMENT_SIGNING' | 'TIMESTAMP_AUTHORITY';
 }
 
 export interface X509ChainEvaluationResult {
   signerIdentity: PadesSignerIdentityResult;
   chainValidation: PadesChainValidationResult;
   rootTrust: PadesRootTrustResult;
+  chainNodes: ParsedX509Node[];
   subIndication?: string;
 }
 
+const OID_KP_TIME_STAMPING = '1.3.6.1.5.5.7.3.8';
+
 /**
  * Evaluates the signer certificate identity, X.509 extension constraints,
- * full certification path, and root trust anchor policy (Lote 6F.2A).
+ * full certification path, and root trust anchor policy (Lote 6F.2A / 6F.2B).
  *
  * Does NOT evaluate temporal validity against current wall clock as historical invalidity,
  * and does NOT query external CRL/OCSP endpoints.
@@ -779,6 +783,7 @@ export interface X509ChainEvaluationResult {
 export async function evaluateX509ChainAndTrust(
   params: EvaluateX509ChainParams,
 ): Promise<X509ChainEvaluationResult> {
+  const purpose = params.purpose ?? 'DOCUMENT_SIGNING';
   const signerNode = parseX509Node(params.signerCert);
 
   const cpfMatchesCommonName =
@@ -788,12 +793,6 @@ export async function evaluateX509ChainAndTrust(
 
   const isEndEntityCa = signerNode.basicConstraints.cA === true;
 
-  // Signer KeyUsage validation:
-  // - Must not have malformed extensions or unrecognized critical extensions.
-  // - Must not be a CA (BasicConstraints cA=true).
-  // - If KeyUsage is present: must include digitalSignature or nonRepudiation, and must NOT include keyCertSign.
-  // - If signer is CA-issued (!isSelfIssued): KeyUsage MUST be present.
-  // - If ExtendedKeyUsage is present: must include at least one document/client/email signing purpose.
   let signerKeyUsageValid = true;
   let signerConstraintError: string | undefined;
   let signerSubIndication: string | undefined;
@@ -806,41 +805,74 @@ export async function evaluateX509ChainAndTrust(
   ) {
     signerKeyUsageValid = false;
     signerConstraintError =
-      'Certificado do signatário possui extensão X.509 crítica desconhecida ou malformada.';
-    signerSubIndication = 'SIGNER_CONSTRAINTS_FAILURE';
-  } else if (!cpfMatchesCommonName) {
+      'Certificado possui extensão X.509 crítica desconhecida ou malformada.';
+    signerSubIndication =
+      purpose === 'TIMESTAMP_AUTHORITY'
+        ? 'TSA_CERT_INCOMPATIBLE'
+        : 'SIGNER_CONSTRAINTS_FAILURE';
+  } else if (purpose === 'DOCUMENT_SIGNING' && !cpfMatchesCommonName) {
     signerConstraintError =
       'CPF na extensão ICP-Brasil (2.16.76.1.3.1) diverge do CPF declarado no Common Name (CN) do certificado.';
     signerSubIndication = 'SIGNER_IDENTITY_MISMATCH';
   } else if (isEndEntityCa) {
     signerKeyUsageValid = false;
     signerConstraintError =
-      'Certificado do signatário é uma Autoridade Certificadora (BasicConstraints cA=true) e não pode assinar documentos finais.';
-    signerSubIndication = 'SIGNER_IS_CA_CERTIFICATE';
+      purpose === 'TIMESTAMP_AUTHORITY'
+        ? 'Certificado da TSA possui BasicConstraints cA=true (Autoridade Certificadora não pode atuar diretamente como TSA).'
+        : 'Certificado do signatário é uma Autoridade Certificadora (BasicConstraints cA=true) e não pode assinar documentos finais.';
+    signerSubIndication =
+      purpose === 'TIMESTAMP_AUTHORITY'
+        ? 'TSA_CERT_INCOMPATIBLE'
+        : 'SIGNER_IS_CA_CERTIFICATE';
   } else if (signerNode.keyUsage.present) {
     const hasSigningBit =
       signerNode.keyUsage.digitalSignature || signerNode.keyUsage.nonRepudiation;
     if (!hasSigningBit || signerNode.keyUsage.keyCertSign) {
       signerKeyUsageValid = false;
       signerConstraintError =
-        'Certificado do signatário possui KeyUsage incompatível com assinatura digital de documentos.';
-      signerSubIndication = 'SIGNER_KEY_USAGE_INCOMPATIBLE';
+        purpose === 'TIMESTAMP_AUTHORITY'
+          ? 'Certificado da TSA possui KeyUsage incompatível com assinatura de carimbo de tempo.'
+          : 'Certificado do signatário possui KeyUsage incompatível com assinatura digital de documentos.';
+      signerSubIndication =
+        purpose === 'TIMESTAMP_AUTHORITY'
+          ? 'TSA_CERT_INCOMPATIBLE'
+          : 'SIGNER_KEY_USAGE_INCOMPATIBLE';
     }
-  } else if (!signerNode.isSelfIssued) {
+  } else if (purpose === 'TIMESTAMP_AUTHORITY' || !signerNode.isSelfIssued) {
     signerKeyUsageValid = false;
     signerConstraintError =
-      'Certificado do signatário emitido por AC não possui extensão obrigatória KeyUsage para assinatura digital.';
-    signerSubIndication = 'SIGNER_KEY_USAGE_MISSING';
+      purpose === 'TIMESTAMP_AUTHORITY'
+        ? 'Certificado da TSA não possui extensão obrigatória KeyUsage.'
+        : 'Certificado do signatário emitido por AC não possui extensão obrigatória KeyUsage para assinatura digital.';
+    signerSubIndication =
+      purpose === 'TIMESTAMP_AUTHORITY'
+        ? 'TSA_CERT_INCOMPATIBLE'
+        : 'SIGNER_KEY_USAGE_MISSING';
   }
 
-  if (signerKeyUsageValid && !signerConstraintError && signerNode.extendedKeyUsage.present) {
-    const hasCompatibleEku = signerNode.extendedKeyUsage.oids.some((oid) =>
-      ALLOWED_DOCUMENT_SIGNING_EKU_OIDS.has(oid),
-    );
-    if (!hasCompatibleEku) {
-      signerKeyUsageValid = false;
-      signerConstraintError = `Certificado do signatário possui ExtendedKeyUsage restrito a finalidades incompatíveis com assinatura de documentos (${signerNode.extendedKeyUsage.oids.join(', ')}).`;
-      signerSubIndication = 'SIGNER_EXTENDED_KEY_USAGE_INCOMPATIBLE';
+  if (signerKeyUsageValid && !signerConstraintError) {
+    if (purpose === 'TIMESTAMP_AUTHORITY') {
+      // RFC 3161 §2.3: TSA certificate MUST have ExtendedKeyUsage marked critical=true with ONLY id-kp-timeStamping (1.3.6.1.5.5.7.3.8)
+      const hasValidTsaEku =
+        signerNode.extendedKeyUsage.present &&
+        signerNode.extendedKeyUsage.critical === true &&
+        signerNode.extendedKeyUsage.oids.length === 1 &&
+        signerNode.extendedKeyUsage.oids[0] === OID_KP_TIME_STAMPING;
+      if (!hasValidTsaEku) {
+        signerKeyUsageValid = false;
+        signerConstraintError =
+          'Certificado da TSA não possui ExtendedKeyUsage crítico (critical = true) e exclusivo id-kp-timeStamping (1.3.6.1.5.5.7.3.8) exigido pela RFC 3161 §2.3.';
+        signerSubIndication = 'TSA_EKU_INVALID';
+      }
+    } else if (signerNode.extendedKeyUsage.present) {
+      const hasCompatibleEku = signerNode.extendedKeyUsage.oids.some((oid) =>
+        ALLOWED_DOCUMENT_SIGNING_EKU_OIDS.has(oid),
+      );
+      if (!hasCompatibleEku) {
+        signerKeyUsageValid = false;
+        signerConstraintError = `Certificado do signatário possui ExtendedKeyUsage restrito a finalidades incompatíveis com assinatura de documentos (${signerNode.extendedKeyUsage.oids.join(', ')}).`;
+        signerSubIndication = 'SIGNER_EXTENDED_KEY_USAGE_INCOMPATIBLE';
+      }
     }
   }
 
@@ -891,6 +923,7 @@ export async function evaluateX509ChainAndTrust(
         rootFingerprint256: null,
         error: prodMsg,
       },
+      chainNodes: [signerNode],
       subIndication: 'CUSTOM_TRUST_ANCHOR_FORBIDDEN_IN_PRODUCTION',
     };
   }
@@ -913,6 +946,7 @@ export async function evaluateX509ChainAndTrust(
         rootFingerprint256: null,
         error: signerConstraintError,
       },
+      chainNodes: [signerNode],
       subIndication: signerSubIndication || 'SIGNER_CONSTRAINTS_FAILURE',
     };
   }
@@ -938,6 +972,7 @@ export async function evaluateX509ChainAndTrust(
           rootFingerprint256: null,
           error: msg,
         },
+        chainNodes: [signerNode],
         subIndication: 'CERT_SIGNATURE_INVALID',
       };
     }
@@ -960,6 +995,7 @@ export async function evaluateX509ChainAndTrust(
         rootFingerprint256: null,
         error: selfSignedMsg,
       },
+      chainNodes: [signerNode],
       subIndication: 'NO_CERTIFICATE_CHAIN_FOUND_SELF_SIGNED',
     };
   }
@@ -1032,6 +1068,7 @@ export async function evaluateX509ChainAndTrust(
           rootFingerprint256: null,
           error: incompleteMsg,
         },
+        chainNodes: chain,
         subIndication: 'INCOMPLETE_CERTIFICATE_CHAIN',
       };
     }
@@ -1061,6 +1098,7 @@ export async function evaluateX509ChainAndTrust(
           rootFingerprint256: null,
           error: akiMsg,
         },
+        chainNodes: chain,
         subIndication: 'AKI_SKI_MISMATCH',
       };
     }
@@ -1088,6 +1126,7 @@ export async function evaluateX509ChainAndTrust(
           rootFingerprint256: null,
           error: sigMsg,
         },
+        chainNodes: chain,
         subIndication: 'CERT_SIGNATURE_INVALID',
       };
     }
@@ -1098,7 +1137,8 @@ export async function evaluateX509ChainAndTrust(
         trustAnchorByFingerprint.has(c.fingerprint256),
       ) || cryptographicallyValidIssuers[0];
 
-    const nextChainSubjects = [...chain.map((c) => c.subject), issuerNode.subject];
+    const nextChain = [...chain, issuerNode];
+    const nextChainSubjects = nextChain.map((c) => c.subject);
 
     // Validate issuer's X.509 extension integrity
     if (
@@ -1124,6 +1164,7 @@ export async function evaluateX509ChainAndTrust(
           rootFingerprint256: null,
           error: extMsg,
         },
+        chainNodes: nextChain,
         subIndication: 'CA_EXTENSION_MALFORMED',
       };
     }
@@ -1147,6 +1188,7 @@ export async function evaluateX509ChainAndTrust(
           rootFingerprint256: null,
           error: caMsg,
         },
+        chainNodes: nextChain,
         subIndication: 'ISSUER_NOT_CA',
       };
     }
@@ -1170,6 +1212,7 @@ export async function evaluateX509ChainAndTrust(
           rootFingerprint256: null,
           error: kuMsg,
         },
+        chainNodes: nextChain,
         subIndication: 'CA_KEY_USAGE_INCOMPATIBLE',
       };
     }
@@ -1202,6 +1245,7 @@ export async function evaluateX509ChainAndTrust(
           rootFingerprint256: null,
           error: pathLenMsg,
         },
+        chainNodes: nextChain,
         subIndication: 'PATH_LEN_CONSTRAINT_VIOLATION',
       };
     }
@@ -1237,6 +1281,7 @@ export async function evaluateX509ChainAndTrust(
               rootFingerprint256: issuerNode.fingerprint256,
               error: rootSigMsg,
             },
+            chainNodes: chain,
             subIndication: 'ROOT_SIGNATURE_INVALID',
           };
         }
@@ -1257,6 +1302,7 @@ export async function evaluateX509ChainAndTrust(
             rootSubject: issuerNode.subject,
             rootFingerprint256: issuerNode.fingerprint256,
           },
+          chainNodes: chain,
         };
       }
 
@@ -1278,6 +1324,7 @@ export async function evaluateX509ChainAndTrust(
           rootFingerprint256: issuerNode.fingerprint256,
           error: untrustedMsg,
         },
+        chainNodes: chain,
         subIndication: 'UNTRUSTED_ROOT_CA',
       };
     }
@@ -1300,6 +1347,7 @@ export async function evaluateX509ChainAndTrust(
       rootFingerprint256: null,
       error: maxDepthMsg,
     },
+    chainNodes: chain,
     subIndication: 'CHAIN_DEPTH_LIMIT_EXCEEDED',
   };
 }
