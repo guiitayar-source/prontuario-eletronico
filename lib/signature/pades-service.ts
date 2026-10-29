@@ -16,6 +16,7 @@ import {
 } from './icp-chain.ts';
 import { validatePadesPdfStructure } from './pdf-structure-validator.ts';
 import { evaluateTemporalValidityAndPoe } from './rfc3161-timestamp.ts';
+import { evaluateDocumentRevocation } from './revocation-validator.ts';
 import type {
   PadesChainValidationResult,
   PadesCmsIntegrityResult,
@@ -1097,12 +1098,6 @@ export class PadesService {
       const temporalStatus = temporalValidity.status;
       const temporalError = temporalValidity.error;
 
-      const revocation: PadesRevocationResult = {
-        status: 'INDETERMINATE',
-        checked: false,
-        source: 'NONE',
-      };
-
       const cryptographicIntegrity =
         pdfIntegrity.valid && primaryCmsResult.valid;
       const chainOrCertInvalid =
@@ -1110,6 +1105,34 @@ export class PadesService {
         !signerIdentity.keyUsageValid ||
         signerIdentity.isCa ||
         !signerIdentity.cpfMatchesCommonName;
+
+      // Lote 6F.2C: revocation of the signer chain (signer + intermediates; trust anchor excluded by policy).
+      // Revocation evidence is ONLY evaluated over a chain proven valid up to a trusted anchor:
+      // otherwise an attacker could build a fake chain plus a matching forged CRL/OCSP and
+      // provoke a false INVALID. Without a trusted chain the result stays INDETERMINATE.
+      const chainTrustedForRevocation =
+        cryptographicIntegrity &&
+        !chainOrCertInvalid &&
+        chainValidation.valid &&
+        rootTrust.trusted;
+
+      const revocation: PadesRevocationResult = chainTrustedForRevocation
+        ? await evaluateDocumentRevocation({
+            signerChainNodes: chainNodes,
+            temporalValidity,
+            claimedSigningTime: primaryClaimedSigningTime,
+            verificationTime,
+            options,
+            tsaRevocationSummaries: temporalValidity.tsaRevocationSummaries,
+          })
+        : {
+            status: 'INDETERMINATE',
+            checked: false,
+            source: 'NONE',
+            subIndication: 'REVOCATION_UNAVAILABLE',
+            error:
+              'Revogação não avaliada: a cadeia do signatário não foi validada até uma âncora confiável.',
+          };
 
       const tsaTrustSatisfiedIfApplicable =
         temporalValidity.poeSource === 'RFC3161_SIGNATURE_TIMESTAMP' ||
@@ -1151,8 +1174,10 @@ export class PadesService {
         subIndication = temporalValidity.subIndication || temporalStatus;
         errorMsg = temporalError;
       } else if (revocation.status === 'REVOKED_BEFORE_POE') {
+        // Only reached with authentic evidence over a trusted chain AND positive proof that the
+        // signature was created at/after revocationDate (never inferred from revocationDate <= poeTime).
         status = 'INVALID';
-        subIndication = 'REVOKED_BEFORE_POE';
+        subIndication = revocation.subIndication || 'REVOKED_BEFORE_POE';
         errorMsg =
           revocation.error ||
           'Certificado do signatário estava revogado no instante comprovado da assinatura.';
@@ -1176,8 +1201,21 @@ export class PadesService {
           subIndication = 'UNTRUSTED_ROOT_CA';
         } else if (revocation.status === 'INVALID_EVIDENCE') {
           subIndication = 'REVOCATION_EVIDENCE_INVALID';
-        } else if (revocation.status === 'REVOKED_NO_POE') {
-          subIndication = 'REVOKED_NO_POE';
+        } else if (
+          revocation.status !== 'GOOD' &&
+          revocation.status !== 'GOOD_AT_POE'
+        ) {
+          subIndication =
+            revocation.subIndication ||
+            (revocation.status === 'REVOKED_NO_POE'
+              ? 'REVOKED_NO_POE'
+              : 'REVOCATION_UNAVAILABLE');
+        } else if (!tsaTrustSatisfiedIfApplicable) {
+          const tsaPending = temporalValidity.tsaRevocationSummaries?.find(
+            (r) => r.status !== 'GOOD' && r.status !== 'GOOD_AT_POE',
+          );
+          subIndication =
+            tsaPending?.subIndication || 'TSA_REVOCATION_UNAVAILABLE';
         } else {
           subIndication = 'REVOCATION_UNAVAILABLE';
         }

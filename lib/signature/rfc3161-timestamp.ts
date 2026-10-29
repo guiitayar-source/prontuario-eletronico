@@ -9,11 +9,13 @@ import {
   type ParsedX509Node,
 } from './icp-chain.ts';
 import type {
+  CertificateRevocationCheckSummary,
   ExternalPoeEvidence,
   PadesTemporalValidityResult,
   PadesVerificationOptions,
   PdfSignatureRevisionSummary,
 } from './types.ts';
+import { evaluateTsaChainRevocation } from './revocation-validator.ts';
 
 try {
   pkijs.setEngine(
@@ -250,6 +252,7 @@ export interface Rfc3161TokenValidationResult {
   tsaRootTrusted: boolean;
   tsaRevocationChecked: boolean;
   tsaTrustComplete: boolean;
+  tsaRevocationSummaries?: CertificateRevocationCheckSummary[];
   subIndication?: string;
   error?: string;
 }
@@ -268,6 +271,9 @@ export interface ValidateRfc3161TokenParams {
   tsaIntermediateCerts?: unknown[];
   tsaIntermediatePems?: string[];
   allowCustomTrustAnchors?: boolean;
+  /** Lote 6F.2C: injected offline revocation evidence (CRL/OCSP) and policy for the TSA chain. */
+  revocationOptions?: PadesVerificationOptions;
+  verificationTime?: Date;
 }
 
 /**
@@ -738,15 +744,53 @@ export async function validateRfc3161TimestampToken(
 
   const tsaChainValid = tsaChainEval.chainValidation.valid;
   const tsaRootTrusted = tsaChainEval.rootTrust.trusted;
-  const validAndTrusted = tsaChainValid && tsaRootTrusted;
-  // In Lote 6F.2B, TSA revocation checking (CRL/OCSP for TSA chain) is still pending Lote 6F.2C.
-  // Therefore, tsaRevocationChecked is false and tsaTrustComplete is false.
-  const tsaRevocationChecked = false;
-  const tsaTrustComplete = validAndTrusted && tsaRevocationChecked;
+  let validAndTrusted = tsaChainValid && tsaRootTrusted;
+
+  // Lote 6F.2C: TSA chain revocation (TSA signer + TSA intermediates; trust anchor excluded by policy).
+  // Only evaluated over a chain already proven valid up to a trusted anchor, so forged
+  // CRL/OCSP signed by an untrusted key can never be accepted as evidence.
+  let tsaRevocationChecked = false;
+  let tsaRevocationComplete = false;
+  let tsaRevocationSummaries: CertificateRevocationCheckSummary[] | undefined;
+  let tsaRevocationSubIndication: string | undefined;
+  let tsaRevocationError: string | undefined;
+  let tsaRevoked = false;
+
+  if (validAndTrusted && params.revocationOptions) {
+    const tsaRevEval = await evaluateTsaChainRevocation({
+      tsaChainNodes: tsaChainEval.chainNodes,
+      genTime,
+      verificationTime: params.verificationTime ?? new Date(),
+      options: params.revocationOptions,
+    });
+    tsaRevocationChecked = tsaRevEval.revocationChecked;
+    tsaRevocationComplete = tsaRevEval.trustComplete;
+    tsaRevocationSummaries =
+      tsaRevEval.certificateResults.length > 0
+        ? tsaRevEval.certificateResults
+        : undefined;
+    tsaRevocationSubIndication = tsaRevEval.subIndication;
+    tsaRevocationError = tsaRevEval.error;
+    tsaRevoked = tsaRevEval.isRevoked;
+  }
+
+  if (tsaRevoked) {
+    // A revoked/suspended TSA (or TSA CA) cannot provide a trusted POE. This does NOT make the
+    // document signature INVALID by itself; the timestamp simply stops counting as POE.
+    validAndTrusted = false;
+  }
+
+  const tsaTrustComplete =
+    validAndTrusted && tsaRevocationChecked && tsaRevocationComplete;
 
   let subIndication: string | undefined;
   let error: string | undefined;
-  if (!validAndTrusted) {
+  if (tsaRevoked) {
+    subIndication = tsaRevocationSubIndication || 'TSA_REVOKED';
+    error =
+      tsaRevocationError ||
+      'Certificado da cadeia da TSA revogado ou suspenso; o carimbo não constitui POE confiável.';
+  } else if (!validAndTrusted) {
     if (tsaChainStatus === 'INCOMPLETE_CHAIN') {
       subIndication = 'TSA_CHAIN_INCOMPLETE';
       error =
@@ -780,6 +824,7 @@ export async function validateRfc3161TimestampToken(
     tsaRootTrusted,
     tsaRevocationChecked,
     tsaTrustComplete,
+    tsaRevocationSummaries,
     subIndication,
     error,
   };
@@ -1160,6 +1205,8 @@ export async function evaluateTemporalValidityAndPoe(
         tsaIntermediateCerts: options.tsaIntermediateCerts,
         tsaIntermediatePems: options.tsaIntermediatePems,
         allowCustomTrustAnchors: options.allowCustomTrustAnchors,
+        revocationOptions: options,
+        verificationTime,
       });
 
       const diag: Partial<PadesTemporalValidityResult> = {
@@ -1176,6 +1223,7 @@ export async function evaluateTemporalValidityAndPoe(
         tsaRootTrusted: tsRes.tsaRootTrusted,
         tsaRevocationChecked: tsRes.tsaRevocationChecked,
         tsaTrustComplete: tsRes.tsaTrustComplete,
+        tsaRevocationSummaries: tsRes.tsaRevocationSummaries,
       };
       lastTsDiag = diag;
 
@@ -1224,6 +1272,8 @@ export async function evaluateTemporalValidityAndPoe(
       tsaIntermediateCerts: options.tsaIntermediateCerts,
       tsaIntermediatePems: options.tsaIntermediatePems,
       allowCustomTrustAnchors: options.allowCustomTrustAnchors,
+      revocationOptions: options,
+      verificationTime,
     });
 
     const diag: Partial<PadesTemporalValidityResult> = {
@@ -1240,6 +1290,7 @@ export async function evaluateTemporalValidityAndPoe(
       tsaRootTrusted: tsRes.tsaRootTrusted,
       tsaRevocationChecked: tsRes.tsaRevocationChecked,
       tsaTrustComplete: tsRes.tsaTrustComplete,
+      tsaRevocationSummaries: tsRes.tsaRevocationSummaries,
     };
     lastTsDiag = diag;
 

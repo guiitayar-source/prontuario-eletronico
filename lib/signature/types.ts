@@ -156,8 +156,9 @@ export interface ExternalPoeEvidence {
  *   a assinatura já existia até aquele instante (antes de `notAfter`: `provenExistedBeforeExpiration = true`).
  * - A POE NÃO demonstra que a assinatura foi criada exatamente em `poeTime` (`exactCreationTimeProven = false`),
  *   nem demonstra isoladamente um limite inferior posterior a `notBefore` (`lowerBoundAfterNotBeforeProven = false`).
- * - A confiança temporal completa (`tsaTrustComplete`) permanece `false` enquanto a verificação de
- *   revogação da cadeia da TSA (`tsaRevocationChecked`) estiver pendente (Lote 6F.2C).
+ * - A confiança temporal completa (`tsaTrustComplete`) somente é `true` quando assinatura, cadeia,
+ *   âncora, validade temporal E revogação da cadeia da TSA (`tsaRevocationChecked`) estiverem
+ *   demonstradas por evidência CRL/OCSP autêntica (Lote 6F.2C).
  */
 export interface PadesTemporalValidityResult {
   status:
@@ -201,13 +202,60 @@ export interface PadesTemporalValidityResult {
   tsaRootTrusted?: boolean;
   tsaRevocationChecked?: boolean;
   tsaTrustComplete?: boolean;
+  /** Lote 6F.2C: resultado de revogação por certificado da cadeia da TSA (sem a âncora). */
+  tsaRevocationSummaries?: CertificateRevocationCheckSummary[];
   externalPoeValid?: boolean;
   subIndication?: string;
   error?: string;
 }
 
+export type CrlReasonName =
+  | 'unspecified'
+  | 'keyCompromise'
+  | 'cACompromise'
+  | 'affiliationChanged'
+  | 'superseded'
+  | 'cessationOfOperation'
+  | 'certificateHold'
+  | 'removeFromCRL'
+  | 'privilegeWithdrawn'
+  | 'aACompromise'
+  | 'unknown';
+
+export type RevocationEvidenceSourcePolicy =
+  | 'INJECTED_ONLY'
+  | 'INJECTED_AND_EMBEDDED_LTV';
+
+export interface CertificateRevocationCheckSummary {
+  subject: string;
+  issuer: string;
+  serialNumber: string;
+  role: 'SIGNER' | 'SIGNER_CA' | 'TSA_SIGNER' | 'TSA_CA';
+  status:
+    | 'GOOD'
+    | 'GOOD_AT_POE'
+    | 'REVOKED_BEFORE_POE'
+    | 'REVOKED_NO_POE'
+    | 'CERTIFICATE_HOLD'
+    | 'INDETERMINATE'
+    | 'INVALID_EVIDENCE';
+  source: 'CRL' | 'OCSP' | 'BOTH' | 'NONE';
+  thisUpdate?: Date;
+  nextUpdate?: Date;
+  producedAt?: Date;
+  revokedAt?: Date;
+  invalidityDate?: Date;
+  reasonCode?: number;
+  reasonName?: CrlReasonName;
+  isHold?: boolean;
+  isKeyCompromise?: boolean;
+  hasContradictoryEvidence?: boolean;
+  subIndication?: string;
+  error?: string;
+}
+
 /**
- * Resultado da verificação de revogação (CRL / OCSP) — contrato preparado para o Lote 6F.2C.
+ * Resultado da verificação de revogação (CRL / OCSP) — Lote 6F.2C.
  *
  * Regra de segurança para evidência de revogação inválida (`INVALID_EVIDENCE`):
  * - Uma CRL ou resposta OCSP corrompida, adulterada, expirada ou sem cadeia válida deve ser
@@ -228,7 +276,19 @@ export interface PadesRevocationResult {
   checked: boolean;
   source: 'CRL' | 'OCSP' | 'BOTH' | 'NONE';
   revokedAt?: Date;
+  invalidityDate?: Date;
   reasonCode?: number;
+  reasonName?: CrlReasonName;
+  isHold?: boolean;
+  isKeyCompromise?: boolean;
+  revokedCertificateRole?: 'SIGNER' | 'SIGNER_CA' | 'TSA_SIGNER' | 'TSA_CA';
+  revokedCertificateSubject?: string;
+  signerChainComplete?: boolean;
+  tsaChainComplete?: boolean;
+  hasContradictoryEvidence?: boolean;
+  rejectedEvidencesCount?: number;
+  certificateResults?: CertificateRevocationCheckSummary[];
+  subIndication?: string;
   error?: string;
 }
 
@@ -253,7 +313,10 @@ export interface PadesVerificationOptions {
   ) => boolean | Promise<boolean>;
   trustedExternalPoeSources?: string[];
   crls?: Array<Buffer | Uint8Array | string>;
-  ocspResponses?: Array<Buffer | Uint8Array>;
+  ocspResponses?: Array<Buffer | Uint8Array | string>;
+  ocspResponderCerts?: unknown[];
+  ocspResponderPems?: string[];
+  revocationEvidenceSourcePolicy?: RevocationEvidenceSourcePolicy;
   requireFullTrust?: boolean;
 }
 

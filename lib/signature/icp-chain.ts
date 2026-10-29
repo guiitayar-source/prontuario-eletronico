@@ -50,6 +50,7 @@ const RECOGNIZED_CRITICAL_EXTENSION_OIDS = new Set<string>([
   '2.5.29.31', // CRLDistributionPoints
   '2.5.29.54', // InhibitAnyPolicy
   '2.5.29.36', // PolicyConstraints
+  '1.3.6.1.5.5.7.48.1.5', // id-pkix-ocsp-nocheck (RFC 6960 §4.2.2.2.1)
 ]);
 
 /**
