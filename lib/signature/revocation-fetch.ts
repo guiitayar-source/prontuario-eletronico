@@ -26,6 +26,7 @@ import { ICP_BRASIL_ROOTS } from './icp-brasil-certs.ts';
 import type { ParsedX509Node } from './icp-chain.ts';
 import { extractCertCrlDistributionPointUris } from './revocation-validator.ts';
 import type {
+  CollectedRevocationEvidence,
   PadesVerificationOptions,
   RevocationEvidenceProvider,
   RevocationFetchAttempt,
@@ -550,6 +551,7 @@ export function createOnlineRevocationProvider(
       const attempts: RevocationFetchAttempt[] = [];
       const crls: Buffer[] = [];
       const ocspResponses: Buffer[] = [];
+      const evidence: CollectedRevocationEvidence[] = [];
       const anchor = chain[chain.length - 1];
       const anchoredInIcpBrasil =
         anchor !== undefined &&
@@ -564,7 +566,7 @@ export function createOnlineRevocationProvider(
           outcome: 'SKIPPED',
           reason: 'cadeia não termina em raiz ICP-Brasil oficial',
         });
-        return { crls, ocspResponses, attempts };
+        return { crls, ocspResponses, attempts, evidence };
       }
 
       const controller = new AbortController();
@@ -721,6 +723,13 @@ export function createOnlineRevocationProvider(
               const der = await getOcsp(url, node, issuer);
               if (der) {
                 ocspResponses.push(der);
+                evidence.push({
+                  kind: 'OCSP',
+                  der,
+                  url,
+                  certificate: node,
+                  chainPosition: i,
+                });
                 return;
               }
             }
@@ -728,6 +737,13 @@ export function createOnlineRevocationProvider(
               const der = await getCrl(url, node.subject);
               if (der) {
                 if (!crls.includes(der)) crls.push(der);
+                evidence.push({
+                  kind: 'CRL',
+                  der,
+                  url,
+                  certificate: node,
+                  chainPosition: i,
+                });
                 return;
               }
             }
@@ -743,7 +759,7 @@ export function createOnlineRevocationProvider(
       } finally {
         clearTimeout(deadline);
       }
-      return { crls, ocspResponses, attempts };
+      return { crls, ocspResponses, attempts, evidence };
     },
   };
 }
@@ -767,12 +783,15 @@ export async function withOnlineRevocationEvidence(
   options: PadesVerificationOptions,
   chain: ParsedX509Node[],
   now: Date,
+  chainKind: 'SIGNER' | 'TSA',
 ): Promise<PadesVerificationOptions> {
   const provider = options.revocationEvidenceProvider;
   if (!provider) return options;
   try {
     const found = await provider.collect(chain, { now });
     options.onRevocationFetch?.(found.attempts);
+    if (found.evidence?.length)
+      options.onRevocationEvidence?.(chainKind, found.evidence);
     if (found.crls.length === 0 && found.ocspResponses.length === 0)
       return options;
     return {
@@ -800,17 +819,25 @@ export function serverRevocationEvidenceProvider():
 }
 
 /**
- * Opções de revogação da emissão ao vivo: provedor do servidor e registro, no log, das buscas
- * que falharam (só URL da AC e motivo).
+ * Opções de revogação da emissão ao vivo: provedor do servidor, registro no log das buscas que
+ * falharam (só URL da AC e motivo) e, se `collected` vier, a evidência obtida para ser guardada.
  */
-export function liveIssuanceRevocationOptions(): Pick<
+export function liveIssuanceRevocationOptions(
+  collected?: Array<{
+    chain: 'SIGNER' | 'TSA';
+    evidence: CollectedRevocationEvidence[];
+  }>,
+): Pick<
   PadesVerificationOptions,
-  'revocationEvidenceProvider' | 'onRevocationFetch'
+  'revocationEvidenceProvider' | 'onRevocationFetch' | 'onRevocationEvidence'
 > {
   const provider = serverRevocationEvidenceProvider();
   if (!provider) return {};
   return {
     revocationEvidenceProvider: provider,
+    onRevocationEvidence: collected
+      ? (chain, evidence) => collected.push({ chain, evidence })
+      : undefined,
     onRevocationFetch: (attempts) => {
       const failed = attempts.filter((a) => a.outcome === 'ERROR');
       if (failed.length)

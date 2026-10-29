@@ -1150,6 +1150,7 @@ export class PadesService {
               options,
               chainNodes,
               verificationTime,
+              'SIGNER',
             ),
             // 6F.2C-R: só a TSA da POE efetivamente usada interessa à revogação do documento.
             tsaRevocationSummaries:

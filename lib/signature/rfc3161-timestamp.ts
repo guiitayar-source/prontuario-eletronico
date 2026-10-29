@@ -768,6 +768,7 @@ export async function validateRfc3161TimestampToken(
         params.revocationOptions,
         tsaChainEval.chainNodes,
         tsaVerificationTime,
+        'TSA',
       ),
     });
     tsaRevocationChecked = tsaRevEval.revocationChecked;

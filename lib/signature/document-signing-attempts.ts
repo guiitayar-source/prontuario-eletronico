@@ -10,6 +10,12 @@ import { getSignatureProvider } from './provider-factory.ts';
 import { padesService } from './pades-service.ts';
 import { liveIssuanceRevocationOptions } from './revocation-fetch.ts';
 import {
+  loadAttemptRevocationEvidence,
+  revocationEvidenceRecords,
+  saveAttemptRevocationEvidence,
+  type CollectedEvidenceByChain,
+} from './revocation-evidence-store.ts';
+import {
   authorizeSigningIdentity,
   assertSigningCertificate,
   SigningIdentityError,
@@ -170,6 +176,11 @@ export async function signDocumentAttempt(
         'Não foi possível registrar a tentativa de assinatura.',
       );
   };
+  const storedEvidenceFor = (a: Attempt) =>
+    loadAttemptRevocationEvidence(db, {
+      clinicId: actor.clinicId,
+      attemptId: a.id,
+    });
   const readArtifact = async (a: Attempt) => {
     const { data, error } = await db.storage
       .from('clinical-files')
@@ -189,7 +200,11 @@ export async function signDocumentAttempt(
         503,
         'Artefato assinado original inconsistente. Não será substituído.',
       );
-    const verification = await padesService.verifyPadesSignature(bytes);
+    // Reverificação sem rede: usa a LCR/OCSP guardada na emissão (6F.2D), se houver.
+    const verification = await padesService.verifyPadesSignature(
+      bytes,
+      await storedEvidenceFor(a),
+    );
     assertSigningCertificate(authorizationFor(a), verification);
     return { bytes, verification };
   };
@@ -218,7 +233,10 @@ export async function signDocumentAttempt(
           throw Error('hash');
         assertSigningCertificate(
           authorizationFor(a),
-          await padesService.verifyPadesSignature(bytes),
+          await padesService.verifyPadesSignature(
+            bytes,
+            await storedEvidenceFor(a),
+          ),
         );
       } catch {
         throw new HttpError(
@@ -385,10 +403,17 @@ export async function signDocumentAttempt(
     );
     // Emissão ao vivo: revogação conhecida ou certificado vencido agora bloqueiam (6F.2C-R).
     // A LCR/OCSP vem da rede (6F.2D); sem resposta, a emissão segue como INDETERMINATE.
+    const collected: CollectedEvidenceByChain[] = [];
     const verification = await padesService.verifyPadesSignature(bytes, {
       validationContext: 'LIVE_ISSUANCE',
-      ...liveIssuanceRevocationOptions(),
+      ...liveIssuanceRevocationOptions(collected),
     });
+    // Guardada mesmo quando a emissão é bloqueada: é a prova do motivo. Falha não interrompe.
+    await saveAttemptRevocationEvidence(
+      db,
+      { clinicId: actor.clinicId, userId: actor.userId, attemptId: a.id },
+      revocationEvidenceRecords(collected, verification),
+    );
     if (!verification.assessment.issuanceAllowed)
       throw new SigningIdentityError('cms_verification_failed', 409);
     assertSigningCertificate(identity.authorization, verification);

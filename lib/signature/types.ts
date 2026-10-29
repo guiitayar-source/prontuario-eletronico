@@ -340,6 +340,21 @@ export interface PadesVerificationOptions {
   revocationEvidenceProvider?: RevocationEvidenceProvider;
   /** Recebe o registro das buscas (URLs e resultado; sem dados do documento). */
   onRevocationFetch?: (attempts: RevocationFetchAttempt[]) => void;
+  /** Recebe a evidência obtida, por cadeia, para ser guardada (6F.2D). */
+  onRevocationEvidence?: (
+    chain: 'SIGNER' | 'TSA',
+    evidence: CollectedRevocationEvidence[],
+  ) => void;
+}
+
+export interface CollectedRevocationEvidence {
+  kind: 'CRL' | 'OCSP';
+  der: Buffer;
+  url: string;
+  /** Certificado para o qual a evidência foi buscada. */
+  certificate: ParsedX509Node;
+  /** Posição na cadeia: 0 é o signatário (ou a TSA); as demais, ACs. */
+  chainPosition: number;
 }
 
 export interface RevocationFetchAttempt {
@@ -358,6 +373,7 @@ export interface RevocationEvidenceProvider {
     crls: Buffer[];
     ocspResponses: Buffer[];
     attempts: RevocationFetchAttempt[];
+    evidence?: CollectedRevocationEvidence[];
   }>;
 }
 
