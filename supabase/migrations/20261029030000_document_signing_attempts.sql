@@ -176,9 +176,9 @@ begin
  if not found then raise exception 'Usuário sem autorização médica.' using errcode='42501'; end if;
  if d.version<>p_version then raise exception 'Versão documental alterada.' using errcode='40001'; end if;
  -- Receita com RCE eletrônica (reservada ou assinada) segue o fluxo SNCR da main; categorias
- -- além de RCE não têm modelo eletrônico neste fluxo (lib/sncr/policy.ts).
+ -- além de RCE e receita simples não têm modelo eletrônico neste fluxo (lib/sncr/policy.ts).
  if exists(select 1 from public.sncr_rce_emissions where document_id=d.id and state<>'CANCELLED') or
-  (d.kind='Receita' and coalesce(d.prescription_category,'RCE')<>'RCE') then
+  (d.kind='Receita' and coalesce(d.prescription_category,'RCE') not in ('RCE','SIMPLES')) then
   raise exception 'Receita desta categoria ou com RCE eletrônica segue o fluxo SNCR.' using errcode='23514';
  end if;
  select * into a from public.document_signing_attempts where clinic_id=p_clinic and user_id=p_user and idempotency_key=p_key for update;

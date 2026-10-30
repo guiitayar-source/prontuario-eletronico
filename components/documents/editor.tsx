@@ -13,7 +13,7 @@ import {
   isSignatureProviderId,
   signatureProviderLabel,
 } from '@/lib/signature/providers';
-import { prescriptionCategories, prescriptionSigningBlock, type PrescriptionCategory } from '@/lib/sncr/policy';
+import { documentPrescriptionCategories, prescriptionSigningBlock, type DocumentPrescriptionCategory } from '@/lib/sncr/policy';
 import { RcePanel } from './rce-panel';
 import { rceStateLabels } from '@/lib/sncr/rce';
 export function DocumentEditor({
@@ -222,8 +222,8 @@ export function DocumentEditor({
         {isRecipe && (
           <label>
             Tipo de receituário
-            <select value={category} onChange={(e) => update({ prescription_category: e.target.value as PrescriptionCategory })}>
-              {Object.entries(prescriptionCategories).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            <select value={category} onChange={(e) => update({ prescription_category: e.target.value as DocumentPrescriptionCategory })}>
+              {Object.entries(documentPrescriptionCategories).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
             </select>
           </label>
         )}
@@ -353,7 +353,7 @@ export function DocumentEditor({
             <button
               type="button"
               className="secondary"
-              disabled={docs.busy || isSigning || rceLocked || !d.text.trim() || (isRecipe && category !== 'RCE')}
+              disabled={docs.busy || isSigning || rceLocked || !d.text.trim() || (isRecipe && category !== 'RCE' && category !== 'SIMPLES')}
               onClick={() => void docs.pdf()}
             >
               {isRecipe ? 'PDF para impressão e assinatura manual' : 'Prévia / PDF'}

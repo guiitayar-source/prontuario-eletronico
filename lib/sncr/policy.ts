@@ -12,10 +12,30 @@ export type PrescriptionCategory = keyof typeof prescriptionCategories;
 export function isPrescriptionCategory(v: unknown): v is PrescriptionCategory {
   return typeof v === 'string' && Object.hasOwn(prescriptionCategories, v);
 }
+// Receita simples (sem retenção nem notificação) não é categoria SNCR: não pede numeração à
+// Anvisa e sua assinatura eletrônica não depende da integração. Fica fora de
+// `prescriptionCategories` para nunca ser aceita num pedido de numeração.
+export const SIMPLE_PRESCRIPTION = 'SIMPLES';
+export type DocumentPrescriptionCategory =
+  | PrescriptionCategory
+  | typeof SIMPLE_PRESCRIPTION;
+export const documentPrescriptionCategories: Record<
+  DocumentPrescriptionCategory,
+  string
+> = {
+  SIMPLES: 'Receita simples (sem retenção)',
+  ...prescriptionCategories,
+};
+export function isDocumentPrescriptionCategory(
+  v: unknown,
+): v is DocumentPrescriptionCategory {
+  return v === SIMPLE_PRESCRIPTION || isPrescriptionCategory(v);
+}
 export function prescriptionSigningBlock(
-  category: PrescriptionCategory,
+  category: DocumentPrescriptionCategory,
   now = new Date(),
 ) {
+  if (category === SIMPLE_PRESCRIPTION) return null;
   const day = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
   }).format(now);
