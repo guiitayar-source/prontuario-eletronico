@@ -100,8 +100,8 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
       }
       if (doc.status === 'SIGNED') throw new HttpError(503, 'O arquivo original assinado precisa ser recuperado.');
       if (doc.status === 'SIGNING') throw new HttpError(409, 'Aguarde a conclusão da assinatura antes de abrir o PDF.');
-      if (doc.kind === 'Receita' && doc.prescription_category && doc.prescription_category !== 'RCE')
-        throw new HttpError(422, 'O PDF atual é exclusivo de Receita de Controle Especial. Utilize o receituário físico adequado para a categoria selecionada.');
+      if (doc.kind === 'Receita' && doc.prescription_category && doc.prescription_category !== 'RCE' && doc.prescription_category !== 'SIMPLES')
+        throw new HttpError(422, 'O PDF atual é exclusivo de Receita de Controle Especial ou receita simples. Utilize o receituário físico adequado para a categoria selecionada.');
 
       await withPdfData(adminClient(), clinic, doc);
       let bytes;

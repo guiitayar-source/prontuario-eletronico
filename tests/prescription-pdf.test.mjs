@@ -72,6 +72,11 @@ await assert.rejects(() => documentPdf({ ...docReceitaCustom, text: 'palavra'.re
 for (const prescription_category of ['RET','NRA','NRB','NRB2','NRR','NRT'])
   await assert.rejects(() => documentPdf({ ...docReceitaCustom, prescription_category }), /exclusivo de Receita de Controle Especial/);
 
+// Receita simples: uma via, título sem "controle especial".
+const simplePdf = await PDFDocument.load(await documentPdf({ ...docReceitaCustom, prescription_category: 'SIMPLES' }));
+assert.equal(simplePdf.getPageCount(), 1, 'receita simples tem uma via');
+assert.equal(simplePdf.getTitle(), 'Receituário');
+
 for (const document_date of ['', null]) {
   const undated = await documentPdf({ ...docReceita, document_date });
   assert.equal((await PDFDocument.load(undated)).getPageCount(), 2);
