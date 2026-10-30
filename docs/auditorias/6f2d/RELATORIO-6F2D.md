@@ -252,12 +252,108 @@ assinatura confere com a raiz v5: true
   `audit_events` e o painel operacional ficaram de fora.
 - **Default `'VALID'`** de `evolution_signatures.verification_status`: pendência do 6F.2C-R.
 
-## 4. Veredito
+## 4. Teste com certificado real (29/10/2026) e correção
 
-**PENDENTE.**
-- O código, a migração (testada só em cópia descartável) e os testes estão completos e verdes.
-- Faltam:
-  1. o teste com Bird ID real (`ROTEIRO-BIRDID.md`, caminho A primeiro);
-  2. a aplicação das migrações em revisão em produção, com o aval do Guilherme, antes do merge na
-     main.
-- Não houve deploy, migração remota nem assinatura real.
+**Primeira execução.** O Guilherme rodou o caminho A (`scripts/check-revocation.mjs`) com um PDF
+assinado com o Bird ID:
+- cadeia confiável;
+- SIGNER INDETERMINATE (REVOCATION_UNAVAILABLE);
+- as duas ACs superiores GOOD;
+- a LCR da AC emissora, `ccd.acsoluti.com.br/lcr/ac-soluti-multipla-v5.crl` (e a do `ccd2`),
+  saiu como "LCR ilegível".
+
+**Causa**, investigada só com GET público da LCR:
+- O download estava íntegro: HTTP 200, `application/pkix-crl`, sem Content-Encoding, DER de
+  919.142 bytes (igual ao Content-Length). Não houve truncamento nem tempo esgotado.
+- O `asn1js` 3.0.10 limita, por padrão, cada análise a **10.000 elementos ASN.1**. Essa LCR tem
+  34.015 revogados, cerca de 102 mil elementos, e a análise falhava com
+  `Maximum ASN.1 node count exceeded`. O "ilegível" escondia esse erro.
+- O validador usa o mesmo analisador, então recusaria a LCR do mesmo jeito. O `pkijs` também
+  esbarra no limite ao reanalisar a estrutura para assinar uma LCR grande.
+- O certificado do signatário tem AIA só com `caIssuers` (1.3.6.1.5.5.7.48.2), sem OCSP, e as
+  ACs não têm AIA. Para essa cadeia, a LCR é o único caminho; não havia OCSP a tentar.
+
+**Medição**, com essa LCR:
+- análise ASN.1 em ~160 ms e montagem `pkijs` em ~430 ms;
+- ~146 MB de heap transitório;
+- `nextUpdate` 6 h depois de `thisUpdate`.
+
+**Correção:**
+- `parseCrlDer` (`revocation-validator.ts`) analisa com `maxNodes = CRL_MAX_ASN1_NODES` (500 mil).
+  O validador, o coletor e o armazenamento usam a mesma função.
+- A análise é memorizada por Buffer (WeakMap): a LCR é analisada uma vez só, e não uma vez por
+  certificado da cadeia.
+- O limite de LCR caiu de 10 MB para **4 MB**, coerente com os 500 mil elementos (~9 bytes por
+  elemento numa LCR real). Acima disso, a análise passaria de ~600 MB de heap numa função
+  serverless.
+- O tempo por requisição de LCR é de 10 s (OCSP continua com 4 s), e o prazo da coleta, 15 s.
+- LCR em PEM ("X509 CRL") é aceita.
+- Mensagens com a causa:
+  - `resposta excede 4 MB`;
+  - `tempo esgotado (10 s)`;
+  - `formato: HTML em vez de LCR`;
+  - `formato: conteúdo gzip sem Content-Encoding`;
+  - `formato: Content-Encoding gzip não suportado`;
+  - `formato: PEM que não é "X509 CRL"`;
+  - `formato: LCR com mais de 500000 elementos ASN.1`.
+
+**Escolha dos limites e do lugar da busca:**
+- **Memória e tempo na Vercel.** A análise única de uma LCR desse porte custa ~0,6 s e ~150 MB
+  transitórios, folgado para a memória padrão das funções. O limite de 500 mil elementos segura o
+  pior caso, inclusive com entrada maliciosa.
+- **Cache em memória por instância.** Não sobrevive entre instâncias, então cada instância fria
+  baixa a LCR de novo (~0,9 MB, servida por CDN). Como a LCR muda a cada 6 h, o ganho de um cache
+  compartilhado seria pequeno.
+- **Reusar a LCR guardada no banco até o nextUpdate.** Trocaria um GET de CDN por uma leitura de
+  ~0,9 MB do Postgres. Não compensa agora; fica como opção se as ACs ficarem lentas.
+- **Busca fora do caminho crítico.** A medição real foi de 1,4 s no processo inteiro (Node +
+  verificação + 3 LCRs). Como a emissão precisa do resultado para bloquear revogação comprovada,
+  a busca fica no caminho; a fila continua sendo a solução para carimbo e validação histórica.
+- **Volume no banco.** A LCR da AC Soluti Múltipla muda a cada 6 h: até 4 versões de ~0,9 MB por
+  dia com assinaturas ao longo do dia, ~1,3 GB por ano no pior caso. Recomendação: no próximo
+  lote, mover o `der` das LCRs grandes para o Storage privado, mantendo no banco o SHA-256 e os
+  metadados. Decisão do Guilherme.
+
+**Teste de regressão** (`tests/revocation-fetch.test.mjs`):
+- LCR sintética com 4 mil revogados, montada em ASN.1 e assinada de verdade. O teste confere que
+  ela passa do limite padrão, dá GOOD e encontra o signatário revogado no meio dela.
+- PEM aceito; gzip, Content-Encoding, PEM de outro tipo, lixo e bytes sobrando, cada um com a sua
+  mensagem.
+- Mensagem de limite de tamanho.
+- Estrutura com 600 mil elementos recusada com a causa.
+
+**Segunda execução, com o mesmo PDF real** (só a saída do script; nada do conteúdo do PDF):
+
+```
+Integridade criptográfica: true
+Cadeia ICP-Brasil confiável: true
+Situação global: VALID
+Revogação: GOOD
+  SIGNER     GOOD           origem=CRL
+  SIGNER_CA  GOOD           origem=CRL
+  SIGNER_CA  GOOD           origem=CRL
+Buscas:
+  CRL   FETCHED  http://ccd.acsoluti.com.br/lcr/ac-soluti-v5.crl
+  CRL   FETCHED  http://ccd.acsoluti.com.br/lcr/ac-soluti-multipla-v5.crl
+  CRL   FETCHED  http://acraiz.icpbrasil.gov.br/LCRacraizv5.crl
+Emissão seria permitida: true
+```
+
+Tempo total do processo: 1,4 s.
+
+**Suítes:**
+- revocation-fetch: 28/28;
+- revocation-evidence-db: 9/9;
+- as demais 26 suítes 6F e de assinatura verdes, incluindo as de PostgreSQL real.
+
+`tsc`, lint dos arquivos alterados, build e `git diff --check` limpos.
+
+## 5. Veredito
+
+**APROVADO para o código do lote**, com uma condição para a main:
+- A evidência real de uma assinatura Bird ID chegou a GOOD (situação global VALID).
+- Os testes, inclusive com PostgreSQL real, estão verdes.
+- **Antes do merge na main**, as migrações em revisão (`20261029030000` de tentativas e
+  `20261029040000` de evidências) precisam ser aplicadas em produção com o aval do Guilherme.
+- O caminho B do roteiro (fluxo completo com gravação no banco local) é opcional.
+- Não houve deploy, migração remota nem assinatura nova.
