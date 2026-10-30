@@ -1,5 +1,5 @@
 -- Receita simples: não é controlada e não depende do SNCR.
--- Depende de 20261019010000_sncr_preparation (coluna e guarda).
+-- Depende de 20261030023641_sncr_preparation (coluna e guarda).
 alter table public.clinical_documents drop constraint clinical_documents_prescription_category_check;
 alter table public.clinical_documents add constraint clinical_documents_prescription_category_check
   check (prescription_category in ('SIMPLES','RCE','RET','NRA','NRB','NRB2','NRR','NRT'));

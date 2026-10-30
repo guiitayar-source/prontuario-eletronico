@@ -47,7 +47,7 @@ test('SNCR staged schema: isolation, one-use claims, quarantine, duplicate rollb
     await db.exec(
       await readFile(
         new URL(
-          '../supabase/migrations/20261019010000_sncr_preparation.sql',
+          '../supabase/migrations/20261030023641_sncr_preparation.sql',
           import.meta.url,
         ),
         'utf8',
@@ -56,7 +56,7 @@ test('SNCR staged schema: isolation, one-use claims, quarantine, duplicate rollb
     await db.exec(
       await readFile(
         new URL(
-          '../supabase/migrations/20261030010000_prescription_simple.sql',
+          '../supabase/migrations/20261030023750_prescription_simple.sql',
           import.meta.url,
         ),
         'utf8',
