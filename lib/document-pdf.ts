@@ -73,7 +73,9 @@ async function prescriptionPdf(
     bodyText = bodyText.slice(viaMatch[0].length).trim();
   }
 
-  const vias = ['1ª via - Farmácia', '2ª via - Paciente'];
+  // Receita simples: uma via, sem o título de controle especial.
+  const simple = d.prescription_category === 'SIMPLES';
+  const vias = simple ? [''] : ['1ª via - Farmácia', '2ª via - Paciente'];
 
   for (const viaTitle of vias) {
     const page = pdf.addPage([595.3, 841.89]);
@@ -109,7 +111,7 @@ async function prescriptionPdf(
     });
 
     // 2. Title & Via
-    page.drawText('Receituário de controle especial', {
+    page.drawText(simple ? 'Receituário' : 'Receituário de controle especial', {
       x: left,
       y: height - 132.0,
       size: 17,
@@ -655,10 +657,10 @@ export async function documentPdf(
   // Existing two-copy RCE layout, preserved for printing/legacy transition.
   // This is not the standardized electronic SNCR model.
   if (d.kind === 'Receita') {
-    if (d.prescription_category && d.prescription_category !== 'RCE')
-      throw new Error('O PDF atual é exclusivo de Receita de Controle Especial. Utilize o modelo adequado para a categoria selecionada.');
+    if (d.prescription_category && d.prescription_category !== 'RCE' && d.prescription_category !== 'SIMPLES')
+      throw new Error('O PDF atual é exclusivo de Receita de Controle Especial ou receita simples. Utilize o modelo adequado para a categoria selecionada.');
     await prescriptionPdf(pdf, d, font, bold);
-    pdf.setTitle('Receituário de controle especial');
+    pdf.setTitle(d.prescription_category === 'SIMPLES' ? 'Receituário' : 'Receituário de controle especial');
     pdf.setCreator('PsyWrite');
     return pdf.save();
   }

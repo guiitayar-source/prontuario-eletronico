@@ -353,7 +353,7 @@ export function DocumentEditor({
             <button
               type="button"
               className="secondary"
-              disabled={docs.busy || isSigning || rceLocked || !d.text.trim() || (isRecipe && category !== 'RCE')}
+              disabled={docs.busy || isSigning || rceLocked || !d.text.trim() || (isRecipe && category !== 'RCE' && category !== 'SIMPLES')}
               onClick={() => void docs.pdf()}
             >
               {isRecipe ? 'PDF para impressão e assinatura manual' : 'Prévia / PDF'}

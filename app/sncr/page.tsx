@@ -164,7 +164,7 @@ export default function SncrPreparation() {
               setCategory(e.target.value as PrescriptionCategory)
             }
           >
-            {Object.entries(prescriptionCategories).map(([key, label]) => (
+            {Object.entries(prescriptionCategories).filter(([key]) => key !== 'SIMPLES').map(([key, label]) => (
               <option key={key} value={key}>
                 {label}
               </option>

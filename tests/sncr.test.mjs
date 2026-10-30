@@ -248,6 +248,11 @@ test('cutoff uses São Paulo date; notifications never use legacy RCE signature'
       prescriptionSigningBlock(category, new Date('2026-10-19T12:00:00Z')),
     );
 });
+test('receita simples não depende do SNCR nem entra na numeração', () => {
+  for (const at of ['2026-10-19T12:00:00Z', '2026-10-30T03:00:00Z', '2027-06-01T12:00:00Z'])
+    assert.equal(prescriptionSigningBlock('SIMPLES', new Date(at)), null);
+  assert.throws(() => validateNumberingInput({ ...input, category: 'SIMPLES' }));
+});
 test('durable workflow: partial failures preserve uncertainty/receipt and never allocate or sign', async () => {
   for (const scenario of [
     'success',

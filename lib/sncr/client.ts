@@ -25,6 +25,7 @@ export function validateNumberingInput(value: unknown): NumberingInput {
   if (
     !v ||
     !isPrescriptionCategory(v.category) ||
+    v.category === 'SIMPLES' ||
     v.conselho !== 'CRM' ||
     typeof v.documento !== 'string' ||
     !/^\d{1,15}$/.test(v.documento) ||

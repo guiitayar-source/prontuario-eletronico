@@ -71,7 +71,7 @@ As chamadas desta implementação restringem conselho a CRM porque o PsyWrite at
 
 Salvar receita com o código novo exige a migração de categoria. O servidor verifica a coluna antes de escrever, para impedir que um RPC antigo ignore a categoria selecionada e salve uma notificação como RCE. Em falha, o editor preserva o texto. Novos PDFs assinados recebem caminho com hash e são gravados sem sobrescrever um original anterior.
 
-Migração **somente preparada** `20261019010000_sncr_preparation.sql`:
+Migração **somente preparada** `20261030023641_sncr_preparation.sql` (antes 20261019010000; esquema aplicado em produção em 30/10/2026, numeração continua inerte):
 
 - Pedidos, itens em quarentena e eventos append-only próprios. Operações service-role também deixam evento, diferentemente do trigger genérico que depende de `auth.uid()`.
 - Banco não concede leitura/escrita dessas tabelas aos navegadores. RPCs de claim/materialização são exclusivas de service-role; chamadas no servidor sempre fornecem clínica e usuário autenticados.
@@ -86,7 +86,7 @@ Estados operacionais: `AUTH_PENDING`, `AUTH_EXPIRED`, `REQUESTING`, `AUTH_FAILED
 
 ### Emissão RCE implementada nesta continuação
 
-Migração **somente local/preparada** `20261019020000_sncr_rce_issuance.sql`, `lib/sncr/rce*.ts`, `/api/sncr/rce` e `components/documents/rce-panel.tsx`:
+Migração **somente local/preparada** `20261030023733_sncr_rce_issuance.sql` (antes 20261019020000; esquema aplicado em produção em 30/10/2026, só ambiente hmg), `lib/sncr/rce*.ts`, `/api/sncr/rce` e `components/documents/rce-panel.tsx`:
 
 - Uma medicação por receita, com concentração, forma, quantidade e posologia; paciente com CPF ou passaporte e endereço, prescritor com CRM/UF, CPF do certificado e dados profissionais. Os campos clínicos são salvos antes da reserva. O texto gerado substitui o texto livre somente após confirmação quando há diferença; as orientações devem estar na posologia.
 - Usa o PDF eletrônico original da Anvisa, preservado em `assets/sncr/`, sem timbre comercial. A posologia longa continua em outras páginas do mesmo documento; campos que não cabem provocam erro antes de consumir um número. A prévia e todos os originais de treinamento têm marca de ausência de validade para dispensação. O QR usa apenas a entrada de treinamento documentada, sem inventar consulta por URL nesse ambiente.
