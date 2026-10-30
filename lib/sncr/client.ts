@@ -233,8 +233,10 @@ export class SncrClient {
   }
 }
 
-// Only the published 14-digit format is understood. The announced 16-digit
-// change must be checked against updated official docs before accepting it.
+// RCE/RET ranges come as NNNN.N-NN. plus a 7-digit (published) or 9-digit
+// sequence; homologação returned 9 digits on 30/10/2026. Notification
+// numbers keep the published 14-digit format until a real sample arrives.
+export const rangeNumberPattern = /^\d{4}\.\d-\d{2}\.(?:\d{7}|\d{9})$/;
 export function parseNumberingResponse(
   input: NumberingInput,
   raw: Record<string, unknown>,
@@ -245,11 +247,13 @@ export function parseNumberingResponse(
       typeof raw.inicio !== 'string' ||
       typeof raw.fim !== 'string' ||
       raw.quantidade !== 1000 ||
-      !pattern.test(raw.inicio) ||
-      !pattern.test(raw.fim) ||
+      !rangeNumberPattern.test(raw.inicio) ||
+      !rangeNumberPattern.test(raw.fim) ||
+      raw.inicio.length !== raw.fim.length ||
       raw.inicio.slice(0, 10) !== raw.fim.slice(0, 10)
     )
       throw new Error('Contrato de numeração divergente.');
+    const width = raw.inicio.length - 10;
     const start = Number(raw.inicio.slice(10)),
       end = Number(raw.fim.slice(10));
     const prefix = raw.inicio.slice(0, 10);
@@ -257,7 +261,7 @@ export function parseNumberingResponse(
       throw new Error('Intervalo inconsistente.');
     return Array.from(
       { length: 1000 },
-      (_, i) => prefix + String(start + i).padStart(7, '0'),
+      (_, i) => prefix + String(start + i).padStart(width, '0'),
     );
   }
   // Swagger declares an array; the manual example incorrectly uses a string.

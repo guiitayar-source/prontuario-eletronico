@@ -157,7 +157,7 @@ export function PrescriptionWorkspace({
               <li key={row.id}>
                 <strong>
                   {formatDate(row)}
-                  {row.status === 'SIGNED' ? ' · Assinada' : ' · Rascunho'}
+                  {' · ' + prescriptionState(row)}
                   {row.id === d?.id ? ' · aberta' : ''}
                 </strong>
                 <span className="prescription-summary">
@@ -279,4 +279,18 @@ export function PrescriptionWorkspace({
       </div>
     </div>
   );
+}
+
+/** Estado que a lista mostra: o da RCE com número, quando houver. */
+function prescriptionState(row: ClinicalDocument) {
+  const e = row.rce_emission;
+  if (e?.state === 'SIGNED') return `Assinada · Nº ${e.number}`;
+  if (e && ['SIGNING', 'SIGNATURE_UNCERTAIN', 'FINALIZING'].includes(e.state))
+    return `Em conferência · Nº ${e.number}`;
+  if (e?.state === 'AWAITING_REVIEW') return `Nº ${e.number} reservado`;
+  if (e?.state === 'CANCELLED' || e?.state === 'BLOCKED') return 'RCE descartada';
+  if (row.status === 'SIGNED' || row.status === 'SUPERSEDED') return 'Assinada';
+  if (row.status === 'SIGNING') return 'Assinando';
+  if (row.status === 'SIGNATURE_FAILED') return 'Falha na assinatura';
+  return 'Rascunho';
 }

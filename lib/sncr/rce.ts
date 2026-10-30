@@ -74,7 +74,8 @@ export function validateRceFields(value: unknown): RceFields {
   };
 }
 export function rceClinicalText(fields: RceFields) {
-  return `${fields.medicine} ${fields.concentration}\nForma farmacêutica: ${fields.pharmaceuticalForm}\nQuantidade: ${fields.quantity}\nPosologia:\n${fields.dosage}`;
+  // Same layout as the handwritten prescriptions: one item line, then the dosage.
+  return `1) ${fields.medicine} ${fields.concentration} · ${fields.pharmaceuticalForm} · Quantidade: ${fields.quantity}\nPosologia: ${fields.dosage}`;
 }
 export function validateRceSnapshot(v: RceSnapshot): RceSnapshot {
   if (v?.schema !== 1) throw new Error('Versão da RCE inválida.');

@@ -164,6 +164,18 @@ test('PDF preserves official page and all required fields; long dosage continues
     ).getPageCount(),
     3,
   );
+  assert.equal(
+    (
+      await PDFDocument.load(
+        await rcePdf(syntheticSnapshot(), '2610.6-35.000112001', new Date(), 'hmg'),
+      )
+    ).getPageCount(),
+    1,
+  );
+  await assert.rejects(
+    () => rcePdf(syntheticSnapshot(), '2610.6-35.00011200', new Date(), 'hmg'),
+    /não validado/,
+  );
   await assert.rejects(
     () => rcePdf(s, '2602.6-53.0000001', new Date(), 'prd'),
     /produção/,
@@ -372,6 +384,89 @@ test('cancel burns the number, and concurrent reservations cannot share a number
     );
     await local.db.exec('reset role');
   } finally {
+    await local.db.close();
+  }
+});
+
+test('prescription text keeps the item on one line and the dosage right below it', async () => {
+  const { rceClinicalText } = await import('../lib/sncr/rce.ts');
+  assert.equal(
+    rceClinicalText({
+      medicine: 'Donaren',
+      concentration: '50 mg',
+      pharmaceuticalForm: 'Comprimido',
+      quantity: '60 (sessenta) comprimidos',
+      dosage: 'Tomar 1 comprimido à noite.',
+    }),
+    '1) Donaren 50 mg · Comprimido · Quantidade: 60 (sessenta) comprimidos\nPosologia: Tomar 1 comprimido à noite.',
+  );
+});
+test('a long medicine name still fits the electronic model below its label', async () => {
+  const s = syntheticSnapshot();
+  s.medicine.name =
+    'Cloridrato de substancia ficticia de nome muito longo para teste de layout';
+  assert.equal(
+    (
+      await PDFDocument.load(
+        await rcePdf(s, '2610.6-35.000112001', new Date(), 'hmg'),
+      )
+    ).getPageCount(),
+    1,
+  );
+});
+test('empty dosage stops the preparation with a message the panel shows', async () => {
+  const { validateRceFields } = await import('../lib/sncr/rce.ts');
+  assert.throws(
+    () =>
+      validateRceFields({
+        crm: '000001',
+        uf: 'SP',
+        passport: '',
+        medicine: 'Donaren',
+        concentration: '50 mg',
+        pharmaceuticalForm: 'Comprimido',
+        quantity: '60',
+        dosage: '',
+      }),
+    /Confira a posologia/,
+  );
+});
+test('the bucket accepts the CMS artifact the RCE stores before embedding it', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const workflow = await readFile(new URL('../lib/sncr/rce-workflow.ts', import.meta.url), 'utf8');
+  assert.match(workflow, /signature\.json[\s\S]*'application\/json'/);
+  const sql = await readFile(
+    new URL('../supabase/migrations/20261030160000_rce_signature_artifact.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(sql, /array_append\(allowed_mime_types, 'application\/json'\)/);
+  assert.match(sql, /id = 'clinical-files'/);
+});
+test('signing checks revocation like the other prescriptions (LIVE_ISSUANCE + server provider)', async () => {
+  const local = await localRceDatabase();
+  const original = padesService.verifyPadesSignature.bind(padesService);
+  const seen = [];
+  const provider = { collect: async () => [] };
+  padesService.verifyPadesSignature = async (pdf, options) => {
+    seen.push(options);
+    return original(pdf, options);
+  };
+  try {
+    await local.addNumbers();
+    const e = await local.reserve();
+    const signed = await signRce({
+      repository: local.repo(e.id),
+      artifacts: memoryArtifacts(),
+      reviewedHash: e.snapshot_hash,
+      numberChecked: true,
+      getSigner: (await mockSigner()).get,
+      revocation: { revocationEvidenceProvider: provider },
+    });
+    assert.equal(signed.state, 'SIGNED');
+    assert.equal(seen[0]?.validationContext, 'LIVE_ISSUANCE');
+    assert.equal(seen[0]?.revocationEvidenceProvider, provider);
+  } finally {
+    padesService.verifyPadesSignature = original;
     await local.db.close();
   }
 });

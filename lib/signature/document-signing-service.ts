@@ -1,21 +1,27 @@
 import crypto from 'node:crypto';
 import { prescriptionSigningBlock } from '../sncr/policy.ts';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { adminClient } from '@/lib/supabase/admin';
-import { HttpError } from '@/lib/supabase/server';
-import { documentPdf } from '@/lib/document-pdf';
-import { withPdfData } from '@/lib/supabase/document-pdf-data';
-import type { ClinicalDocument } from '@/lib/document-fields';
+import { adminClient } from '../supabase/admin.ts';
+import { HttpError } from '../supabase/server.ts';
+import type { ClinicalDocument } from '../document-fields.ts';
 import {
-  cleanCpf,
   formatCpf,
   encryptToken,
   decryptToken,
   generatePkce,
+  parseX509Certificate,
 } from './crypto-utils.ts';
 import { getSignatureProvider } from './provider-factory.ts';
+import { oauthHash, oauthSecret, oauthRedirect, validSecret } from './oauth-context.ts';
 import { signatureProviderLabel, type SignatureProviderId } from './providers.ts';
 import { padesService } from './pades-service.ts';
+import { liveIssuanceRevocationOptions } from './revocation-fetch.ts';
+import { signDocumentAttempt } from './document-signing-attempts.ts';
+import {
+  assertDocumentSigningAuthor,
+  SigningIdentityError,
+  signingCpf,
+} from './signing-identity.ts';
 import type {
   DigitalSignatureRecord,
   PadesVerificationResult,
@@ -23,258 +29,103 @@ import type {
 } from './types.ts';
 
 export class DocumentSigningService {
-  /**
-   * Initiates an OAuth 2.0 PKCE flow with the signature provider (Bird ID or VIDaaS).
-   */
+  private readonly documentAdmin: typeof adminClient;
+  constructor(documentAdmin = adminClient) { this.documentAdmin = documentAdmin; }
+  /** Tentativa PSC vinculada ao usuário, sessão PsyWrite e segredo do navegador. */
   async initiateOAuthSession(params: {
-    db: SupabaseClient;
-    clinicId: string;
-    userId: string;
-    redirectUri: string;
-    provider: SignatureProviderId;
+    db: SupabaseClient; clinicId: string; userId: string;
+    authSessionId: string; binding: string; provider: SignatureProviderId;
   }): Promise<{ authorizationUrl: string; state: string }> {
+    if (!params.authSessionId || !validSecret(params.binding))
+      throw new HttpError(403, 'Sessão e navegador autorizados são obrigatórios.');
+    const redirectUri = oauthRedirect(params.provider);
     const provider = getSignatureProvider(params.provider);
-    const { codeVerifier, codeChallenge } = generatePkce();
-
-    const state = crypto.randomBytes(24).toString('base64url');
-    const stateHash = crypto.createHash('sha256').update(state).digest('hex');
-    const codeVerifierEncrypted = encryptToken(codeVerifier);
-
-    const admin = adminClient();
-
-    // Store state with encrypted verifier
-    const { error: stateError } = await admin
-      .from('signature_oauth_states')
-      .insert({
-        clinic_id: params.clinicId,
-        user_id: params.userId,
-        provider: params.provider,
-        state_hash: stateHash,
-        code_verifier_encrypted: codeVerifierEncrypted,
-        redirect_uri: params.redirectUri,
-        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      });
-
-    if (stateError) {
-      throw new HttpError(
-        500,
-        `Falha ao iniciar estado OAuth: ${stateError.message}`
-      );
-    }
-
-    // Try to get doctor CPF to use as login_hint for the provider
-    const { data: profile } = await admin
-      .from('document_profiles')
-      .select('cpf')
-      .eq('clinic_id', params.clinicId)
-      .eq('user_id', params.userId)
-      .maybeSingle();
-
-    const authorizationUrl = provider.getAuthorizationUrl({
-      state,
-      codeChallenge,
-      redirectUri: params.redirectUri,
-      loginHint: profile?.cpf || undefined,
-      lifetimeSeconds: 4 * 3600, // 4 hours signature session
-    });
-
-    return { authorizationUrl, state };
+    const { codeVerifier, codeChallenge } = generatePkce(), state = oauthSecret();
+    const admin = this.documentAdmin();
+    await this.oauthOperation(admin, params, state, 'start', {
+      provider: params.provider, redirect_uri: redirectUri, verifier: encryptToken(codeVerifier),
+    }, 'pending');
+    // login_hint não concede identidade. Somente o X.509 é usado na conclusão.
+    return { state, authorizationUrl: provider.getAuthorizationUrl({ state, codeChallenge, redirectUri, lifetimeSeconds: 4 * 3600 }) };
   }
 
-  /**
-   * Completes OAuth callback: exchanges code, validates CPF, stores encrypted session.
-   */
+  private async oauthOperation(
+    db: SupabaseClient,
+    actor: { clinicId: string; userId: string; authSessionId: string; binding: string },
+    state: string, action: string, payload: Record<string, unknown>, expected?: string,
+  ) {
+    const { data, error } = await db.rpc('signature_oauth_operation', {
+      p_action: action, p_clinic_id: actor.clinicId, p_user_id: actor.userId,
+      p_auth_session_id: actor.authSessionId, p_state_hash: oauthHash('state', state),
+      p_binding_hash: oauthHash('browser', actor.binding), p_payload: payload,
+    });
+    if (error || !data) throw new HttpError(503, 'Não foi possível confirmar a tentativa OAuth. Inicie nova conexão.');
+    if (expected && data.status !== expected)
+      throw new HttpError(data.reason === 'certificate_profile_identity_mismatch' ? 403 : 409,
+        data.reason === 'certificate_profile_identity_mismatch'
+          ? 'O certificado não corresponde à identidade autorizada. As sessões incompatíveis exigem revisão.'
+          : 'Tentativa inválida, já utilizada ou expirada. Inicie nova conexão.');
+    return data;
+  }
+
+  /** O chamador fornece exclusivamente contexto autenticado, nunca o usuário salvo no state. */
   async handleOAuthCallback(params: {
-    db: SupabaseClient;
-    clinicId: string;
-    userId: string;
-    code: string;
-    state: string;
+    db: SupabaseClient; clinicId: string; userId: string; authSessionId: string;
+    binding: string; code: string; state: string; redirectUri: string; cancelled?: boolean;
   }): Promise<SignatureSessionData> {
-    const admin = adminClient();
-    const stateHash = crypto
-      .createHash('sha256')
-      .update(params.state)
-      .digest('hex');
-
-    // Retrieve and validate state
-    const { data: stateRecord, error: stateError } = await admin
-      .from('signature_oauth_states')
-      .select('*')
-      .eq('state_hash', stateHash)
-      .gt('expires_at', new Date().toISOString())
-      .maybeSingle();
-
-    if (stateError || !stateRecord) {
-      throw new HttpError(
-        400,
-        'Estado de autorização expirado ou inválido (CSRF prevenido). Reinicie a autorização.'
-      );
+    if (!params.authSessionId || !validSecret(params.binding) || !validSecret(params.state) ||
+        (!params.cancelled && (!params.code || params.code.length > 1024)))
+      throw new HttpError(403, 'Contexto de autorização ausente ou inválido.');
+    const admin = this.documentAdmin();
+    // Única aquisição: COMMIT no PostgreSQL antes de decifrar PKCE ou chamar o PSC.
+    const attempt = await this.oauthOperation(admin, params, params.state, 'claim', { redirect_uri: params.redirectUri }, 'processing');
+    let externalStarted = false, exchanged = false;
+    try {
+      if (params.cancelled) throw new HttpError(409, 'Autorização cancelada. Inicie nova conexão.');
+      if (oauthRedirect(attempt.provider) !== params.redirectUri) throw new HttpError(403, 'Endereço de retorno incompatível.');
+      const codeVerifier = decryptToken(attempt.verifier), provider = getSignatureProvider(attempt.provider);
+      externalStarted = true;
+      const token = await provider.exchangeAuthorizationCode({ code: params.code, codeVerifier, redirectUri: attempt.redirect_uri });
+      exchanged = true;
+      if (!token.accessToken || !Number.isFinite(token.expiresIn) || token.expiresIn <= 0 || token.expiresIn > 86400)
+        throw new HttpError(422, 'Resposta de autorização inválida.');
+      const certs = await provider.getCertificates(token.accessToken);
+      let cert;
+      try { cert = parseX509Certificate(certs[0].rawPem, certs[0].alias); }
+      catch { throw new HttpError(422, 'Não foi possível identificar o certificado autorizado.'); }
+      const cpf = signingCpf(cert.cpf);
+      if (!cpf) throw new HttpError(422, 'Não foi possível identificar o CPF do titular no certificado.');
+      // Não confia somente no CPF editável do perfil nem no CPF declarado pelo PSC.
+      const { data: previous, error } = await admin.from('signature_sessions')
+        .select('certificate_raw').eq('user_id', params.userId);
+      if (error) throw new HttpError(503, 'Não foi possível conferir a identidade anterior.');
+      const priorMismatch = (previous || []).some(row => {
+        if (!row.certificate_raw) return false; // legado será revogado na transação
+        try { return signingCpf(parseX509Certificate(row.certificate_raw).cpf) !== cpf; }
+        catch { return true; }
+      });
+      const completed = await this.oauthOperation(admin, params, params.state, 'finish', {
+        cpf, certificate_alias: cert.alias, certificate_subject: cert.subject, certificate_issuer: cert.issuer,
+        certificate_valid_from: cert.validFrom.toISOString(), certificate_valid_to: cert.validTo.toISOString(),
+        certificate_raw: cert.rawPem, common_name: cert.commonName, prior_certificate_mismatch: priorMismatch,
+        access_token_encrypted: encryptToken(token.accessToken), expires_at: new Date(Date.now() + token.expiresIn * 1000).toISOString(),
+      }, 'completed');
+      const s = completed.session;
+      return { id: s.id, clinicId: s.clinic_id, userId: s.user_id, provider: s.provider, cpf: s.cpf,
+        certificateAlias: s.certificate_alias, certificateSubject: s.certificate_subject, certificateIssuer: s.certificate_issuer,
+        certificateValidFrom: s.certificate_valid_from, certificateValidTo: s.certificate_valid_to, expiresAt: s.expires_at, revoked: s.revoked };
+    } catch (error) {
+      // Sem repetição de token exchange, inclusive se a resposta do COMMIT se perder.
+      const invalidCode = !exchanged && error instanceof HttpError && [400, 401, 403].includes(error.status);
+      const uncertain = externalStarted && !invalidCode && (!exchanged || !(error instanceof HttpError) || error.status >= 500);
+      const reason = params.cancelled ? 'cancelled' : invalidCode ? 'invalid_code' : !exchanged ? 'external_failure' : 'certificate_identity_unavailable';
+      try { await this.oauthOperation(admin, params, params.state, uncertain ? 'uncertain' : 'reject', { reason }); }
+      catch { /* O claim durável permanece processing; nunca libera nova troca. */ }
+      throw new HttpError(uncertain ? 409 : error instanceof HttpError && error.status === 422 ? 422 : 403,
+        uncertain ? 'Resultado externo incerto. A tentativa não será repetida; inicie nova conexão.'
+          : params.cancelled ? 'Autorização cancelada. Inicie nova conexão.'
+          : 'Não foi possível autorizar o certificado para esta identidade. Inicie nova conexão ou solicite revisão.');
     }
-
-    if (
-      stateRecord.clinic_id !== params.clinicId ||
-      stateRecord.user_id !== params.userId
-    ) {
-      throw new HttpError(
-        403,
-        'O estado de autorização pertence a outro usuário ou clínica.'
-      );
-    }
-
-    const codeVerifier = decryptToken(stateRecord.code_verifier_encrypted);
-    const provider = getSignatureProvider(stateRecord.provider);
-
-    // 1. Exchange authorization code for token
-    const tokenResult = await provider.exchangeAuthorizationCode({
-      code: params.code,
-      codeVerifier,
-      redirectUri: stateRecord.redirect_uri,
-    });
-
-    // 2. Discover certificates
-    const certs = await provider.getCertificates(tokenResult.accessToken);
-    if (!certs.length) {
-      throw new HttpError(
-        422,
-        `Nenhum certificado ICP-Brasil encontrado na conta ${signatureProviderLabel(stateRecord.provider)}.`
-      );
-    }
-    const cert = certs[0];
-
-    const certCpf = cleanCpf(cert.cpf || tokenResult.cpf);
-    if (!certCpf || certCpf.length !== 11) {
-      throw new HttpError(
-        422,
-        'Não foi possível identificar o CPF do titular no certificado digital ICP-Brasil.'
-      );
-    }
-
-    // 3. Strict CPF validation against doctor's registered profile
-    const { data: profile } = await admin
-      .from('document_profiles')
-      .select('cpf, physician_name')
-      .eq('clinic_id', params.clinicId)
-      .eq('user_id', params.userId)
-      .maybeSingle();
-
-    if (profile?.cpf) {
-      const registeredCpf = cleanCpf(profile.cpf);
-      if (registeredCpf && registeredCpf !== certCpf) {
-        // Security audit event
-        await admin.from('audit_events').insert({
-          clinic_id: params.clinicId,
-          actor_id: params.userId,
-          action: 'signature_cpf_mismatch',
-          entity_type: 'signature_session',
-          entity_id: params.userId,
-          context: {
-            doctor_registered_cpf: formatCpf(registeredCpf),
-            certificate_cpf: formatCpf(certCpf),
-            certificate_subject: cert.subject,
-          },
-        });
-
-        throw new HttpError(
-          403,
-          `O CPF do certificado digital (${formatCpf(certCpf)}) não coincide com o CPF cadastrado para o médico (${formatCpf(registeredCpf)}). Por segurança, a sessão foi cancelada.`
-        );
-      }
-    } else if (profile) {
-      // First time setting CPF on profile: lock it to the verified certificate's CPF
-      await admin
-        .from('document_profiles')
-        .update({ cpf: certCpf })
-        .eq('clinic_id', params.clinicId)
-        .eq('user_id', params.userId);
-    } else {
-      // Create initial profile locked to verified certificate
-      await admin
-        .from('document_profiles')
-        .insert({
-          clinic_id: params.clinicId,
-          user_id: params.userId,
-          physician_name: cert.commonName || '',
-          physician_registration: '',
-          cpf: certCpf,
-        });
-    }
-
-    // 4. Store encrypted session
-    const encryptedToken = encryptToken(tokenResult.accessToken);
-    const expiresAt = new Date(
-      Date.now() + tokenResult.expiresIn * 1000
-    ).toISOString();
-
-    // Invalidate prior sessions
-    await admin
-      .from('signature_sessions')
-      .update({ revoked: true })
-      .eq('clinic_id', params.clinicId)
-      .eq('user_id', params.userId)
-      .eq('revoked', false);
-
-    const { data: newSession, error: sessionError } = await admin
-      .from('signature_sessions')
-      .insert({
-        clinic_id: params.clinicId,
-        user_id: params.userId,
-        provider: stateRecord.provider,
-        cpf: certCpf,
-        certificate_alias: cert.alias,
-        certificate_subject: cert.subject,
-        certificate_issuer: cert.issuer,
-        certificate_valid_from: cert.validFrom.toISOString(),
-        certificate_valid_to: cert.validTo.toISOString(),
-        access_token_encrypted: encryptedToken,
-        expires_at: expiresAt,
-        revoked: false,
-      })
-      .select()
-      .single();
-
-    if (sessionError || !newSession) {
-      throw new HttpError(
-        500,
-        `Falha ao salvar sessão de assinatura: ${sessionError?.message}`
-      );
-    }
-
-    // Clean up consumed OAuth state
-    await admin
-      .from('signature_oauth_states')
-      .delete()
-      .eq('id', stateRecord.id);
-
-    // Audit log
-    await admin.from('audit_events').insert({
-      clinic_id: params.clinicId,
-      actor_id: params.userId,
-      action: 'signature_session_created',
-      entity_type: 'signature_session',
-      entity_id: newSession.id,
-      context: {
-        provider: stateRecord.provider,
-        cpf: certCpf,
-        certificate_alias: cert.alias,
-        expires_at: expiresAt,
-      },
-    });
-
-    return {
-      id: newSession.id,
-      clinicId: newSession.clinic_id,
-      userId: newSession.user_id,
-      provider: newSession.provider,
-      cpf: newSession.cpf,
-      certificateAlias: newSession.certificate_alias,
-      certificateSubject: newSession.certificate_subject,
-      certificateIssuer: newSession.certificate_issuer,
-      certificateValidFrom: newSession.certificate_valid_from,
-      certificateValidTo: newSession.certificate_valid_to,
-      expiresAt: newSession.expires_at,
-      revoked: newSession.revoked,
-    };
   }
 
   /**
@@ -368,35 +219,18 @@ export class DocumentSigningService {
     clinicId: string;
     userId: string;
     documentId: string;
+    documentVersion?: number;
+    idempotencyKey?: string;
   }): Promise<{
     success: boolean;
     documentId: string;
     signedPdfPath: string;
     verification: PadesVerificationResult;
-    signature: DigitalSignatureRecord;
+    signature?: DigitalSignatureRecord;
+    simulation?: boolean;
+    document?: ClinicalDocument;
   }> {
-    const admin = adminClient();
-
-    // 1. Check active session
-    const { data: session, error: sessionErr } = await admin
-      .from('signature_sessions')
-      .select('*')
-      .eq('clinic_id', params.clinicId)
-      .eq('user_id', params.userId)
-      .eq('revoked', false)
-      .gt('expires_at', new Date().toISOString())
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (sessionErr || !session) {
-      throw new HttpError(
-        401,
-        'Nenhuma sessão ativa de certificado em nuvem. Conecte seu certificado digital para assinar.'
-      );
-    }
-
-    const accessToken = decryptToken(session.access_token_encrypted);
+    const admin = this.documentAdmin();
 
     // 2. Fetch document
     const { data: docRecord, error: docErr } = await admin
@@ -410,11 +244,19 @@ export class DocumentSigningService {
       throw new HttpError(404, 'Documento clínico não encontrado.');
     }
 
-    if (docRecord.status === 'SIGNED') {
-      throw new HttpError(
-        409,
-        'Este documento já foi assinado digitalmente e está imutável.'
-      );
+    const audit = async (action: string, reason: string, details: Record<string, unknown> = {}) => {
+      const { error } = await admin.from('audit_events').insert({
+        clinic_id: params.clinicId, actor_id: params.userId, action,
+        entity_type: 'clinical_documents', entity_id: params.documentId,
+        context: { reason, document_version: docRecord.version, ...details },
+      });
+      if (error) throw new HttpError(503, 'Não foi possível registrar a operação de assinatura.');
+    };
+    try {
+      assertDocumentSigningAuthor(params, docRecord);
+    } catch (error) {
+      await audit('document.signature_denied', error instanceof SigningIdentityError ? error.reason : 'identity_unavailable');
+      throw error;
     }
 
     const doc = docRecord as ClinicalDocument;
@@ -425,192 +267,7 @@ export class DocumentSigningService {
       if (block) throw new HttpError(409, block);
     }
 
-    // 3. Mark status as SIGNING
-    const claim = await admin
-      .from('clinical_documents')
-      .update({ status: 'SIGNING' })
-      .eq('id', params.documentId)
-      .eq('clinic_id', params.clinicId)
-      .eq('author_id', params.userId)
-      .eq('version', doc.version)
-      .in('status', ['DRAFT', 'SIGNATURE_FAILED'])
-      .select('id').maybeSingle();
-    if (claim.error || !claim.data)
-      throw new HttpError(409, 'Documento alterado ou com assinatura em andamento. Reabra-o antes de assinar.');
-
-    try {
-      // 4. Endereço do paciente (receitas) e timbre do autor
-      await withPdfData(admin, params.clinicId, doc);
-
-      // 5. Generate unsigned official PDF
-      const unsignedPdfBytes = await documentPdf(doc, { isDraft: false });
-      const unsignedPdfHash = crypto
-        .createHash('sha256')
-        .update(Buffer.from(unsignedPdfBytes))
-        .digest('hex');
-
-      // Extract signer name from CN
-      const cnMatch = session.certificate_subject.match(/CN=([^,\n/]+)/i);
-      const signerName = cnMatch ? cnMatch[1].trim() : doc.physician_name;
-
-      // 6. Prepare PDF with PAdES placeholder
-      const prepared = await padesService.preparePdfForSignature(
-        unsignedPdfBytes,
-        {
-          signerName,
-          doctorCrm: doc.physician_registration,
-          reason: 'Documento assinado digitalmente com certificado ICP-Brasil',
-        }
-      );
-
-      // 7. Request signature on the document hash from the provider (HSM)
-      const provider = getSignatureProvider(session.provider);
-      const signResult = await provider.signHash({
-        accessToken,
-        certificateAlias: session.certificate_alias,
-        hashHex: prepared.digestHex,
-        documentAlias: `${doc.kind} #${doc.id.slice(0, 8)}`,
-      });
-
-      // 8. Embed the CMS signature into the PDF
-      const signedPdfBuffer = padesService.embedSignature(
-        prepared,
-        signResult.cmsSignatureBase64
-      );
-      const signedPdfHash = crypto
-        .createHash('sha256')
-        .update(signedPdfBuffer)
-        .digest('hex');
-
-      // 9. Verify the final signed PDF locally
-      const verification =
-        await padesService.verifyPadesSignature(signedPdfBuffer);
-      if (!verification.isValid) {
-        throw new Error(
-          `Falha na validação criptográfica do PDF assinado: ${
-            verification.error || 'Assinatura inválida'
-          }`
-        );
-      }
-
-      // 10. Upload signed PDF to Storage
-      const storagePath = `${params.clinicId}/signatures/${params.documentId}_v${doc.version}_${signedPdfHash}_signed.pdf`;
-      const uploadRes = await admin.storage
-        .from('clinical-files')
-        .upload(storagePath, signedPdfBuffer, {
-          contentType: 'application/pdf',
-          upsert: false,
-        });
-
-      if (uploadRes.error) {
-        throw new Error(
-          `Falha ao salvar PDF assinado no Storage: ${uploadRes.error.message}`
-        );
-      }
-
-      // 11. Insert digital signature record
-      const signatureInsert = {
-        clinic_id: params.clinicId,
-        document_id: params.documentId,
-        document_version: doc.version,
-        signer_user_id: params.userId,
-        signer_doctor_id: params.userId,
-        provider: session.provider,
-        certificate_subject:
-          verification.certificateSubject || session.certificate_subject,
-        certificate_issuer:
-          verification.certificateIssuer || session.certificate_issuer,
-        certificate_serial: verification.certificateSerial || '',
-        certificate_fingerprint: verification.certificateFingerprint || '',
-        cpf_from_certificate: verification.signerCpf || session.cpf,
-        signature_algorithm: 'SHA256withRSA',
-        digest_algorithm: 'SHA-256',
-        signature_format: 'PAdES-B-B',
-        signed_at: new Date().toISOString(),
-        document_hash: prepared.digestHex,
-        unsigned_pdf_hash: unsignedPdfHash,
-        signed_pdf_hash: signedPdfHash,
-        signed_pdf_storage_path: storagePath,
-        status: 'SIGNED',
-        verification_status: 'VALID',
-        provider_transaction_id: signResult.providerTransactionId || null,
-      };
-
-      const { data: sigRecord, error: sigInsertErr } = await admin
-        .from('digital_signatures')
-        .insert(signatureInsert)
-        .select()
-        .single();
-
-      if (sigInsertErr || !sigRecord) {
-        throw new Error(
-          `Erro ao registrar assinatura no banco: ${sigInsertErr?.message}`
-        );
-      }
-
-      // 12. Update clinical_documents status and path
-      const { error: docUpdateErr } = await admin
-        .from('clinical_documents')
-        .update({
-          status: 'SIGNED',
-          signed_pdf_path: storagePath,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', params.documentId);
-
-      if (docUpdateErr) {
-        throw new Error(
-          `Erro ao atualizar status do documento para SIGNED: ${docUpdateErr.message}`
-        );
-      }
-
-      // 13. Audit event
-      await admin.from('audit_events').insert({
-        clinic_id: params.clinicId,
-        actor_id: params.userId,
-        action: 'document.signed',
-        entity_type: 'clinical_documents',
-        entity_id: params.documentId,
-        context: {
-          document_id: params.documentId,
-          version: doc.version,
-          cpf: formatCpf(verification.signerCpf || session.cpf),
-          certificate_serial: verification.certificateSerial,
-          signed_pdf_hash: signedPdfHash,
-          storage_path: storagePath,
-          provider: session.provider,
-        },
-      });
-
-      return {
-        success: true,
-        documentId: params.documentId,
-        signedPdfPath: storagePath,
-        verification,
-        signature: sigRecord as DigitalSignatureRecord,
-      };
-    } catch (error) {
-      // Mark as SIGNATURE_FAILED on failure
-      await admin
-        .from('clinical_documents')
-        .update({ status: 'SIGNATURE_FAILED' })
-        .eq('id', params.documentId)
-        .eq('clinic_id', params.clinicId)
-        .eq('status', 'SIGNING');
-
-      await admin.from('audit_events').insert({
-        clinic_id: params.clinicId,
-        actor_id: params.userId,
-        action: 'document.signature_failed',
-        entity_type: 'clinical_documents',
-        entity_id: params.documentId,
-        context: {
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-
-      throw error;
-    }
+    return signDocumentAttempt(admin, params, docRecord);
   }
 
   /**
@@ -734,11 +391,16 @@ export class DocumentSigningService {
     );
 
     // 5. Verify cryptographically
-    const verification = await padesService.verifyPadesSignature(signedPdfBuffer);
-    if (!verification.isValid) {
+    const verification = await padesService.verifyPadesSignature(signedPdfBuffer, {
+      validationContext: 'LIVE_ISSUANCE',
+      ...liveIssuanceRevocationOptions(),
+    });
+    if (!verification.assessment.issuanceAllowed) {
       throw new Error(
         `Falha na validação criptográfica do PDF assinado: ${
-          verification.error || 'Assinatura inválida'
+          verification.assessment.issuanceBlockReason ||
+          verification.error ||
+          'Assinatura inválida'
         }`
       );
     }

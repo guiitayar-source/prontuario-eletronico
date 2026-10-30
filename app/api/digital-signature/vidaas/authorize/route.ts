@@ -1,1 +1,1 @@
-export { dynamic, GET } from '../../birdid/authorize/route';
+export { dynamic, POST } from '../../birdid/authorize/route';

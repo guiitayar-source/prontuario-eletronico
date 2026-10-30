@@ -39,6 +39,16 @@ export async function completeNumbering(params: {
   }
   // If this fails, REQUESTING is retained and becomes UNKNOWN. No retry.
   await store.update({ raw_response: raw });
+  return storeParsed(store, input, raw);
+}
+// Rereads a response already preserved in CONTRACT_REVIEW (after the parser
+// learned a new format). Called ONLY after sncr_reprocess_request moved it back
+// to REQUESTING; never contacts Anvisa again.
+export async function storeParsed(
+  store: Store,
+  input: NumberingInput,
+  raw: Record<string, unknown>,
+) {
   let numbers: string[];
   try {
     numbers = parseNumberingResponse(input, raw);

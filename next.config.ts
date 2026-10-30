@@ -30,8 +30,14 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Callbacks retornam segredos na query: não registrar suas URLs.
+  logging: { incomingRequests: { ignore: [/^\/sncr\?(?:.*&)?session_id=/, /^\/api\/digital-signature\/(birdid|vidaas)\/callback(?:\/|\?|$)/] } },
   poweredByHeader: false,
-  outputFileTracingIncludes: { '/api/documents': ['./assets/fonts/*.ttf'], '/api/sncr/rce': ['./assets/sncr/*.pdf'] },
+  outputFileTracingIncludes: {
+    '/api/documents': ['./assets/fonts/*.ttf'],
+    '/api/digital-signature/sign': ['./assets/fonts/*.ttf'],
+    '/api/sncr/rce': ['./assets/sncr/*.pdf'],
+  },
   experimental,
   // `npm run build` runs `tsc --noEmit` first. Avoid Next's duplicate typecheck
   // worker, which loses compiler output under the managed Node runtime.

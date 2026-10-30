@@ -16,11 +16,19 @@ import {
   validateNumberingInput,
   validCnpj,
 } from './client.ts';
-import { completeNumbering } from './workflow.ts';
+import { completeNumbering, storeParsed } from './workflow.ts';
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const cookieName = 'psywrite_sncr_flow';
+// Same states as the sncr_request_unresolved index.
+export const unresolvedStates = [
+  'AUTH_PENDING',
+  'REQUESTING',
+  'UNKNOWN',
+  'RECEIVED_UNVERIFIED',
+  'CONTRACT_REVIEW',
+];
 const hash = (v: string) => createHash('sha256').update(v).digest('hex');
 function browserSecret(request: Request) {
   return (
@@ -58,11 +66,59 @@ export function sncrPreparationConfig(
 export const sncr = handle(async (request, ctx) => {
   if (!['owner', 'doctor'].includes(ctx.role))
     throw new HttpError(403, 'Apenas prescritores podem utilizar o SNCR.');
-  if (request.method === 'GET' && !new URL(request.url).searchParams.has('id'))
+  if (request.method === 'GET' && !new URL(request.url).searchParams.has('id')) {
+    const environment =
+      process.env.SNCR_ENVIRONMENT === 'hmg' ? 'hmg' : 'disabled';
+    // The page keeps the request id per tab; a new tab must still find the
+    // unresolved request instead of starting another one.
+    const open =
+      environment === 'hmg'
+        ? check(
+            await adminClient()
+              .from('sncr_numbering_requests')
+              .select('id')
+              .eq('clinic_id', ctx.clinic)
+              .eq('user_id', ctx.user)
+              .eq('environment', 'hmg')
+              .in('state', unresolvedStates)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle(),
+          )
+        : null;
+    // Read-only summary of the prescriber's batch for the page; no state changes.
+    let lot = null;
+    if (environment === 'hmg') {
+      const items = check(
+        await adminClient()
+          .from('sncr_numbering_items')
+          .select('number,state')
+          .eq('clinic_id', ctx.clinic)
+          .eq('user_id', ctx.user)
+          .eq('environment', 'hmg')
+          .order('number')
+          .limit(5000),
+      ) as { number: string; state: string }[];
+      if (items.length) {
+        const count = (state: string) => items.filter((i) => i.state === state).length;
+        lot = {
+          first: items[0].number,
+          last: items[items.length - 1].number,
+          total: items.length,
+          available: count('QUARANTINED'),
+          reserved: count('RESERVED'),
+          used: count('USED'),
+          void: count('VOID'),
+        };
+      }
+    }
     return json({
-      environment: process.env.SNCR_ENVIRONMENT === 'hmg' ? 'hmg' : 'disabled',
+      environment,
+      openRequestId: open?.id ?? null,
+      lot,
       issuanceAvailable: false,
     });
+  }
   const cfg = sncrPreparationConfig(request);
   const admin = adminClient();
   if (request.method === 'GET') {
@@ -167,6 +223,40 @@ export const sncr = handle(async (request, ctx) => {
       `${cookieName}=${secret}; HttpOnly; SameSite=Lax; Path=/api/sncr; Max-Age=600${cfg.origin.startsWith('https:') ? '; Secure' : ''}`,
     );
     return response;
+  }
+  if (p.action === 'reprocess') {
+    // Same one-row lock as the callback claim; the raw response stays as received.
+    const row = check(
+      await admin.rpc('sncr_reprocess_request', {
+        rid: p.id,
+        c: ctx.clinic,
+        u: ctx.user,
+      }),
+    );
+    const store = {
+      update: async (fields: Record<string, unknown>) =>
+        check(
+          await admin
+            .from('sncr_numbering_requests')
+            .update({ ...fields, updated_at: new Date().toISOString() })
+            .eq('id', p.id)
+            .eq('clinic_id', ctx.clinic)
+            .eq('user_id', ctx.user),
+        ),
+      storeNumbers: async (numbers: string[]) => {
+        check(
+          await admin.rpc('sncr_store_numbers', {
+            rid: p.id,
+            c: ctx.clinic,
+            u: ctx.user,
+            numbers,
+          }),
+        );
+      },
+    };
+    return json(
+      await storeParsed(store, validateNumberingInput(row.input), row.raw_response),
+    );
   }
   if (p.action !== 'complete' || typeof p.sessionId !== 'string')
     throw new HttpError(422, 'Solicitação inválida.');

@@ -18,5 +18,6 @@
 @import './styles/settings.css'; /* Ajustes e temas */
 @import './styles/signature.css'; /* Assinatura digital */
 @import './styles/prescriptions.css'; /* Receitas e timbre profissional */
+@import './styles/sncr.css'; /* Página SNCR: numeração de teste */
 @import './styles/diagnoses.css'; /* Diagnósticos CID-10/CID-11 */
 @import './styles/exams.css'; /* Exames laboratoriais e leitura de laudos por IA */

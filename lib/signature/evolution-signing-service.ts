@@ -210,7 +210,9 @@ export class EvolutionSigningService {
           certificate_not_after: certNotAfter,
           provider: session.provider,
           provider_signature_id: signResult.providerTransactionId || null,
-          verification_status: 'VALID',
+          // Só integridade, certificado e cadeia são conferidos; sem revogação não há
+          // confiança plena, então nunca se grava VALID (6F.2C-R).
+          verification_status: 'UNVERIFIED',
           verified_at: nowIso,
           signed_at: nowIso,
         })
@@ -477,6 +479,10 @@ export class EvolutionSigningService {
 
     return {
       isValid,
+      // Revogação não é consultada para evoluções: o melhor resultado é INDETERMINATE.
+      status: isValid ? 'INDETERMINATE' : 'INVALID',
+      persistenceStatus: isValid ? 'UNVERIFIED' : 'INVALID',
+      isTrusted: false,
       evolutionId: params.evolutionId,
       signatureId: sig.id,
       provider: sig.provider,

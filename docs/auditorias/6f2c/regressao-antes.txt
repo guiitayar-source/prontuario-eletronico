@@ -1,0 +1,29 @@
+    not ok 1 - revogação conhecida sem POE: INDETERMINATE, mas isValid=false e emissão bloqueada
+    not ok 2 - revogação indisponível (sem CRL/OCSP): não bloqueia a emissão, mas nunca é confiança plena
+    not ok 3 - emissão ao vivo com certificado já revogado: INVALID e persistido INVALID
+    not ok 4 - certificado sintético fora de raiz confiável: emissão simulada permitida, sem confiança plena
+    not ok 5 - VALID é o único caminho para persistir VALID
+not ok 1 - 6F.2C-R A2 — isValid, avaliação e estado persistido
+    not ok 1 - CRL emitida depois da POE e já vencida no instante da verificação comprova GOOD na POE
+    not ok 2 - OCSP produzido depois da POE e já vencido comprova GOOD na POE
+    not ok 3 - evidência emitida depois do vencimento do certificado não comprova GOOD
+not ok 2 - 6F.2C-R A3 — evidência posterior à POE na validação histórica
+    not ok 1 - CRL anterior à POE, ainda vigente agora, não comprova GOOD na POE
+    not ok 2 - nenhum subconjunto e nenhuma ordem de evidências produz VALID para certificado revogado antes da POE
+    ok 3 - a ordem de CRL e OCSP para o mesmo certificado não altera o resultado
+not ok 3 - 6F.2C-R A4 — frescor, ordem e subconjunto de evidências
+    not ok 1 - motivo ausente com invalidityDate anterior à POE não é VALID
+    not ok 2 - motivo 0 com invalidityDate anterior à POE não é VALID
+    not ok 3 - motivo 3 com invalidityDate anterior à POE não é VALID
+    not ok 4 - motivo 4 com invalidityDate anterior à POE não é VALID
+    not ok 5 - motivo 5 com invalidityDate anterior à POE não é VALID
+    ok 6 - invalidityDate posterior à POE preserva GOOD_AT_POE (motivo administrativo e keyCompromise)
+    not ok 7 - motivo não reconhecido (7) sem invalidityDate é tratado como comprometimento
+    not ok 8 - OCSP revoked com invalidityDate anterior à POE também não é VALID
+not ok 4 - 6F.2C-R A5 — invalidityDate para qualquer motivo
+    not ok 1 - OCSP good sem nextUpdate: aceito dentro da idade máxima, recusado fora dela
+    not ok 2 - tryLater não assinado não conta como evidência de nenhum certificado
+    not ok 3 - um carimbo mais antigo de TSA sem revogação comprovada não esconde um carimbo completo posterior
+not ok 5 - 6F.2C-R — OCSP sem nextUpdate, tryLater e seleção de carimbo
+# pass 2
+# fail 20

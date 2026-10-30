@@ -12,7 +12,7 @@ import {
 } from '../lib/sncr/client.ts';
 import { prescriptionSigningBlock, sncrTransitionEnd } from '../lib/sncr/policy.ts';
 import { completeNumbering } from '../lib/sncr/workflow.ts';
-import { sncrPreparationConfig } from '../lib/sncr/service.ts';
+import { sncrPreparationConfig, unresolvedStates } from '../lib/sncr/service.ts';
 
 const input = {
   category: 'RCE',
@@ -196,6 +196,45 @@ test('reject inconsistent ranges, duplicate numbers, string arrays and unvalidat
       parseNumberingResponse(v, { numeracoesReceita, saldoReceitas: 0 }),
     );
 });
+test('16-digit RCE range returned by homologação on 30/10/2026 is expanded with its own width', () => {
+  const sample = {
+    fim: '2610.6-35.000113000',
+    inicio: '2610.6-35.000112001',
+    mensagem: 'Numeração gerada com sucesso.',
+    quantidade: 1000,
+  };
+  const numbers = parseNumberingResponse(input, sample);
+  assert.equal(numbers.length, 1000);
+  assert.equal(numbers[0], '2610.6-35.000112001');
+  assert.equal(numbers[999], '2610.6-35.000113000');
+  assert.ok(numbers.every((n) => n.length === 19));
+  assert.equal(new Set(numbers).size, 1000);
+  for (const changed of [
+    { fim: '2610.6-35.0113000' }, // mixed widths
+    { inicio: '2610.6-35.00112001', fim: '2610.6-35.00113000' }, // 8 digits
+    { fim: '2610.6-35.000113001' },
+    { fim: '2610.6-36.000113000' },
+  ])
+    assert.throws(() => parseNumberingResponse(input, { ...sample, ...changed }));
+  // Notifications keep the published format until a real sample arrives.
+  assert.throws(() =>
+    parseNumberingResponse(
+      { ...input, category: 'NRA', quantidade: 10 },
+      { numeracoesReceita: ['2610.6-35.000112001'], saldoReceitas: 0 },
+    ),
+  );
+});
+test('a new tab resumes the same unresolved request the database blocks from repeating', async () => {
+  const sql = await readFile(
+    new URL('../supabase/migrations/20261030023641_sncr_preparation.sql', import.meta.url),
+    'utf8',
+  );
+  const states = sql
+    .match(/sncr_request_unresolved[^;]*state in \(([^)]*)\)/)[1]
+    .match(/'([A-Z_]+)'/g)
+    .map((s) => s.slice(1, -1));
+  assert.deepEqual([...unresolvedStates].sort(), states.sort());
+});
 test('return URL cannot be redirected to untrusted hosts; production requires HTTPS .br', () => {
   assert.match(
     sncrLoginUrl('hmg', 'http://127.0.0.1:3000/sncr'),
@@ -248,10 +287,16 @@ test('cutoff uses São Paulo date; notifications never use legacy RCE signature'
     prescriptionSigningBlock('RCE', new Date('2027-03-04T03:00:00Z')),
     /04\/03\/2027/,
   );
-  for (const category of ['NRA', 'NRB', 'NRB2', 'NRR', 'NRT', 'RET'])
+  for (const category of ['NRA', 'NRB', 'NRB2', 'NRR', 'NRT'])
     assert.ok(
       prescriptionSigningBlock(category, new Date('2026-10-19T12:00:00Z')),
     );
+  // RET tem fluxo próprio: segue o mesmo prazo de transição da RCE.
+  assert.equal(prescriptionSigningBlock('RET', new Date('2026-10-30T12:00:00Z')), null);
+  assert.match(
+    prescriptionSigningBlock('RET', new Date('2027-03-04T03:00:00Z')),
+    /04\/03\/2027/,
+  );
 });
 test('receita simples não depende do SNCR nem entra na numeração', () => {
   for (const at of ['2026-10-19T12:00:00Z', '2026-10-30T03:00:00Z', '2027-06-01T12:00:00Z'])

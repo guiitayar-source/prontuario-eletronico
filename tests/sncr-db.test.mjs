@@ -324,6 +324,65 @@ test('SNCR staged schema: isolation, one-use claims, quarantine, duplicate rollb
         ),
       /não pode retornar/,
     );
+    // 16 dígitos: retorno real da homologação (30/10/2026) preservado em CONTRACT_REVIEW.
+    await db.exec(
+      (
+        await readFile(
+          new URL(
+            '../supabase/migrations/20261030150000_sncr_16_digits.sql',
+            import.meta.url,
+          ),
+          'utf8',
+        )
+      ).replace(/do \$\$ begin\n raise exception '[^']*não aplicar';\nend \$\$;/, ''),
+    );
+    const review = crypto.randomUUID();
+    await create(review, c, u, 'RET', 'CONTRACT_REVIEW');
+    const sample = {
+      fim: '2610.6-35.000113000',
+      inicio: '2610.6-35.000112001',
+      mensagem: 'Numeração gerada com sucesso.',
+      quantidade: 1000,
+    };
+    const reprocess = (rid, clinic = c, user = u) =>
+      db.query('select public.sncr_reprocess_request($1,$2,$3) as r', [
+        rid,
+        clinic,
+        user,
+      ]);
+    await assert.rejects(() => reprocess(review), /Só um retorno preservado/);
+    await db.query(
+      'update public.sncr_numbering_requests set raw_response=$2::jsonb where id=$1',
+      [review, JSON.stringify(sample)],
+    );
+    await assert.rejects(() => reprocess(review, c2), /privilege|permission/i);
+    await assert.rejects(() => reprocess(review, c, u2), /privilege|permission/i);
+    assert.deepEqual((await reprocess(review)).rows[0].r.raw_response, sample);
+    await assert.rejects(() => reprocess(review), /Só um retorno preservado/);
+    await assert.rejects(
+      () => store(review, ['2610.6-35.00011200']),
+      /não validado/,
+    );
+    await store(review, ['2610.6-35.000112001', '2610.6-35.000113000']);
+    assert.equal(
+      (
+        await db.query(
+          'select state,raw_response from public.sncr_numbering_requests where id=$1',
+          [review],
+        )
+      ).rows[0].state,
+      'RECEIVED_UNVERIFIED',
+    );
+    assert.deepEqual(
+      (
+        await db.query(
+          'select raw_response from public.sncr_numbering_requests where id=$1',
+          [review],
+        )
+      ).rows[0].raw_response,
+      sample,
+      'raw response kept exactly as received',
+    );
     assert.equal(
       (
         await db.query(

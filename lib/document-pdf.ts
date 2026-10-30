@@ -2,6 +2,7 @@ import { PDFDocument, rgb, type PDFFont } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFile } from 'node:fs/promises';
 import type { ClinicalDocument } from './document-fields.ts';
+import { rceTransitionPdf } from './sncr/rce-transition.ts';
 
 const clean = (s: string) => s.replace(/\r\n?/g, '\n').replace(/\t/g, '    ');
 
@@ -75,7 +76,14 @@ async function prescriptionPdf(
 
   // Receita simples: uma via, sem o título de controle especial.
   const simple = d.prescription_category === 'SIMPLES';
+  // RET (RDC 471/2021): duas vias; paciente com nome completo, idade e sexo.
+  const ret = d.prescription_category === 'RET';
   const vias = simple ? [''] : ['1ª via - Farmácia', '2ª via - Paciente'];
+  const patientExtra = ret
+    ? `Idade: ${patientAge(d) ?? '____'} anos   Sexo: ${clean(d.patient_gender || '').trim() || '________'}`
+    : simple
+      ? ''
+      : `CPF: ${formatCpf(d.patient_cpf) || '___.___.___-__'}`;
 
   for (const viaTitle of vias) {
     const page = pdf.addPage([595.3, 841.89]);
@@ -111,7 +119,7 @@ async function prescriptionPdf(
     });
 
     // 2. Title & Via
-    page.drawText(simple ? 'Receituário' : 'Receituário de controle especial', {
+    page.drawText(simple ? 'Receituário' : ret ? 'Receituário sujeito à retenção' : 'Receituário de controle especial', {
       x: left,
       y: height - 132.0,
       size: 17,
@@ -138,6 +146,18 @@ async function prescriptionPdf(
       font: bold,
       color: rgb(0, 0, 0),
     });
+    const nameEnd = patientExtra ? left + 330 : right;
+    if (patientExtra) {
+      if (d.patient_name && left + pLabelW + font.widthOfTextAtSize(d.patient_name, 10) > nameEnd)
+        throw new Error('O nome do paciente é longo demais para o PDF da receita. Revise o cadastro.');
+      page.drawText(patientExtra, {
+        x: left + 340,
+        y: height - 180.0,
+        size: 9.5,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
+    }
     if (d.patient_name) {
       page.drawText(d.patient_name, {
         x: left + pLabelW,
@@ -151,14 +171,14 @@ async function prescriptionPdf(
           x: left + pLabelW + font.widthOfTextAtSize(d.patient_name, 10) + 4,
           y: height - 182,
         },
-        end: { x: right, y: height - 182 },
+        end: { x: nameEnd, y: height - 182 },
         thickness: 0.5,
         color: rgb(0.2, 0.2, 0.2),
       });
     } else {
       page.drawLine({
         start: { x: left + pLabelW, y: height - 182 },
-        end: { x: right, y: height - 182 },
+        end: { x: nameEnd, y: height - 182 },
         thickness: 0.5,
         color: rgb(0.2, 0.2, 0.2),
       });
@@ -619,9 +639,47 @@ async function prescriptionPdf(
     });
   }
 }
+function formatCpf(raw?: string) {
+  const digits = (raw || '').replace(/\D/g, '');
+  return digits.length === 11
+    ? digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+    : '';
+}
+
+/** Idade em anos completos na data de emissão (ou hoje, em Brasília). */
+export function patientAge(d: ClinicalDocument): number | null {
+  const birth = /^(\d{4})-(\d{2})-(\d{2})/.exec(d.patient_birth_date || '');
+  if (!birth) return null;
+  const on =
+    d.document_date ||
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const [y, m, day] = on.split('-').map(Number);
+  let age = y - Number(birth[1]);
+  if (m < Number(birth[2]) || (m === Number(birth[2]) && day < Number(birth[3]))) age -= 1;
+  return age >= 0 && age < 150 ? age : null;
+}
+
+/** Campos obrigatórios da RET eletrônica (RDC 471/2021): emissão bloqueada se faltarem. */
+function assertElectronicRet(d: ClinicalDocument) {
+  if (patientAge(d) === null)
+    throw new Error('RET eletrônica: informe a data de nascimento do paciente no cadastro (a idade é obrigatória).');
+  if (!d.patient_gender?.trim())
+    throw new Error('RET eletrônica: informe o sexo do paciente no cadastro.');
+  if (!d.letterhead_address?.trim() || !d.letterhead_phone?.trim())
+    throw new Error('RET eletrônica: informe endereço completo e telefone do consultório nos dados profissionais.');
+  if (!d.document_date)
+    throw new Error('RET eletrônica: data de emissão ausente.');
+}
+
 export async function documentPdf(
   d: ClinicalDocument,
-  options?: { isDraft?: boolean }
+  options?: {
+    isDraft?: boolean;
+    /** PDF que será assinado digitalmente (fluxo de assinatura), e não impressão. */
+    electronic?: boolean;
+    /** Data da assinatura, impressa no modelo eletrônico da RCE (art. 12). */
+    issuedAt?: Date;
+  },
 ) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
@@ -654,13 +712,20 @@ export async function documentPdf(
           'O PDF contém um caractere não suportado. Remova emojis ou símbolos incomuns e tente novamente.',
         );
 
-  // Existing two-copy RCE layout, preserved for printing/legacy transition.
-  // This is not the standardized electronic SNCR model.
+  // Receitas:
+  // - RCE eletrônica (assinatura): modelo oficial da Anvisa (lib/sncr/rce-transition.ts);
+  // - RCE impressa: desenho de duas vias, só para impressão e assinatura manual;
+  // - RET: duas vias com idade e sexo do paciente; SIMPLES: uma via;
+  // - notificações: sem PDF até a integração SNCR.
   if (d.kind === 'Receita') {
-    if (d.prescription_category && d.prescription_category !== 'RCE' && d.prescription_category !== 'SIMPLES')
-      throw new Error('O PDF atual é exclusivo de Receita de Controle Especial ou receita simples. Utilize o modelo adequado para a categoria selecionada.');
+    const category = d.prescription_category || 'RCE';
+    if (category !== 'RCE' && category !== 'RET' && category !== 'SIMPLES')
+      throw new Error('O PDF atual cobre Receita de Controle Especial, receita sujeita à retenção e receita simples. Utilize o modelo adequado para a categoria selecionada.');
+    if (options?.electronic && category === 'RCE')
+      return rceTransitionPdf(d, options.issuedAt ?? new Date());
+    if (options?.electronic && category === 'RET') assertElectronicRet(d);
     await prescriptionPdf(pdf, d, font, bold);
-    pdf.setTitle(d.prescription_category === 'SIMPLES' ? 'Receituário' : 'Receituário de controle especial');
+    pdf.setTitle(category === 'SIMPLES' ? 'Receituário' : category === 'RET' ? 'Receituário sujeito à retenção' : 'Receituário de controle especial');
     pdf.setCreator('PsyWrite');
     return pdf.save();
   }

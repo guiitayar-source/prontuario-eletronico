@@ -14,7 +14,7 @@ import {
   signatureProviderLabel,
 } from '@/lib/signature/providers';
 import { prescriptionCategories, prescriptionSigningBlock, type PrescriptionCategory } from '@/lib/sncr/policy';
-import { RcePanel } from './rce-panel';
+import { RceFieldsEditor, RcePanel, useRceTestEnabled } from './rce-panel';
 import { rceStateLabels } from '@/lib/sncr/rce';
 export function DocumentEditor({
   docs,
@@ -24,6 +24,7 @@ export function DocumentEditor({
   prescription?: boolean;
 }) {
   const ai = useFeature('ia');
+  const rceTest = useRceTestEnabled();
   const [choosingProvider, setChoosingProvider] = useState(false);
   // Validação expirada com a página aberta: revalida direto no mesmo provedor.
   const expiredProvider = isSignatureProviderId(docs.signatureExpired)
@@ -31,13 +32,15 @@ export function DocumentEditor({
     : undefined;
   const d = docs.draft;
   if (!d) return null;
-  const isSigned = d.status === 'SIGNED';
+  const isSigned = d.status === 'SIGNED' || d.status === 'SUPERSEDED';
   const isSigning = d.status === 'SIGNING';
   const isRecipe = d.kind === 'Receita';
   const rceLocked = !!d.rce_emission;
   const category = d.prescription_category || 'RCE';
   const signingBlock = isRecipe ? prescriptionSigningBlock(category) : null;
   const noun = prescription ? 'receita' : 'documento';
+  // Both RCE paths are on screen only while the SNCR test is enabled.
+  const transitionOnly = isRecipe && category === 'RCE' && rceTest;
 
   function update(fields: Partial<ClinicalDocument>) {
     if (isSigned || isSigning || rceLocked) return;
@@ -318,10 +321,37 @@ export function DocumentEditor({
           onChange={(e) => update({ text: e.target.value })}
         />
       </fieldset>
+      {isRecipe && category === 'RCE' && !isSigned && (
+        <section aria-label="RCE eletrônica" className="rce-fields-section">
+          <h3>RCE eletrônica</h3>
+          <p className="rce-flow-note">
+            Campos impressos no modelo oficial da Anvisa: um medicamento por receita. O CPF e o
+            endereço do paciente vêm do cadastro; o endereço e o telefone do consultório, dos seus
+            dados profissionais.
+          </p>
+          <fieldset disabled={docs.busy || isSigning || rceLocked} style={{ border: 0, padding: 0, margin: 0 }}>
+            <RceFieldsEditor docs={docs} />
+          </fieldset>
+        </section>
+      )}
+      {isRecipe && category === 'RET' && !isSigned && (
+        <p className="document-template-note">
+          RET: duas vias com nome, idade e sexo do paciente (data de nascimento e sexo vêm do
+          cadastro). Assinatura digital ICP-Brasil; sem numeração SNCR até 03/03/2027.
+        </p>
+      )}
       {isRecipe && category === 'RCE' && !isSigned && <RcePanel key={d.id} docs={docs} />}
-      {rceLocked && <button type="button" className="secondary" onClick={() => docs.open(d, undefined, true)}>Duplicar como novo rascunho</button>}
       <div className="editor-actions">
-        {isSigned ? (
+        {rceLocked ? (
+          <>
+            <p className="rce-footer-note">
+              Esta receita segue pelo passo a passo da RCE com numeração acima; o texto ficou fixado.
+            </p>
+            <button type="button" className="secondary" onClick={() => docs.open(d, undefined, true)}>
+              Duplicar como novo rascunho
+            </button>
+          </>
+        ) : isSigned ? (
           <>
             <button
               type="button"
@@ -353,7 +383,7 @@ export function DocumentEditor({
             <button
               type="button"
               className="secondary"
-              disabled={docs.busy || isSigning || rceLocked || !d.text.trim() || (isRecipe && category !== 'RCE' && category !== 'SIMPLES')}
+              disabled={docs.busy || isSigning || rceLocked || !d.text.trim() || (isRecipe && category !== 'RCE' && category !== 'RET' && category !== 'SIMPLES')}
               onClick={() => void docs.pdf()}
             >
               {isRecipe ? 'PDF para impressão e assinatura manual' : 'Prévia / PDF'}
@@ -403,10 +433,10 @@ export function DocumentEditor({
             ) : (
               <button
                 type="button"
-                className="primary"
+                className={transitionOnly ? 'secondary' : 'primary'}
                 disabled={docs.busy || isSigning || rceLocked || !!signingBlock || docs.signingDocId === d.id || !d.text.trim()}
                 style={{
-                  backgroundColor: docs.signatureSession ? 'var(--success)' : undefined,
+                  backgroundColor: docs.signatureSession && !transitionOnly ? 'var(--success)' : undefined,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
@@ -428,6 +458,8 @@ export function DocumentEditor({
                 <Lock size={14} />
                 {docs.signingDocId === d.id
                   ? `Assinando com ${signatureProviderLabel(docs.signatureSession?.provider)}…`
+                  : transitionOnly
+                    ? 'Assinar sem número SNCR'
                   : docs.signatureSession
                     ? `Finalizar e assinar (${signatureProviderLabel(docs.signatureSession.provider)})`
                     : expiredProvider
@@ -438,6 +470,12 @@ export function DocumentEditor({
           </>
         )}
       </div>
+      {transitionOnly && !rceLocked && (
+        <p className="rce-footer-note">
+          “Assinar sem número SNCR” usa o fluxo de transição, válido até 03/03/2027. Para a RCE com
+          número de teste, siga o passo a passo acima.
+        </p>
+      )}
       <output
         style={{
           display: 'block',

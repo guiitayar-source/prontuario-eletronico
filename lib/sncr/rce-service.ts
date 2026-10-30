@@ -16,6 +16,7 @@ import {
 } from '../signature/crypto-utils.ts';
 import { validateIcpChain } from '../signature/icp-chain.ts';
 import { getSignatureProvider } from '../signature/provider-factory.ts';
+import { liveIssuanceRevocationOptions } from '../signature/revocation-fetch.ts';
 import {
   validateRceFields,
   validateRceSnapshot,
@@ -378,6 +379,7 @@ export const rce = handle(async (request, ctx) => {
         reviewedHash: p.reviewedHash,
         numberChecked: true,
         getSigner: () => activeSigner(admin, ctx.clinic, ctx.user),
+        revocation: liveIssuanceRevocationOptions(),
       }),
     });
   } catch (error) {

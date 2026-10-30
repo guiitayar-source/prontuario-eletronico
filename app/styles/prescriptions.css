@@ -114,3 +114,291 @@
 .signature-status-banner.warning .status-badge-icon {
   color: var(--warning);
 }
+
+/* ==========================================================================
+   RCE eletrônica: campos agrupados e passo a passo da RCE com numeração SNCR.
+   Sem cartões aninhados: seções separadas por linha, como na página Equipe.
+   ========================================================================== */
+.rce-fields-section,
+.rce-flow {
+  margin: 20px 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+}
+.rce-fields-section h3,
+.rce-flow-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.rce-flow-note,
+.rce-flow-head p,
+.rce-step-note,
+.rce-footer-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.rce-flow-head {
+  display: grid;
+  gap: 4px;
+}
+.rce-fields {
+  display: grid;
+  gap: 16px;
+}
+.rce-field-group {
+  display: grid;
+  gap: 10px;
+}
+.rce-field-group h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.rce-field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.rce-field-row-medicine {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+.rce-field-row-crm {
+  grid-template-columns: minmax(0, 1fr) 72px minmax(0, 2fr);
+}
+.rce-field {
+  display: grid;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.rce-field input,
+.rce-field textarea {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 0;
+}
+.rce-field textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.rce-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.rce-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  position: relative;
+}
+/* Linha vertical ligando os passos */
+.rce-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 38px;
+  bottom: -10px;
+  width: 1px;
+  background: var(--border);
+}
+.rce-step-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+  color: var(--text-subtle);
+  background: var(--surface-solid);
+  position: relative;
+}
+.rce-step[data-state='done'] .rce-step-marker {
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+.rce-step[data-state='current'] .rce-step-marker {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.rce-step-content {
+  display: grid;
+  gap: 3px;
+  padding-top: 4px;
+  min-width: 0;
+}
+.rce-step-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.rce-step[data-state='pending'] .rce-step-title {
+  color: var(--text-subtle);
+  font-weight: 500;
+}
+.rce-step-detail {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.rce-step-body {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  margin-top: 8px;
+}
+.rce-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rce-link-button {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 14px;
+}
+.rce-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  max-width: 60ch;
+}
+.rce-check input {
+  margin-top: 3px;
+}
+.rce-missing {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--warning);
+}
+.rce-missing ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
+.rce-alert,
+.rce-recovery {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--warning-border);
+  background: var(--warning-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.rce-recovery {
+  display: grid;
+  gap: 8px;
+}
+.rce-recovery p {
+  margin: 0;
+}
+.rce-discard {
+  justify-self: start;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.rce-preview {
+  display: grid;
+  gap: 6px;
+}
+.rce-preview iframe {
+  width: 100%;
+  height: 640px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+.rce-footer-note {
+  flex: 1 1 100%;
+}
+/* Dentro do modal, .modal p/li/label/input põem margens e corpo 15px: anula aqui. */
+.rce-flow .rce-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.rce-flow .rce-step,
+.rce-flow .rce-missing li {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.rce-flow p.rce-step-note,
+.rce-flow-head p,
+.rce-fields-section p.rce-flow-note,
+.editor-actions p.rce-footer-note,
+p.rce-footer-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.rce-flow p.rce-alert,
+.rce-flow .rce-recovery p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.rce-flow .rce-missing ul {
+  list-style: disc;
+}
+.rce-flow .rce-step-note a {
+  color: var(--accent);
+}
+.rce-fields label.rce-field,
+.rce-flow label.rce-check {
+  margin: 0;
+}
+.rce-fields label.rce-field {
+  display: grid;
+}
+.rce-fields .rce-field input,
+.rce-fields .rce-field textarea {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.rce-flow .rce-check input {
+  width: auto;
+  display: inline-block;
+  margin: 3px 0 0;
+  padding: 0;
+}
+@media (max-width: 640px) {
+  .rce-field-row,
+  .rce-field-row-medicine,
+  .rce-field-row-crm {
+    grid-template-columns: 1fr;
+  }
+}

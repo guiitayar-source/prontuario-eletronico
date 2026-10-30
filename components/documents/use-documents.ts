@@ -120,13 +120,17 @@ export function useDocuments(patient: Patient, enabled = true) {
         success?: boolean;
         error?: string;
         storagePath?: string;
-        verification?: { isValid: boolean; signerName: string; signerCpf: string; algorithm: string };
+        verification?: { isValid: boolean; status?: string; signerName: string; signerCpf: string; algorithm: string };
       };
       if (!res.ok) throw new Error(data.error || 'Falha ao testar assinatura');
 
       setSignatureNotice({
         type: 'success',
-        message: `✓ Documento sintético assinado com sucesso! Titular: ${data.verification?.signerName} (${data.verification?.signerCpf}).`,
+        message: `✓ Documento sintético assinado com sucesso! Titular: ${data.verification?.signerName} (${data.verification?.signerCpf}).${
+          data.verification?.status === 'VALID'
+            ? ''
+            : ' Integridade conferida; confiança plena ICP-Brasil (revogação) ainda não comprovada.'
+        }`,
       });
 
       if (data.storagePath) {
@@ -340,12 +344,14 @@ export function useDocuments(patient: Patient, enabled = true) {
     }
   }
   async function sign(documentId: string) {
-    if (!signatureSession) {
+    // Assinatura em andamento (SIGNING) é retomada pela mesma tentativa, sem salvar de novo.
+    const pending = draft?.id === documentId && draft.status === 'SIGNING';
+    if (!signatureSession && !pending) {
       setError(`Conecte seu ${signature.label} antes de assinar o documento.`);
       return false;
     }
     let currentDoc = draft;
-    if (dirty || currentDoc?.version === 0) {
+    if (!pending && (dirty || currentDoc?.version === 0)) {
       currentDoc = await save();
       if (!currentDoc) return false;
     }
@@ -359,9 +365,9 @@ export function useDocuments(patient: Patient, enabled = true) {
           'Content-Type': 'application/json',
           'X-Signature-Action': '1',
         },
-        body: JSON.stringify({ documentId }),
+        body: JSON.stringify({ documentId, documentVersion: currentDoc?.version }),
       });
-      const data = (await res.json()) as { error?: string; signedPdfPath?: string };
+      const data = (await res.json()) as { error?: string; signedPdfPath?: string; document?: ClinicalDocument };
       if (!res.ok) {
         // 401: a validação do certificado expirou; a tela passa a oferecer "revalidar".
         if (res.status === 401) signatureState.markExpired();
@@ -374,7 +380,16 @@ export function useDocuments(patient: Patient, enabled = true) {
       });
       await load();
       if (draft && draft.id === documentId) {
-        setDraft({ ...draft, status: 'SIGNED', signed_pdf_path: data.signedPdfPath });
+        const today = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Sao_Paulo',
+        }).format(new Date());
+        setDraft(data.document || {
+          ...draft,
+          status: 'SIGNED',
+          document_date: draft.document_date || today,
+          signed_pdf_path: data.signedPdfPath,
+        });
+        if (data.document) setSaved(JSON.stringify(data.document));
         await pdf();
       }
       return true;
@@ -412,6 +427,7 @@ export function useDocuments(patient: Patient, enabled = true) {
     dirty,
     preview,
     signatureSession,
+    profile,
     signatureExpired: signatureState.expired,
     signatureNotice,
     signingDocId,

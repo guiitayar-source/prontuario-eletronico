@@ -1,0 +1,123 @@
+/* ==========================================================================
+   Página SNCR (numeração de teste): seções separadas por linha, como Equipe
+   ========================================================================== */
+.sncr-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+  min-height: calc(100vh - 46px);
+  align-content: start;
+  display: grid;
+  color: var(--text);
+}
+.sncr-section {
+  padding: 24px 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+}
+.sncr-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.sncr-page h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.sncr-section h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.sncr-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.sncr-alert {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--warning-border);
+  background: var(--warning-soft);
+  font-size: 13px;
+}
+.sncr-lot {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.sncr-lot div {
+  display: grid;
+  gap: 4px;
+}
+.sncr-lot dt {
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+.sncr-lot dd {
+  margin: 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+.sncr-request {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+.sncr-request-state {
+  font-size: 14px;
+  color: var(--text-strong);
+}
+.sncr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sncr-form {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 72px;
+  gap: 12px;
+  align-items: end;
+}
+.sncr-form-note,
+.sncr-form > button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+.sncr-field {
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.sncr-field input,
+.sncr-field select {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  min-width: 0;
+}
+.sncr-back {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--accent);
+}
+@media (max-width: 640px) {
+  .sncr-lot,
+  .sncr-form {
+    grid-template-columns: 1fr;
+  }
+}

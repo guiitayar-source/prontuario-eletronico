@@ -10,6 +10,7 @@ import { adminClient } from './admin.ts';
 import { documentKinds, type ClinicalDocument } from '../document-fields.ts';
 import { documentPdf } from '../document-pdf.ts';
 import { withPdfData } from './document-pdf-data.ts';
+import { createHash } from 'node:crypto';
 import { isPrescriptionCategory } from '../sncr/policy.ts';
 
 const uuid =
@@ -69,25 +70,45 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
         if (electronic.data) throw new HttpError(409, 'Esta receita possui uma RCE eletrônica. Abra a emissão para revisar ou recuperar o original.');
       }
 
-      // If document is signed and storage path exists, serve official signed PDF
-      if (doc.status === 'SIGNED' && doc.signed_pdf_path) {
-        let fileData = null;
-        const bucket = db.storage.from('clinical-files');
-        const { data, error } = await bucket.download(doc.signed_pdf_path);
-        if (!error && data) {
-          fileData = data;
-        } else {
-          const { data: adminData } = await adminClient()
-            .storage.from('clinical-files')
-            .download(doc.signed_pdf_path);
-          if (adminData) {
-            fileData = adminData;
-          }
-        }
+      // Um documento assinado só pode ser entregue a partir do arquivo original.
+      if (doc.status === 'SIGNED' || doc.status === 'SUPERSEDED') {
+        const unavailable = () => new HttpError(503, 'Não foi possível recuperar o documento assinado original.');
+        if (!doc.signed_pdf_path) throw unavailable();
 
-        if (fileData) {
-          const arrayBuf = await fileData.arrayBuffer();
-          return new Response(new Uint8Array(arrayBuf), {
+        try {
+          // Registros antigos podem não ter metadados de assinatura. Quando há
+          // hash para esta versão e caminho, confira os bytes antes de entregá-los.
+          const { data: signature, error: signatureError } = await db
+            .from('digital_signatures')
+            .select('signed_pdf_hash,signed_pdf_storage_path')
+            .eq('clinic_id', clinic)
+            .eq('document_id', doc.id)
+            .eq('document_version', doc.version)
+            .eq('status', 'SIGNED')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (signatureError || (signature && signature.signed_pdf_storage_path !== doc.signed_pdf_path)) throw unavailable();
+
+          let fileData = null;
+          try {
+            const result = await db.storage.from('clinical-files').download(doc.signed_pdf_path);
+            if (!result.error) fileData = result.data;
+          } catch { /* Tenta o acesso de servidor usado pelo fluxo existente. */ }
+          if (!fileData) {
+            const result = await adminClient().storage.from('clinical-files').download(doc.signed_pdf_path);
+            if (!result.error) fileData = result.data;
+          }
+          if (!fileData) throw unavailable();
+          const bytes = new Uint8Array(await fileData.arrayBuffer());
+          const storedHash = signature?.signed_pdf_hash;
+          if (storedHash != null && (
+            typeof storedHash !== 'string' ||
+            !/^[a-f0-9]{64}$/i.test(storedHash) ||
+            createHash('sha256').update(bytes).digest('hex') !== storedHash.toLowerCase()
+          )) throw unavailable();
+
+          return new Response(bytes, {
             headers: {
               'Content-Type': 'application/pdf',
               'Content-Disposition': 'inline; filename="documento_assinado.pdf"',
@@ -95,13 +116,13 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
               'X-Content-Type-Options': 'nosniff',
             },
           });
+        } catch {
+          throw unavailable();
         }
-        throw new HttpError(503, 'O PDF assinado não está disponível. Tente novamente ou solicite a recuperação do arquivo original.');
       }
-      if (doc.status === 'SIGNED') throw new HttpError(503, 'O arquivo original assinado precisa ser recuperado.');
       if (doc.status === 'SIGNING') throw new HttpError(409, 'Aguarde a conclusão da assinatura antes de abrir o PDF.');
-      if (doc.kind === 'Receita' && doc.prescription_category && doc.prescription_category !== 'RCE' && doc.prescription_category !== 'SIMPLES')
-        throw new HttpError(422, 'O PDF atual é exclusivo de Receita de Controle Especial ou receita simples. Utilize o receituário físico adequado para a categoria selecionada.');
+      if (doc.kind === 'Receita' && doc.prescription_category && !['RCE', 'RET', 'SIMPLES'].includes(doc.prescription_category))
+        throw new HttpError(422, 'O PDF atual cobre Receita de Controle Especial, receita sujeita à retenção e receita simples. Utilize o receituário físico adequado para a categoria selecionada.');
 
       await withPdfData(adminClient(), clinic, doc);
       let bytes;
