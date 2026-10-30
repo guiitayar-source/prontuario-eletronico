@@ -87,8 +87,25 @@ Decisões do Guilherme (29/10/2026):
 
 **Evidência no banco** (`supabase/migrations/20261029040000_revocation_evidence.sql` e
 `lib/signature/revocation-evidence-store.ts`):
-- `revocation_evidence`: o DER deduplicado por SHA-256, com tipo, emissor, datas e URL de origem.
-  Não tem `clinic_id`: é dado público de AC, compartilhado entre clínicas, sem paciente.
+- `revocation_evidence`: uma linha por evidência, identificada pelo SHA-256 do DER, com tipo,
+  tamanho, emissor, datas e URL de origem. Não tem `clinic_id`: é dado público de AC,
+  compartilhado entre clínicas, sem paciente.
+- **Bytes só quando são prova** (decisão do Guilherme, 30/10/2026):
+  - o arquivo inteiro é guardado para respostas OCSP (poucos KB) e para a LCR que mostrou
+    revogação ou suspensão (REVOKED_* ou CERTIFICATE_HOLD), o motivo de um bloqueio;
+  - a LCR que só confirmou "não revogado" fica com SHA-256, tamanho, emissor, datas, URL e o
+    resultado por certificado, sem o arquivo;
+  - motivo: uma LCR posterior prova o mesmo, a revogação é permanente e tem data, e a da AC
+    Soluti Múltipla tem ~0,9 MB e muda a cada 6 h (até ~1,3 GB por ano se guardada inteira);
+  - se uma LCR guardada só como metadados aparecer depois como prova de bloqueio, os bytes são
+    acrescentados à mesma linha;
+  - a regra vale no código (`keepsBytes`) e no banco: a função recusa OCSP ou prova de bloqueio
+    sem bytes.
+- **Migração ajustada no próprio arquivo.** A `20261029040000` está em revisão, travada, e nunca
+  foi aplicada fora do Postgres descartável dos testes: a trava faz qualquer aplicação falhar e
+  ser desfeita, e o arquivo foi criado nesta sessão, sem `db push`. A conferência por
+  `supabase migration list` no remoto foi bloqueada pela política de permissões do ambiente e não
+  foi contornada.
 - `signing_revocation_evidence`: vínculo entre clínica, tentativa e evidência. Guarda a cadeia
   (signatário ou TSA), o papel do certificado, o serial, a impressão digital e o resultado que a
   verificação deu.
@@ -96,23 +113,20 @@ Decisões do Guilherme (29/10/2026):
   por `service_role`. A função:
   - exige médico ou titular da clínica e uma tentativa dele mesmo, com artefato
     (EXTERNAL_STARTED ou posterior);
-  - recalcula o SHA-256 sobre os bytes recebidos;
-  - limita cada evidência a 10 MB e a chamada a 20 MB e 32 itens;
+  - recalcula o SHA-256 e o tamanho quando recebe os bytes;
+  - limita cada evidência a 4 MB e a chamada a 8 MB e 32 itens;
   - não tem UPDATE nem DELETE concedidos.
 - **Leitura:** RLS com `has_clinic_role(owner, doctor)`. A evidência só é visível a quem enxerga
   um vínculo dela na própria clínica; secretária, outra clínica e anônimo não leem nada.
-- **bytea, não Storage.**
-  - A evidência entra na mesma transação do vínculo, sem objeto órfão nem segunda credencial.
-  - A deduplicação faz cada versão de LCR ocupar espaço uma vez só.
-  - O OCSP, preferido, tem poucos KB.
-  - O custo cresce com a frequência de publicação das LCRs das ACs usadas, quando não há OCSP. Se
-    isso pesar, migrar `der` para o Storage privado mantém o mesmo esquema (o SHA-256 vira a
-    chave do objeto).
+- **bytea, não Storage.** Com bytes só para OCSP e provas de bloqueio, o volume fica em poucos KB
+  por assinatura. Mantê-los na mesma transação do vínculo evita objeto órfão e segunda credencial.
 - **Emissão:** grava a evidência usada logo depois da verificação, inclusive quando a emissão é
   bloqueada por revogação, como prova do motivo. Falha ao gravar só gera log.
 - **Recuperação e entrega** (`readArtifact` e `recover` em `document-signing-attempts.ts`):
-  reverificam com a evidência guardada, sem rede. Na leitura, os bytes cujo SHA-256 não confere
-  são descartados.
+  reverificam com a evidência guardada que tem bytes (OCSP e prova de bloqueio), sem rede.
+  - Sem bytes, o resultado fica INDETERMINATE, sem erro. A LCR estaria vencida em até 6 h de
+    qualquer forma.
+  - Na leitura, os bytes cujo SHA-256 não confere são descartados.
 - **Degradação:** se a tabela ou a função não existir, ou se o banco falhar, gravar devolve
   `unavailable` e ler devolve listas vazias. Não lança exceção.
 - **Testes de banco:** a migração vai para o helper `tests/helpers/signature-trust-db.mjs` com a
@@ -171,7 +185,7 @@ sintética tem CDP/AIA apontando para o servidor local.
 | Suíte | Antes (17af400) | Depois |
 |---|---|---|
 | revocation-fetch (nova) | — | 24/24 |
-| revocation-evidence-db (nova, PostgreSQL + PostgREST reais) | — | 9/9 |
+| revocation-evidence-db (nova, PostgreSQL + PostgREST reais) | — | 10/10 |
 | pades-revocation-6f2c-r | 22/22 | 22/22 |
 | pades-revocation-poe | 20/20 | 20/20 |
 | pades-rfc3161-poe | 13/13 | 13/13 |
@@ -188,14 +202,24 @@ sintética tem CDP/AIA apontando para o servidor local.
 
 `revocation-evidence-db` cobre:
 - a trava da migração;
-- os registros (papel, resultado, datas);
-- a gravação pelo backend e a deduplicação: 2 evidências e 4 vínculos para 2 tentativas;
-- as recusas da função: SHA divergente, secretária, outra clínica, tentativa sem artefato e lista
-  vazia;
+- registros:
+  - LCR GOOD só com metadados;
+  - prova de bloqueio e OCSP com os bytes;
+- gravação e deduplicação:
+  - as mesmas LCRs em 2 tentativas: 2 evidências e 4 vínculos;
+  - com o bloqueio e o OCSP: 4 evidências, 7 vínculos e só 2 linhas com bytes;
+- recusas da função:
+  - SHA ou tamanho divergente;
+  - prova de bloqueio sem bytes e OCSP sem bytes;
+  - secretária, outra clínica, tentativa sem artefato e lista vazia;
 - autenticado sem escrita, nem pela função nem direto na tabela;
-- RLS: médico lê 4/2; secretária, outra clínica e anônimo, 0/0;
-- reverificação com a evidência guardada dando GOOD sem rede (sem ela, REVOCATION_UNAVAILABLE);
+- RLS: médico lê 7/4; secretária, outra clínica e anônimo, 0/0;
+- reverificação sem rede:
+  - só metadados dá INDETERMINATE (REVOCATION_UNAVAILABLE) sem erro;
+  - a LCR de bloqueio guardada continua bloqueando a emissão;
+  - o OCSP guardado dá GOOD de novo;
 - bytes adulterados descartados;
+- LCR só com metadados recebe os bytes quando vira prova de bloqueio;
 - degradação sem a migração.
 
 `signature-trust-permissions` passou a excluir a nova migração da lista do histórico (24/24).
@@ -230,7 +254,9 @@ assinatura confere com a raiz v5: true
   (`thisUpdate ≤ agora ≤ nextUpdate`). Depois do `nextUpdate`, a LCR guardada fica NOT_FRESH e o
   resultado volta a INDETERMINATE. Ela continua valendo como registro do que foi verificado na
   emissão; para valer no tempo é preciso carimbo e LTV (próximo lote).
-- **Volume do bytea.** Ver a escolha acima; acompanhar o tamanho de `revocation_evidence`.
+- **LCR GOOD sem bytes.** A reverificação posterior de uma assinatura cuja LCR só confirmou "não
+  revogado" não tem o arquivo; dá INDETERMINATE, como daria de qualquer jeito após o
+  `nextUpdate`. O DSS/LTV do próximo lote põe a evidência dentro do PDF.
 - **Carimbo e validação histórica.** Com carimbo de tempo, a LCR precisa ter `thisUpdate`
   posterior ao `genTime`. Na emissão, a LCR em cache costuma ser anterior, e a TSA fica sem
   revogação comprovada. O OCSP, emitido na hora, resolve. A coleta tardia (job com carência) segue
@@ -309,10 +335,9 @@ assinado com o Bird ID:
 - **Busca fora do caminho crítico.** A medição real foi de 1,4 s no processo inteiro (Node +
   verificação + 3 LCRs). Como a emissão precisa do resultado para bloquear revogação comprovada,
   a busca fica no caminho; a fila continua sendo a solução para carimbo e validação histórica.
-- **Volume no banco.** A LCR da AC Soluti Múltipla muda a cada 6 h: até 4 versões de ~0,9 MB por
-  dia com assinaturas ao longo do dia, ~1,3 GB por ano no pior caso. Recomendação: no próximo
-  lote, mover o `der` das LCRs grandes para o Storage privado, mantendo no banco o SHA-256 e os
-  metadados. Decisão do Guilherme.
+- **Volume no banco.** A LCR da AC Soluti Múltipla muda a cada 6 h: guardada inteira, seriam até 4
+  versões de ~0,9 MB por dia (~1,3 GB por ano). Decidido em 30/10/2026: só metadados para LCR
+  GOOD, bytes para OCSP e provas de bloqueio (ver seção 1).
 
 **Teste de regressão** (`tests/revocation-fetch.test.mjs`):
 - LCR sintética com 4 mil revogados, montada em ASN.1 e assinada de verdade. O teste confere que
@@ -343,7 +368,7 @@ Tempo total do processo: 1,4 s.
 
 **Suítes:**
 - revocation-fetch: 28/28;
-- revocation-evidence-db: 9/9;
+- revocation-evidence-db: 10/10;
 - as demais 26 suítes 6F e de assinatura verdes, incluindo as de PostgreSQL real.
 
 `tsc`, lint dos arquivos alterados, build e `git diff --check` limpos.
