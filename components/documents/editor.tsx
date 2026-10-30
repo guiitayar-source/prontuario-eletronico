@@ -14,7 +14,7 @@ import {
   signatureProviderLabel,
 } from '@/lib/signature/providers';
 import { prescriptionCategories, prescriptionSigningBlock, type PrescriptionCategory } from '@/lib/sncr/policy';
-import { RcePanel } from './rce-panel';
+import { RceFieldsEditor, RcePanel } from './rce-panel';
 import { rceStateLabels } from '@/lib/sncr/rce';
 export function DocumentEditor({
   docs,
@@ -318,7 +318,27 @@ export function DocumentEditor({
           onChange={(e) => update({ text: e.target.value })}
         />
       </fieldset>
-      {isRecipe && category === 'RCE' && !isSigned && <RcePanel key={d.id} docs={docs} />}
+      {isRecipe && category === 'RCE' && !isSigned && (
+        <section aria-label="RCE eletrônica" style={{ margin: '16px 0' }}>
+          <h3>RCE eletrônica (modelo oficial da Anvisa)</h3>
+          <p>
+            A assinatura digital gera a RCE no modelo eletrônico oficial, com um medicamento por
+            receita, CPF (ou passaporte) e endereço do paciente, e endereço e telefone do
+            consultório. Até 03/03/2027 sai sem numeração SNCR (período de transição). O PDF de
+            duas vias continua disponível para impressão e assinatura manual.
+          </p>
+          <fieldset disabled={docs.busy || isSigning || rceLocked} style={{ border: 0, padding: 0 }}>
+            <RceFieldsEditor docs={docs} />
+          </fieldset>
+        </section>
+      )}
+      {isRecipe && category === 'RET' && !isSigned && (
+        <p className="document-template-note">
+          RET: duas vias com nome, idade e sexo do paciente (data de nascimento e sexo vêm do
+          cadastro). Assinatura digital ICP-Brasil; sem numeração SNCR até 03/03/2027.
+        </p>
+      )}
+      {isRecipe && category === 'RCE' && !isSigned && <RcePanel key={d.id} docs={docs} fieldsShownAbove />}
       {rceLocked && <button type="button" className="secondary" onClick={() => docs.open(d, undefined, true)}>Duplicar como novo rascunho</button>}
       <div className="editor-actions">
         {isSigned ? (
@@ -353,7 +373,7 @@ export function DocumentEditor({
             <button
               type="button"
               className="secondary"
-              disabled={docs.busy || isSigning || rceLocked || !d.text.trim() || (isRecipe && category !== 'RCE' && category !== 'SIMPLES')}
+              disabled={docs.busy || isSigning || rceLocked || !d.text.trim() || (isRecipe && category !== 'RCE' && category !== 'RET' && category !== 'SIMPLES')}
               onClick={() => void docs.pdf()}
             >
               {isRecipe ? 'PDF para impressão e assinatura manual' : 'Prévia / PDF'}

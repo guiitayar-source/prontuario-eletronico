@@ -11,7 +11,14 @@ import {
 import type { RceEmission } from '@/lib/sncr/rce-workflow';
 import type { DocumentsController } from './use-documents';
 
-export function RcePanel({ docs }: { docs: DocumentsController }) {
+export function RcePanel({
+  docs,
+  fieldsShownAbove = false,
+}: {
+  docs: DocumentsController;
+  /** Os campos já aparecem no editor (RCE eletrônica de transição); não repetir aqui. */
+  fieldsShownAbove?: boolean;
+}) {
   const d = docs.draft!;
   const [enabled, setEnabled] = useState(false),
     [e, setEmission] = useState<RceEmission | null>(null),
@@ -178,50 +185,7 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
             posologia deve conter todas as orientações ao paciente.
           </p>
           <fieldset disabled={busy || docs.busy}>
-            {(
-              [
-                ['crm', 'Seu CRM'],
-                ['uf', 'UF do CRM'],
-                ['passport', 'Passaporte, apenas se o paciente não tiver CPF'],
-                ['medicine', 'Medicamento'],
-                ['concentration', 'Concentração'],
-                ['pharmaceuticalForm', 'Forma farmacêutica'],
-                ['quantity', 'Quantidade'],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key}>
-                {label}
-                <input
-                  value={fields[key]}
-                  maxLength={key === 'uf' ? 2 : 200}
-                  onChange={(event) =>
-                    docs.setDraft({
-                      ...d,
-                      rce_fields: {
-                        ...fields,
-                        [key]:
-                          key === 'uf'
-                            ? event.target.value.toUpperCase()
-                            : event.target.value,
-                      },
-                    })
-                  }
-                />
-              </label>
-            ))}
-            <label>
-              Posologia e orientações
-              <textarea
-                value={fields.dosage}
-                maxLength={10000}
-                onChange={(event) =>
-                  docs.setDraft({
-                    ...d,
-                    rce_fields: { ...fields, dosage: event.target.value },
-                  })
-                }
-              />
-            </label>
+            {!fieldsShownAbove && <RceFieldsEditor docs={docs} />}
             <button type="button" onClick={() => void prepare()}>
               Preparar RCE de teste para revisar
             </button>
@@ -366,5 +330,59 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
         </>
       )}
     </section>
+  );
+}
+
+/** Campos do modelo eletrônico oficial da RCE (um medicamento por receita). */
+export function RceFieldsEditor({ docs }: { docs: DocumentsController }) {
+  const d = docs.draft!;
+  const fields = d.rce_fields || emptyRceFields();
+  return (
+    <>
+        {(
+          [
+            ['crm', 'Seu CRM'],
+            ['uf', 'UF do CRM'],
+            ['passport', 'Passaporte, apenas se o paciente não tiver CPF'],
+            ['medicine', 'Medicamento'],
+            ['concentration', 'Concentração'],
+            ['pharmaceuticalForm', 'Forma farmacêutica'],
+            ['quantity', 'Quantidade'],
+          ] as const
+        ).map(([key, label]) => (
+          <label key={key}>
+            {label}
+            <input
+              value={fields[key]}
+              maxLength={key === 'uf' ? 2 : 200}
+              onChange={(event) =>
+                docs.setDraft({
+                  ...d,
+                  rce_fields: {
+                    ...fields,
+                    [key]:
+                      key === 'uf'
+                        ? event.target.value.toUpperCase()
+                        : event.target.value,
+                  },
+                })
+              }
+            />
+          </label>
+        ))}
+        <label>
+          Posologia e orientações
+          <textarea
+            value={fields.dosage}
+            maxLength={10000}
+            onChange={(event) =>
+              docs.setDraft({
+                ...d,
+                rce_fields: { ...fields, dosage: event.target.value },
+              })
+            }
+          />
+        </label>
+    </>
   );
 }
