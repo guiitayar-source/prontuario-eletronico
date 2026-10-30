@@ -62,6 +62,19 @@ test('SNCR staged schema: isolation, one-use claims, quarantine, duplicate rollb
         'utf8',
       ),
     );
+    await db.exec(
+      await readFile(
+        new URL(
+          '../supabase/migrations/20261030030624_sncr_transition_extension.sql',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    );
+    assert.equal(
+      (await db.query("select public.sncr_transition_end()::text as d")).rows[0].d,
+      '2027-03-04',
+    );
     const historical = (
       await db.query(
         'select status,text,prescription_category,signed_pdf_path from public.clinical_documents where id=$1',

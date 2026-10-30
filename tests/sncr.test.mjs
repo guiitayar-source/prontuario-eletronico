@@ -10,7 +10,7 @@ import {
   validateNumberingInput,
   validCnpj,
 } from '../lib/sncr/client.ts';
-import { prescriptionSigningBlock } from '../lib/sncr/policy.ts';
+import { prescriptionSigningBlock, sncrTransitionEnd } from '../lib/sncr/policy.ts';
 import { completeNumbering } from '../lib/sncr/workflow.ts';
 import { sncrPreparationConfig } from '../lib/sncr/service.ts';
 
@@ -236,12 +236,17 @@ test('the server remains disabled by default and cannot be switched to productio
 });
 test('cutoff uses São Paulo date; notifications never use legacy RCE signature', () => {
   assert.equal(
-    prescriptionSigningBlock('RCE', new Date('2026-10-30T02:59:59Z')),
+    prescriptionSigningBlock('RCE', new Date('2027-03-04T02:59:59Z')),
+    null,
+  );
+  // Prorrogação: RCE continua assinável depois de 30/10/2026.
+  assert.equal(
+    prescriptionSigningBlock('RCE', new Date('2026-10-30T12:00:00Z')),
     null,
   );
   assert.match(
-    prescriptionSigningBlock('RCE', new Date('2026-10-30T03:00:00Z')),
-    /30\/10\/2026/,
+    prescriptionSigningBlock('RCE', new Date('2027-03-04T03:00:00Z')),
+    /04\/03\/2027/,
   );
   for (const category of ['NRA', 'NRB', 'NRB2', 'NRR', 'NRT', 'RET'])
     assert.ok(
@@ -322,4 +327,12 @@ test('durable workflow: partial failures preserve uncertainty/receipt and never 
     if (scenario === 'inventory-store' || scenario === 'contract')
       assert.ok(receipt);
   }
+});
+
+test('data de fim da transição igual no código e no banco', async () => {
+  const sql = await readFile(
+    new URL('../supabase/migrations/20261030030624_sncr_transition_extension.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(sql, new RegExp(`date '${sncrTransitionEnd}'`));
 });
