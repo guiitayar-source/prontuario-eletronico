@@ -86,7 +86,38 @@ export const sncr = handle(async (request, ctx) => {
               .maybeSingle(),
           )
         : null;
-    return json({ environment, openRequestId: open?.id ?? null, issuanceAvailable: false });
+    // Read-only summary of the prescriber's batch for the page; no state changes.
+    let lot = null;
+    if (environment === 'hmg') {
+      const items = check(
+        await adminClient()
+          .from('sncr_numbering_items')
+          .select('number,state')
+          .eq('clinic_id', ctx.clinic)
+          .eq('user_id', ctx.user)
+          .eq('environment', 'hmg')
+          .order('number')
+          .limit(5000),
+      ) as { number: string; state: string }[];
+      if (items.length) {
+        const count = (state: string) => items.filter((i) => i.state === state).length;
+        lot = {
+          first: items[0].number,
+          last: items[items.length - 1].number,
+          total: items.length,
+          available: count('QUARANTINED'),
+          reserved: count('RESERVED'),
+          used: count('USED'),
+          void: count('VOID'),
+        };
+      }
+    }
+    return json({
+      environment,
+      openRequestId: open?.id ?? null,
+      lot,
+      issuanceAvailable: false,
+    });
   }
   const cfg = sncrPreparationConfig(request);
   const admin = adminClient();
