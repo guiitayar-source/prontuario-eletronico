@@ -590,11 +590,29 @@ try {
       assert.equal(f.calls(), 0);
       assert.equal(f.doc().status, 'DRAFT');
     });
-  await test('receita RCE sem RCE eletrônica adquire pelo caminho comum SQL', async () => {
+  // Receita simples: assinatura independente do SNCR, em qualquer data (decisão do titular).
+  await test('receita simples adquire e conclui pelo caminho comum, em qualquer data', async () => {
     const f = await fixture({ kind: 'Receita', text: 'MED001 - Sintetico' });
-    await asyncSql(statement(f.args('acquire', randomUUID(), f.acquireData)));
-    assert.equal(f.attempts().length, 1);
-    assert.equal(f.doc().status, 'SIGNING');
+    h.sql(`update clinical_documents set prescription_category='SIMPLES' where id='${f.documentId}';`);
+    await f.sign();
+    assert.equal(f.doc().status, 'SIGNED');
+    assert.equal(f.signatures().length, 1);
+    assert.equal(f.signatures()[0].verification_status, 'UNVERIFIED');
+    assert.equal(f.calls(), 1);
+  });
+  await test('receita RCE pelo caminho comum segue o marco SNCR de 30/10/2026 da main', async () => {
+    const f = await fixture({ kind: 'Receita', text: 'MED001 - Sintetico' });
+    const brasilia = h.sql("select ((now() at time zone 'America/Sao_Paulo')::date>='2026-10-30')::text;");
+    const acquire = () => asyncSql(statement(f.args('acquire', randomUUID(), f.acquireData)));
+    if (brasilia === 'true') {
+      await assert.rejects(acquire, /SNCR/);
+      assert.equal(f.attempts().length, 0);
+      assert.equal(f.doc().status, 'DRAFT');
+    } else {
+      await acquire();
+      assert.equal(f.attempts().length, 1);
+      assert.equal(f.doc().status, 'SIGNING');
+    }
     assert.equal(f.calls(), 0);
   });
   await test('identidade alterada durante HSM não conclui nem libera outra assinatura', async () => {

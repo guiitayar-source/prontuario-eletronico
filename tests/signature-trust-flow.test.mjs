@@ -308,6 +308,26 @@ try {
       '0',
     );
   });
+  await test('20 receita simples assina pelo fluxo completo, independente do SNCR', async () => {
+    const rx = await createDocument('MED001 10mg - 1 cp ao dia', 'Receita', {
+      prescription_category: 'SIMPLES',
+    });
+    const result = await service.signClinicalDocument({
+      db: userDb,
+      ...actor,
+      documentId: rx.id,
+    });
+    assert.equal(result.success, true);
+    assert.equal(result.signature.verification_status, 'UNVERIFIED');
+    assert.equal(
+      h.sql(`select status||':'||prescription_category from clinical_documents where id='${rx.id}';`),
+      'SIGNED:SIMPLES',
+    );
+    assert.equal(signCalls, 3);
+    const response = await retrieve(rx);
+    assert.equal(response.status, 200);
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), files.get(result.signedPdfPath));
+  });
   await test('PostgREST recusa INSERT VALID, troca de sessão/estado e leitura de ciphertext', async () => {
     const doctorDb = client(tokens.doctor),
       colleagueDb = client(tokens.colleague),
