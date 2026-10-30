@@ -22,7 +22,9 @@ export interface CollectedEvidenceByChain {
 
 export interface RevocationEvidenceRecord {
   kind: 'CRL' | 'OCSP';
-  der: string;
+  /** Base64 do DER; ausente para LCR que só confirmou "não revogado" (ver keepsBytes). */
+  der?: string;
+  byte_length: number;
   sha256: string;
   source_url: string;
   issuer: string;
@@ -76,6 +78,21 @@ function evidenceDates(kind: 'CRL' | 'OCSP', der: Buffer) {
   }
 }
 
+const BLOCKING_RESULTS = new Set([
+  'REVOKED_BEFORE_POE',
+  'REVOKED_NO_POE',
+  'CERTIFICATE_HOLD',
+]);
+
+/**
+ * Bytes só quando servem de prova: OCSP (poucos KB) e LCR que mostrou revogação ou suspensão.
+ * A LCR que só confirmou "não revogado" fica com hash, tamanho e datas: uma LCR posterior prova o
+ * mesmo, e a de uma AC grande (~1 MB, republicada a cada 6 h) encheria o banco sem ganho.
+ */
+export function keepsBytes(kind: 'CRL' | 'OCSP', result: string): boolean {
+  return kind === 'OCSP' || BLOCKING_RESULTS.has(result);
+}
+
 /**
  * Monta os registros a gravar: cada evidência com o certificado para o qual foi buscada e o
  * resultado que a verificação deu a esse certificado.
@@ -110,9 +127,13 @@ export function revocationEvidenceRecords(
           s.issuer === node.issuer,
       );
       const sha256 = crypto.createHash('sha256').update(item.der).digest('hex');
+      const result = summary?.status ?? 'NOT_EVALUATED';
       records.set(`${sha256} ${node.fingerprint256}`, {
         kind: item.kind,
-        der: item.der.toString('base64'),
+        ...(keepsBytes(item.kind, result)
+          ? { der: item.der.toString('base64') }
+          : {}),
+        byte_length: item.der.length,
         sha256,
         source_url: item.url,
         issuer: node.issuer,
@@ -121,7 +142,7 @@ export function revocationEvidenceRecords(
         certificate_role: role,
         certificate_serial: node.serialNumber,
         certificate_fingerprint: node.fingerprint256,
-        result: summary?.status ?? 'NOT_EVALUATED',
+        result,
       });
     }
   return [...records.values()];
@@ -167,7 +188,8 @@ function byteaToBuffer(value: unknown): Buffer | null {
 }
 
 /**
- * Evidência guardada para a tentativa, pronta para `crls`/`ocspResponses`. Sem rede.
+ * Evidência guardada para a tentativa, pronta para `crls`/`ocspResponses`. Sem rede. Só volta o
+ * que tem bytes guardados (OCSP e LCR de bloqueio); sem eles a reverificação fica INDETERMINATE.
  * Devolve listas vazias se a tabela não existir ou a consulta falhar.
  */
 export async function loadAttemptRevocationEvidence(
@@ -190,6 +212,7 @@ export async function loadAttemptRevocationEvidence(
       revocation_evidence: { kind: string; der: unknown } | null;
     }>) {
       const ev = row.revocation_evidence;
+      // Sem bytes (LCR que só confirmou "não revogado"): nada a reapresentar ao validador.
       const der = byteaToBuffer(ev?.der);
       if (!ev || !der || seen.has(row.evidence_sha256)) continue;
       // Confere que os bytes ainda são os que o SHA-256 identifica.
