@@ -388,18 +388,22 @@ Tempo total do processo: 1,4 s.
 O Guilherme escolheu a opção A: fica o SNCR da main (PR #10). A linha SNCR desta branch saiu,
 resumida em `docs/auditorias/sncr-branch-descartada.md`.
 
-Migrações que ficam, em ordem, depois de `20261016010000`, o estado de produção:
+Migrações que ficam, em ordem, depois de `20261016010000`. Os nomes foram atualizados em
+30/10/2026, depois do PR #11 da main:
 
-| Migração | Origem | Trava |
+| Migração | Origem | Estado |
 |---|---|---|
-| `20261019010000_sncr_preparation` | main (PR #10), "LOCAL/STAGED ONLY" | sem trava |
-| `20261019020000_sncr_rce_issuance` | main (PR #10) | sem trava |
-| `20261028020000_signature_identity_guard` | branch (6B) | travada |
-| `20261029010000_signature_trust_permissions` | branch (6C) | travada |
-| `20261029020000_signature_oauth_attempts` | branch (6D) | travada |
-| `20261029030000_document_signing_attempts` | branch (6E), adaptada ao modelo da main | travada |
-| `20261029040000_revocation_evidence` | branch (6F.2D) | travada |
-| `20261030010000_simple_prescription_signing` | branch (receita simples, 30/10/2026) | sem trava; vai junto com as `20261019*` |
+| `20261030023641_sncr_preparation` | main (PR #10, renomeada no PR #11) | aplicada em produção, segundo o PR #11 |
+| `20261030023733_sncr_rce_issuance` | main | aplicada em produção, segundo o PR #11 |
+| `20261030023750_prescription_simple` | main (PR #11) | aplicada em produção, segundo o PR #11 |
+| `20261030030000_signature_identity_guard` | branch (6B), antes `20261028020000` | travada, não aplicada |
+| `20261030030100_signature_trust_permissions` | branch (6C), antes `20261029010000` | travada, não aplicada |
+| `20261030030200_signature_oauth_attempts` | branch (6D), antes `20261029020000` | travada, não aplicada |
+| `20261030030300_document_signing_attempts` | branch (6E), antes `20261029030000`, adaptada ao modelo da main | travada, não aplicada |
+| `20261030030400_revocation_evidence` | branch (6F.2D), antes `20261029040000` | travada, não aplicada |
+
+As migrações da branch foram renomeadas para depois da última aplicada em produção. Elas nunca
+foram aplicadas, e a `…030300` usa `sncr_rce_emissions`, criada na `20261030023733`.
 
 - A sequência aplica sem erro num Postgres descartável a partir do estado de produção.
 - `clinical_documents` fica só com as guardas SNCR da main: `sncr_document_guard` e
@@ -413,16 +417,15 @@ Migrações que ficam, em ordem, depois de `20261016010000`, o estado de produç
 
 **Receita simples (decisão do Guilherme, 30/10/2026).** A assinatura digital de receita simples
 continua funcionando, independentemente da integração SNCR.
-- Categoria `SIMPLES` ("Receita simples (sem retenção)"), escolhida no editor. Fica fora das
-  categorias SNCR e nunca é aceita num pedido de numeração.
-- `prescriptionSigningBlock('SIMPLES')` nunca bloqueia, em qualquer data.
-- O PDF tem uma via e título "Receituário", sem os quadros de comprador e fornecedor.
-- No banco, a `20261030010000` aceita `SIMPLES` na restrição de categoria e isenta a receita
-  simples do bloqueio de `sncr_document_guard`. A `20261029030000` aceita `SIMPLES` no caminho
-  comum.
-- RCE, RET e notificações continuam como na main: a partir de 30/10/2026 a RCE exige SNCR.
-  Receita sem categoria continua valendo como RCE.
-- Testes: `simple-prescription` (5 casos); `signature-persistence-local`, com receita simples
-  concluída e RCE conforme a data; e `signature-trust-flow`, com receita simples assinada pelo
-  fluxo completo e o original recuperado.
-
+- A correção entrou na main pelo PR #11 (categoria `SIMPLES`, política, PDF em uma via e
+  `20261030023750_prescription_simple`). Ela já está em produção, então a branch adotou a versão
+  da main. A implementação paralela feita aqui (`20261030010000` e
+  `documentPrescriptionCategories`) foi descartada no merge.
+- A branch acrescenta:
+  - a `…030300` (tentativas de assinatura) aceita `SIMPLES` no caminho comum;
+  - `simple-prescription.test` (5 casos: política em qualquer data, recusa na numeração SNCR,
+    PDF em uma via);
+  - `signature-persistence-local`, com receita simples concluída e RCE conforme a data em
+    Brasília;
+  - `signature-trust-flow`, com receita simples assinada pelo fluxo completo e o original
+    recuperado.
