@@ -188,8 +188,13 @@ export async function signRce(params: {
         Buffer.from(JSON.stringify(signature)),
         'application/json',
       );
-    } catch {
+    } catch (error) {
       // May have signed remotely. Never sign again to "fix" an uncertain result.
+      // The provider message has no token; it is the only clue left for review.
+      console.warn(
+        '[rce] assinatura incerta:',
+        error instanceof Error ? error.message : 'erro desconhecido',
+      );
       return repo.transition(attempt, 'SIGNING', 'SIGNATURE_UNCERTAIN');
     }
   }
