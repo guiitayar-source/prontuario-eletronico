@@ -431,3 +431,14 @@ test('empty dosage stops the preparation with a message the panel shows', async 
     /Confira a posologia/,
   );
 });
+test('the bucket accepts the CMS artifact the RCE stores before embedding it', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const workflow = await readFile(new URL('../lib/sncr/rce-workflow.ts', import.meta.url), 'utf8');
+  assert.match(workflow, /signature\.json[\s\S]*'application\/json'/);
+  const sql = await readFile(
+    new URL('../supabase/migrations/20261030160000_rce_signature_artifact.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(sql, /array_append\(allowed_mime_types, 'application\/json'\)/);
+  assert.match(sql, /id = 'clinical-files'/);
+});
