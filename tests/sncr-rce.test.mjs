@@ -444,12 +444,12 @@ test('the bucket accepts the CMS artifact the RCE stores before embedding it', a
 });
 test('signing checks revocation like the other prescriptions (LIVE_ISSUANCE + server provider)', async () => {
   const local = await localRceDatabase();
-  const original = padesService.verifyPadesSignature;
+  const original = padesService.verifyPadesSignature.bind(padesService);
   const seen = [];
   const provider = { collect: async () => [] };
   padesService.verifyPadesSignature = async (pdf, options) => {
     seen.push(options);
-    return original.call(padesService, pdf, options);
+    return original(pdf, options);
   };
   try {
     await local.addNumbers();

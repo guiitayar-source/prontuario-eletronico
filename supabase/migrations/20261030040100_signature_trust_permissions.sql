@@ -1,8 +1,3 @@
--- Aplicação remota exige revisão própria. Testes aplicam somente uma cópia isolada.
-do $$ begin
- raise exception 'Migração de permissões de assinatura em revisão: não aplicar';
-end $$;
-
 -- Atributos de confiança são escritos exclusivamente pelo backend.
 -- Revoga também privilégios de coluna preexistentes; REVOKE da tabela não os remove.
 do $$

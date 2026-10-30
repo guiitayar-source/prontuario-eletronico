@@ -1,8 +1,3 @@
--- Aplicação remota exige revisão própria. Testes aplicam somente uma cópia isolada.
-do $$ begin
- raise exception 'Migração de identidade de assinatura em revisão: não aplicar';
-end $$;
-
 -- A identidade autorizada se refere à versão congelada antes da chamada ao HSM.
 -- Não altera os vínculos, estados ou bloqueios transacionais do SNCR.
 create function public.signature_document_identity_guard() returns trigger

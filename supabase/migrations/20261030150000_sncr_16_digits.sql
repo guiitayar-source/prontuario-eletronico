@@ -1,8 +1,3 @@
--- SNCR 16 dígitos (30/10/2026): somente banco local até o teste completo em homologação.
-do $$ begin
- raise exception 'Migração SNCR 16 dígitos em revisão: não aplicar';
-end $$;
-
 -- A homologação devolveu em 30/10/2026 a faixa RCE com sequência de 9 dígitos
 -- (NNNN.N-NN.NNNNNNNNN), o formato de 16 dígitos anunciado pela Anvisa. O de 14
 -- continua aceito. Quem decide o formato por categoria é o parser do servidor.

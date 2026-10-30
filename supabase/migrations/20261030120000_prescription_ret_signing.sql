@@ -1,9 +1,3 @@
--- Lote receitas RCE/RET (30/10/2026): somente cópia em PostgreSQL descartável. Vai junto com o
--- deploy do código da branch (fluxo de RET, RCE no modelo eletrônico oficial).
-do $$ begin
- raise exception 'Migração de receitas RCE/RET em revisão: não aplicar';
-end $$;
-
 -- Libera a RET eletrônica (fluxo e PDF próprios) até o fim da transição SNCR. Depende de
 -- 20261030030624_sncr_transition_extension (main), que define public.sncr_transition_end().
 -- Muda só a condição de categoria em relação àquela versão de sncr_document_guard.

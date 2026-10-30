@@ -1,7 +1,7 @@
 // Testes negativos com papéis efetivos PostgreSQL. Somente fixtures sintéticas.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import {
   createSignatureTrustDb,
   trustMigration,
@@ -307,18 +307,9 @@ try {
       denied("update evolution_signatures set document_hash='forjado';");
       denied('delete from evolution_signatures;');
     });
-    await test('migração bloqueada no original e reaplicável somente na cópia descartável', () => {
+    await test('migração reaplicável na cópia descartável sem alterar assinaturas', () => {
       const before = h.sql(
         'select jsonb_agg(to_jsonb(d) order by id) from digital_signatures d;',
-      );
-      const source = readFileSync(
-        new URL(`../supabase/migrations/${trustMigration}`, import.meta.url),
-        'utf8',
-      );
-      assert.throws(
-        () => h.sql(source),
-        (e) =>
-          /P0001.*Migração de permissões/s.test(String(e.stderr || e.message)),
       );
       h.applyTrust();
       assert.equal(

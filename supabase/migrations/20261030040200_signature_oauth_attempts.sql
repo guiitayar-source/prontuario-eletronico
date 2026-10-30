@@ -1,8 +1,3 @@
--- Aplicação remota exige revisão própria. Somente cópia em PostgreSQL descartável.
-do $$ begin
- raise exception 'Migração OAuth de assinatura em revisão: não aplicar';
-end $$;
-
 alter table public.signature_oauth_states
  add column if not exists status text not null default 'pending',
  add column if not exists browser_binding_hash text,

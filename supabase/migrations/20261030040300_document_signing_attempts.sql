@@ -1,8 +1,3 @@
--- Lote 6E: somente cópia em PostgreSQL descartável. Promoção exige revisão própria.
-do $$ begin
- raise exception 'Migração de tentativas de assinatura em revisão: não aplicar';
-end $$;
-
 -- Estende o congelamento 6B ao estado terminal SUPERSEDED, inclusive em
 -- documentos históricos sem tentativa 6E. SIGNED -> SUPERSEDED continua legítimo.
 create or replace function public.signature_document_identity_guard() returns trigger

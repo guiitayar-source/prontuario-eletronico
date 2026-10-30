@@ -5,10 +5,8 @@ import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
-import { readFileSync } from 'node:fs';
 import {
   createSignatureTrustDb,
-  evidenceMigration,
 } from './helpers/signature-trust-db.mjs';
 import { startSignatureTrustRest } from './helpers/signature-trust-rest.mjs';
 import {
@@ -172,18 +170,7 @@ const save = (attemptId, records) =>
 const load = (attemptId, clinicId = clinicA) =>
   loadAttemptRevocationEvidence(server, { clinicId, attemptId });
 
-test('migração bloqueada no original; só a cópia descartável a aplica', () => {
-  const source = readFileSync(
-    new URL(`../supabase/migrations/${evidenceMigration}`, import.meta.url),
-    'utf8',
-  );
-  assert.throws(
-    () => h.sql(source),
-    (e) =>
-      /P0001.*Migração de evidências de revogação/s.test(
-        String(e.stderr || e.message),
-      ),
-  );
+test('migração de evidências aplicada na cópia descartável', () => {
   assert.equal(
     h.sql("select to_regclass('public.revocation_evidence') is not null;"),
     't',

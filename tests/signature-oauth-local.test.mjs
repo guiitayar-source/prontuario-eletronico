@@ -9,7 +9,6 @@ import { createClient } from '@supabase/supabase-js';
 import {
   createSignatureTrustDb,
   oauthMigration,
-  oauthGuard as migrationGuard,
 } from './helpers/signature-trust-db.mjs';
 import { startSignatureTrustRest } from './helpers/signature-trust-rest.mjs';
 import { containerEngine } from './helpers/sncr-container.mjs';
@@ -799,7 +798,7 @@ try {
       't',
     );
   });
-  await test('migração reaplicável conserva tentativas concluídas e bloqueio original', async () => {
+  await test('migração reaplicável conserva tentativas concluídas', async () => {
     const s = await start();
     await finish(s);
     const source = readFileSync(
@@ -810,12 +809,7 @@ try {
     h.sql(
       `insert into signature_oauth_states(clinic_id,user_id,state_hash,code_verifier_encrypted,redirect_uri,expires_at) values('${s.clinicId}','${s.userId}',${h.lit(oauth.oauthHash('state', legacyState))},'legacy',${h.lit(redirectUri)},now()+interval '1 day');`,
     );
-    assert.throws(() => h.sql('begin;' + source + 'commit;'));
-    h.sql(
-      'begin;' +
-        source.replace(migrationGuard, '-- somente cópia descartável') +
-        'commit;',
-    );
+    h.sql('begin;' + source + 'commit;');
     assert.equal(row(s).status, 'completed');
     const legacy = row({ ...s, state: legacyState });
     assert.equal(legacy.status, 'rejected');

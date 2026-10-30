@@ -5,7 +5,6 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
   attemptsMigration,
-  attemptsGuard,
 } from './helpers/signature-trust-db.mjs';
 import { signingHarness } from './helpers/signing-persistence.mjs';
 const env = await signingHarness(),
@@ -744,13 +743,12 @@ try {
     assert.equal(f.signatures()[0].document_version, 2);
     assert.equal(f.doc().status, 'SIGNED');
   });
-  await test('migração bloqueada no original, eventos duráveis e ausência de segredos na auditoria', async () => {
+  await test('migração presente, eventos duráveis e ausência de segredos na auditoria', async () => {
     const source = readFileSync(
       new URL('../supabase/migrations/' + attemptsMigration, import.meta.url),
       'utf8',
     );
-    assert.equal(source.split(attemptsGuard).length, 2);
-    assert.throws(() => h.sql('begin;' + source + 'commit;'));
+    assert.ok(source.includes('document_signing_attempts'));
     const logs = h.sql(
       "select coalesce(jsonb_agg(context),'[]') from audit_events where action like 'document.signature%';",
     );

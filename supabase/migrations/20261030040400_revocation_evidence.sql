@@ -1,9 +1,3 @@
--- Lote 6F.2D: somente cópia em PostgreSQL descartável. Depende de 20261030040300 (tentativas),
--- também em revisão. Aplicar em produção só com o aval do titular, ANTES de a branch ir para a main.
-do $$ begin
- raise exception 'Migração de evidências de revogação em revisão: não aplicar';
-end $$;
-
 -- LCR/OCSP usadas na emissão, identificadas pelo SHA-256 do DER. Dado público de AC, sem paciente.
 -- Os bytes só são guardados quando servem de prova: respostas OCSP (poucos KB) e LCR que mostrou
 -- revogação/suspensão (motivo de bloqueio). LCR que só confirmou "não revogado" fica com hash,

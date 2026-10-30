@@ -1,4 +1,3 @@
-import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import * as pkijs from 'pkijs';
@@ -11,11 +10,7 @@ import {
   OID_TST_INFO,
 } from '../../../lib/signature/rfc3161-timestamp.ts';
 import {
-  OID_KP_OCSP_SIGNING,
   OID_PKIX_OCSP_BASIC,
-  OID_PKIX_OCSP_NOCHECK,
-  OID_ISSUING_DISTRIBUTION_POINT,
-  OID_DELTA_CRL_INDICATOR,
   OID_CRL_REASON,
   OID_INVALIDITY_DATE,
 } from '../../../lib/signature/revocation-validator.ts';
