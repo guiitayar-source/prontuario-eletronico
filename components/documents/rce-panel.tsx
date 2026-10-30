@@ -94,13 +94,23 @@ export function RcePanel({
         !window.confirm(
           'O texto desta receita será substituído pelos campos preenchidos abaixo. Confira se todas as orientações estão na posologia. Continuar?',
         )
-      )
+      ) {
+        // A blocked dialog also returns false; never leave the click silent.
+        setError(
+          'Preparação cancelada: o texto da receita não foi substituído pelos campos da RCE.',
+        );
         return;
+      }
       const saved = await docs.save({
         rce_fields: f,
         text: rceClinicalText(f),
       });
-      if (!saved) return;
+      if (!saved) {
+        setError(
+          'A receita não foi salva. Confira o aviso no topo do editor e tente de novo.',
+        );
+        return;
+      }
       idRef.current ||= crypto.randomUUID();
       const data = await action({
         action: 'prepare',
@@ -177,7 +187,7 @@ export function RcePanel({
         Homologação, sem validade para dispensação. Use somente um paciente
         fictício. Nesta versão, uma medicação por receita.
       </p>
-      {error && <p role="alert">{error} Os dados foram mantidos.</p>}
+      {error && active && <p role="alert">{error} Os dados foram mantidos.</p>}
       {!active ? (
         <>
           <p>
@@ -190,6 +200,7 @@ export function RcePanel({
               Preparar RCE de teste para revisar
             </button>
           </fieldset>
+          {error && <p role="alert">{error} Os dados foram mantidos.</p>}
           <p>
             Se faltar numeração,{' '}
             <Link href="/sncr" target="_blank">

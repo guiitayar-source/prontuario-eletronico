@@ -414,3 +414,20 @@ test('a long medicine name still fits the electronic model below its label', asy
     1,
   );
 });
+test('empty dosage stops the preparation with a message the panel shows', async () => {
+  const { validateRceFields } = await import('../lib/sncr/rce.ts');
+  assert.throws(
+    () =>
+      validateRceFields({
+        crm: '000001',
+        uf: 'SP',
+        passport: '',
+        medicine: 'Donaren',
+        concentration: '50 mg',
+        pharmaceuticalForm: 'Comprimido',
+        quantity: '60',
+        dosage: '',
+      }),
+    /Confira a posologia/,
+  );
+});
