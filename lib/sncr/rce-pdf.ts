@@ -8,6 +8,7 @@ import {
 } from 'pdf-lib';
 import QRCode from 'qrcode';
 import { validateRceSnapshot, type RceSnapshot } from './rce.ts';
+import { rangeNumberPattern } from './client.ts';
 
 // Original official model, unchanged. Source/hash are documented in assets/sncr/README.md.
 // 'hmg': RCE de treinamento com número de homologação. 'transition': RCE eletrônica sem
@@ -26,7 +27,7 @@ export async function rcePdf(
   if (environment !== 'hmg' && environment !== 'transition')
     throw new Error('Emissão em produção ainda não liberada.');
   const training = environment === 'hmg';
-  if (training ? !/^\d{4}\.\d-\d{2}\.\d{7}$/.test(number || '') : number !== null)
+  if (training ? !rangeNumberPattern.test(number || '') : number !== null)
     throw new Error('Formato da numeração ainda não validado.');
   const template = await PDFDocument.load(
     templateBytes ||

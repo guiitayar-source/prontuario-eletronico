@@ -196,6 +196,34 @@ test('reject inconsistent ranges, duplicate numbers, string arrays and unvalidat
       parseNumberingResponse(v, { numeracoesReceita, saldoReceitas: 0 }),
     );
 });
+test('16-digit RCE range returned by homologação on 30/10/2026 is expanded with its own width', () => {
+  const sample = {
+    fim: '2610.6-35.000113000',
+    inicio: '2610.6-35.000112001',
+    mensagem: 'Numeração gerada com sucesso.',
+    quantidade: 1000,
+  };
+  const numbers = parseNumberingResponse(input, sample);
+  assert.equal(numbers.length, 1000);
+  assert.equal(numbers[0], '2610.6-35.000112001');
+  assert.equal(numbers[999], '2610.6-35.000113000');
+  assert.ok(numbers.every((n) => n.length === 19));
+  assert.equal(new Set(numbers).size, 1000);
+  for (const changed of [
+    { fim: '2610.6-35.0113000' }, // mixed widths
+    { inicio: '2610.6-35.00112001', fim: '2610.6-35.00113000' }, // 8 digits
+    { fim: '2610.6-35.000113001' },
+    { fim: '2610.6-36.000113000' },
+  ])
+    assert.throws(() => parseNumberingResponse(input, { ...sample, ...changed }));
+  // Notifications keep the published format until a real sample arrives.
+  assert.throws(() =>
+    parseNumberingResponse(
+      { ...input, category: 'NRA', quantidade: 10 },
+      { numeracoesReceita: ['2610.6-35.000112001'], saldoReceitas: 0 },
+    ),
+  );
+});
 test('return URL cannot be redirected to untrusted hosts; production requires HTTPS .br', () => {
   assert.match(
     sncrLoginUrl('hmg', 'http://127.0.0.1:3000/sncr'),

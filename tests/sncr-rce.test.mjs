@@ -164,6 +164,18 @@ test('PDF preserves official page and all required fields; long dosage continues
     ).getPageCount(),
     3,
   );
+  assert.equal(
+    (
+      await PDFDocument.load(
+        await rcePdf(syntheticSnapshot(), '2610.6-35.000112001', new Date(), 'hmg'),
+      )
+    ).getPageCount(),
+    1,
+  );
+  await assert.rejects(
+    () => rcePdf(syntheticSnapshot(), '2610.6-35.00011200', new Date(), 'hmg'),
+    /não validado/,
+  );
   await assert.rejects(
     () => rcePdf(s, '2602.6-53.0000001', new Date(), 'prd'),
     /produção/,
