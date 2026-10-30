@@ -175,10 +175,11 @@ begin
  perform 1 from public.clinic_members where clinic_id=p_clinic and user_id=p_user and role in ('owner','doctor') for share;
  if not found then raise exception 'Usuário sem autorização médica.' using errcode='42501'; end if;
  if d.version<>p_version then raise exception 'Versão documental alterada.' using errcode='40001'; end if;
- -- O caminho controlado continua sob as RPCs SNCR, com sua própria reserva.
- if exists(select 1 from public.sncr_reservations where document_id=d.id) or
-  (d.kind='Receita' and (public.sncr_document_modality(d.text)<>'invalid' or d.text ~* '(^|\n)\s*(n[º°o]?\s*)?sncr:')) then
-  raise exception 'Documento controlado exige o fluxo transacional SNCR.' using errcode='23514';
+ -- Receita com RCE eletrônica (reservada ou assinada) segue o fluxo SNCR da main; categorias
+ -- além de RCE não têm modelo eletrônico neste fluxo (lib/sncr/policy.ts).
+ if exists(select 1 from public.sncr_rce_emissions where document_id=d.id and state<>'CANCELLED') or
+  (d.kind='Receita' and coalesce(d.prescription_category,'RCE')<>'RCE') then
+  raise exception 'Receita desta categoria ou com RCE eletrônica segue o fluxo SNCR.' using errcode='23514';
  end if;
  select * into a from public.document_signing_attempts where clinic_id=p_clinic and user_id=p_user and idempotency_key=p_key for update;
  if found and (a.document_id<>p_document or a.document_version<>p_version) then

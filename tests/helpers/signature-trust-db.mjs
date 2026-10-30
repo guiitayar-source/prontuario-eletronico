@@ -110,8 +110,6 @@ export function createSignatureTrustDb({ baseline = false, oauth = false, attemp
       alter default privileges in schema public grant all on tables to anon,authenticated,service_role;
       alter default privileges in schema public grant all on sequences to anon,authenticated,service_role;`);
     const guards = [
-      "do $$ begin\n raise exception 'Migração SNCR em revisão: não aplicar';\nend $$;",
-      "do $$ begin\n raise exception 'Migração de sessões SNCR em revisão: não aplicar';\nend $$;",
       "do $$ begin\n raise exception 'Migração de identidade de assinatura em revisão: não aplicar';\nend $$;",
     ];
     const history = [];
