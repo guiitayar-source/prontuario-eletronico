@@ -186,7 +186,7 @@ export function RcePanel({
           </p>
           <fieldset disabled={busy || docs.busy}>
             {!fieldsShownAbove && <RceFieldsEditor docs={docs} />}
-            <button type="button" onClick={() => void prepare()}>
+            <button className="primary" type="button" onClick={() => void prepare()}>
               Preparar RCE de teste para revisar
             </button>
           </fieldset>
@@ -220,6 +220,7 @@ export function RcePanel({
                 {e.snapshot.medicine.dosage}
               </p>
               <button
+                className="secondary"
                 type="button"
                 disabled={busy}
                 onClick={() => void showPdf(e.state === 'SIGNED')}
@@ -230,6 +231,7 @@ export function RcePanel({
               </button>
               {e.state === 'SIGNED' && (
                 <button
+                  className="secondary"
                   type="button"
                   disabled={busy}
                   onClick={() => {
@@ -265,6 +267,7 @@ export function RcePanel({
                     ao meu CRM/UF e está disponível.
                   </label>
                   <button
+                    className="primary"
                     type="button"
                     disabled={busy || !checked}
                     onClick={() => void sign()}
@@ -279,6 +282,7 @@ export function RcePanel({
               )}
               {e.state === 'AWAITING_REVIEW' && (
                 <button
+                  className="secondary"
                   type="button"
                   disabled={busy}
                   onClick={() => {
@@ -305,6 +309,7 @@ export function RcePanel({
             </>
           )}
           <button
+            className="secondary"
             type="button"
             disabled={busy}
             onClick={() => void load().catch((err) => setError(err.message))}

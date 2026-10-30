@@ -231,7 +231,7 @@ export default function SncrPreparation() {
             ? 'O SNCR fornece 1.000 números por lote. As cotas são do prescritor.'
             : 'Em produção, as notificações dependem de numeração autorizada pela Vigilância Sanitária.'}
         </p>
-        <button type="button" onClick={() => void start()}>
+        <button className="primary" type="button" onClick={() => void start()}>
           Solicitar lote de teste com gov.br
         </button>
       </fieldset>
@@ -239,6 +239,7 @@ export default function SncrPreparation() {
         <p>
           Solicitação: {requestId}{' '}
           <button
+            className="secondary"
             type="button"
             disabled={busy}
             onClick={() => void refresh().catch((e) => setMessage(e.message))}
@@ -249,12 +250,13 @@ export default function SncrPreparation() {
       )}
       {message && <p role="status">{message}</p>}
       {review && (
-        <button type="button" disabled={busy} onClick={() => void reprocess()}>
+        <button className="primary" type="button" disabled={busy} onClick={() => void reprocess()}>
           Conferir de novo o retorno gravado
         </button>
       )}
       {terminal && (
         <button
+          className="secondary"
           type="button"
           disabled={busy}
           onClick={() => {
