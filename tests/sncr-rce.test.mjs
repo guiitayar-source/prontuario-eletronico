@@ -387,3 +387,30 @@ test('cancel burns the number, and concurrent reservations cannot share a number
     await local.db.close();
   }
 });
+
+test('prescription text keeps the item on one line and the dosage right below it', async () => {
+  const { rceClinicalText } = await import('../lib/sncr/rce.ts');
+  assert.equal(
+    rceClinicalText({
+      medicine: 'Donaren',
+      concentration: '50 mg',
+      pharmaceuticalForm: 'Comprimido',
+      quantity: '60 (sessenta) comprimidos',
+      dosage: 'Tomar 1 comprimido à noite.',
+    }),
+    '1) Donaren 50 mg · Comprimido · Quantidade: 60 (sessenta) comprimidos\nPosologia: Tomar 1 comprimido à noite.',
+  );
+});
+test('a long medicine name still fits the electronic model below its label', async () => {
+  const s = syntheticSnapshot();
+  s.medicine.name =
+    'Cloridrato de substancia ficticia de nome muito longo para teste de layout';
+  assert.equal(
+    (
+      await PDFDocument.load(
+        await rcePdf(s, '2610.6-35.000112001', new Date(), 'hmg'),
+      )
+    ).getPageCount(),
+    1,
+  );
+});

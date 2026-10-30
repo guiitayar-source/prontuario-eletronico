@@ -110,7 +110,7 @@ export async function rcePdf(
       );
     };
     // All coordinates refer to the unmodified official A4 template.
-    field(number ?? RCE_TRANSITION_NUMBER_TEXT, 394, 34, 180, number ? 1 : 2, number ? 12 : 8, true);
+    field(number ?? RCE_TRANSITION_NUMBER_TEXT, 398, 34, 180, number ? 1 : 2, number ? 12 : 8, true);
     field(s.prescriber.name, 31, 166, 246, 2);
     field(`CRM ${s.prescriber.crm}/${s.prescriber.uf}`, 31, 208, 246, 1);
     field(s.prescriber.address, 31, 248, 246, 2, 8);
@@ -118,12 +118,15 @@ export async function rcePdf(
     field(s.patient.name, 307, 166, 246, 2);
     field(s.patient.identifier, 307, 208, 246, 1);
     field(s.patient.address, 307, 249, 246, 4, 8);
-    field(s.medicine.name, 36, 394, 527, 1, 8);
-    field(s.medicine.concentration, 145, 408, 410, 1);
-    field(s.medicine.pharmaceuticalForm, 181, 438, 375, 1);
-    field(s.medicine.quantity, 125, 468, 430, 1);
+    // Values sit on the label's baseline; a long name goes below its label.
+    if (font.widthOfTextAtSize(s.medicine.name, 10) <= 270)
+      field(s.medicine.name, 285, 379, 270, 1, 10);
+    else field(s.medicine.name, 36, 394, 527, 1, 8);
+    field(s.medicine.concentration, 145, 410, 410, 1, 10);
+    field(s.medicine.pharmaceuticalForm, 181, 440, 375, 1, 10);
+    field(s.medicine.quantity, 125, 470, 430, 1, 10);
     part.forEach((line, i) =>
-      page.drawText(line, { x: 31, y: height - 530 - i * 11, size: 9, font }),
+      page.drawText(line, { x: 36, y: height - 530 - i * 11, size: 9, font }),
     );
     // Replace the QR placeholder, preserving the official footer's text.
     page.drawRectangle({
