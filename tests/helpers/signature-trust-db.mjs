@@ -5,15 +5,15 @@ import { readFileSync, readdirSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { containerEngine, containerImage } from './sncr-container.mjs';
 
-export const trustMigration = '20261029010000_signature_trust_permissions.sql';
+export const trustMigration = '20261030030100_signature_trust_permissions.sql';
 export const trustGuard =
   "do $$ begin\n raise exception 'Migração de permissões de assinatura em revisão: não aplicar';\nend $$;";
 const migrations = new URL('../../supabase/migrations/', import.meta.url);
-export const oauthMigration = '20261029020000_signature_oauth_attempts.sql';
+export const oauthMigration = '20261030030200_signature_oauth_attempts.sql';
 export const oauthGuard = "do $$ begin\n raise exception 'Migração OAuth de assinatura em revisão: não aplicar';\nend $$;";
-export const attemptsMigration = '20261029030000_document_signing_attempts.sql';
+export const attemptsMigration = '20261030030300_document_signing_attempts.sql';
 export const attemptsGuard = "do $$ begin\n raise exception 'Migração de tentativas de assinatura em revisão: não aplicar';\nend $$;";
-export const evidenceMigration = '20261029040000_revocation_evidence.sql';
+export const evidenceMigration = '20261030030400_revocation_evidence.sql';
 export const evidenceGuard = "do $$ begin\n raise exception 'Migração de evidências de revogação em revisão: não aplicar';\nend $$;";
 export function createSignatureTrustDb({ baseline = false, oauth = false, attempts = false, revocationEvidence = false } = {}) {
   const inspect = JSON.parse(

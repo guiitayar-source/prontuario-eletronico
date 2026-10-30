@@ -1,4 +1,4 @@
--- Lote 6F.2D: somente cópia em PostgreSQL descartável. Depende de 20261029030000 (tentativas),
+-- Lote 6F.2D: somente cópia em PostgreSQL descartável. Depende de 20261030030300 (tentativas),
 -- também em revisão. Aplicar em produção só com o aval do titular, ANTES de a branch ir para a main.
 do $$ begin
  raise exception 'Migração de evidências de revogação em revisão: não aplicar';

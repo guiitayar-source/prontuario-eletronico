@@ -1,5 +1,5 @@
 // Lote 6F.2D: guarda a LCR/OCSP usada na emissão e a devolve para a recuperação/reverificação,
-// sem rede. Depende da migração 20261029040000_revocation_evidence.sql; sem ela (ou com o banco
+// sem rede. Depende da migração 20261030030400_revocation_evidence.sql; sem ela (ou com o banco
 // indisponível) as funções degradam: nada é gravado e a verificação segue sem evidência.
 import crypto from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
