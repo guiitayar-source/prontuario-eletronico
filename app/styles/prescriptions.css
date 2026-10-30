@@ -339,6 +339,62 @@
 .rce-footer-note {
   flex: 1 1 100%;
 }
+/* Dentro do modal, .modal p/li/label/input põem margens e corpo 15px: anula aqui. */
+.rce-flow .rce-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.rce-flow .rce-step,
+.rce-flow .rce-missing li {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.rce-flow p.rce-step-note,
+.rce-flow-head p,
+.rce-fields-section p.rce-flow-note,
+.editor-actions p.rce-footer-note,
+p.rce-footer-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.rce-flow p.rce-alert,
+.rce-flow .rce-recovery p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.rce-flow .rce-missing ul {
+  list-style: disc;
+}
+.rce-flow .rce-step-note a {
+  color: var(--accent);
+}
+.rce-fields label.rce-field,
+.rce-flow label.rce-check {
+  margin: 0;
+}
+.rce-fields label.rce-field {
+  display: grid;
+}
+.rce-fields .rce-field input,
+.rce-fields .rce-field textarea {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.rce-flow .rce-check input {
+  width: auto;
+  display: inline-block;
+  margin: 3px 0 0;
+  padding: 0;
+}
 @media (max-width: 640px) {
   .rce-field-row,
   .rce-field-row-medicine,

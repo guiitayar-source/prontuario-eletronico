@@ -433,10 +433,10 @@ export function DocumentEditor({
             ) : (
               <button
                 type="button"
-                className="primary"
+                className={transitionOnly ? 'secondary' : 'primary'}
                 disabled={docs.busy || isSigning || rceLocked || !!signingBlock || docs.signingDocId === d.id || !d.text.trim()}
                 style={{
-                  backgroundColor: docs.signatureSession ? 'var(--success)' : undefined,
+                  backgroundColor: docs.signatureSession && !transitionOnly ? 'var(--success)' : undefined,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
