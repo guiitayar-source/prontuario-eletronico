@@ -276,35 +276,11 @@ try {
       assert.equal(row(s).status, 'rejected');
     }
   });
-  await test('state inválido e SNCR não são aceitos no namespace Bird ID', async () => {
+  await test('state inválido não é aceito no namespace Bird ID', async () => {
     const s = await start();
     for (const state of ['bad', oauth.oauthSecret()])
       await noExchange(() => finish(s, { state }));
-    const { SncrSessions } = await import('../lib/sncr/sessions.ts');
-    const previousKey = process.env.SNCR_SESSION_ENCRYPTION_KEY;
-    process.env.SNCR_SESSION_ENCRYPTION_KEY = 'a'.repeat(64);
-    try {
-      const sncr = new SncrSessions(backend, async () => {
-        throw Error('Rede SNCR proibida.');
-      });
-      const started = await sncr.start(s, {
-        environment: 'hmg',
-        callback: 'http://localhost:3000/api/sncr/auth/callback',
-        origin: 'http://localhost:3000',
-      });
-      const sncrState = new URL(started.authorizationUrl).searchParams.get(
-        'state',
-      );
-      await noExchange(() =>
-        finish(s, { state: sncrState, binding: started.binding }),
-      );
-      assert.equal((await sncr.status(s)).state, 'pending');
-      assert.equal(row(s).status, 'pending');
-    } finally {
-      if (previousKey === undefined)
-        delete process.env.SNCR_SESSION_ENCRYPTION_KEY;
-      else process.env.SNCR_SESSION_ENCRYPTION_KEY = previousKey;
-    }
+    assert.equal(row(s).status, 'pending');
   });
   await test('state expirado vira expired sem HTTP', async () => {
     const s = await start();
@@ -862,7 +838,8 @@ try {
     for (const path of [
       '/api/digital-signature/birdid/callback?code=secret',
       '/api/digital-signature/vidaas/callback?code=secret',
-      '/api/sncr/auth/callback/opaque?session_id=secret',
+      '/sncr?session_id=secret',
+      '/sncr?x=1&session_id=secret',
     ])
       assert.ok(
         config.logging.incomingRequests.ignore.some((p) => p.test(path)),

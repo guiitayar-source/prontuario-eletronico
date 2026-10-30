@@ -11,9 +11,6 @@ import {
 import { padesService } from '../lib/signature/pades-service.ts';
 import { MockBirdIdProvider } from '../lib/signature/mock-birdid-provider.ts';
 import { documentPdf } from '../lib/document-pdf.ts';
-import { rceSimulationPdf } from '../lib/sncr/rce-pdf.ts';
-import { notificationSimulationPdf } from '../lib/sncr/notification-pdf.ts';
-import { syntheticRce, syntheticRceText } from './helpers/rce-fixture.mjs';
 
 const provider = new MockBirdIdProvider({
   mockCpf: '52998224725',
@@ -732,34 +729,26 @@ describe('Lote 6F.1 — Integridade Estrutural PAdES, ByteRange, Revisões Incre
     assert.equal(resTamperedFont.isValid, false);
   });
 
-  it('11. preserva compatibilidade com Receita Simples, RCE e Notificações A, B e B2', async () => {
-    const simpleDoc = {
-      ...syntheticRce,
-      text: 'Modalidade: Receita simples\nVia de administração: Uso oral\n\nMED001 10mg - 1 cp ao dia',
-      prescription_modality: 'simples',
-      sncr_number: undefined,
+  it('11. preserva compatibilidade com os PDFs da aplicação (receita RCE e atestado)', async () => {
+    const base = {
+      id: '00000000-0000-4000-8000-0000000006f1',
+      patient_id: 'sintetico',
+      patient_name: 'Paciente Sintético',
+      physician_name: 'Dr. Médico Sintético',
+      physician_registration: 'CRM 12345 SP',
+      document_date: '2026-10-29',
+      version: 1,
+      status: 'FINALIZED',
     };
     const pdfBuffers = [
-      await documentPdf(simpleDoc, { isDraft: false }),
-      await rceSimulationPdf(syntheticRce),
-      await notificationSimulationPdf({
-        ...syntheticRce,
-        text: `Modalidade: Notificação de Receita A\n${syntheticRceText}`,
-        prescription_modality: 'notificacao_a',
-        sncr_number: 'SIMULADO.6F1.NRA.0000001',
-      }),
-      await notificationSimulationPdf({
-        ...syntheticRce,
-        text: `Modalidade: Notificação de Receita B\n${syntheticRceText}`,
-        prescription_modality: 'notificacao_b',
-        sncr_number: 'SIMULADO.6F1.NRB.0000001',
-      }),
-      await notificationSimulationPdf({
-        ...syntheticRce,
-        text: `Modalidade: Notificação de Receita B2\n${syntheticRceText}`,
-        prescription_modality: 'notificacao_b2',
-        sncr_number: 'SIMULADO.6F1.NRB2.0000001',
-      }),
+      await documentPdf(
+        { ...base, kind: 'Receita', prescription_category: 'RCE', text: 'MED001 10mg - 1 cp ao dia' },
+        { isDraft: false },
+      ),
+      await documentPdf(
+        { ...base, kind: 'Atestado', text: 'Atesto, para os devidos fins, comparecimento.' },
+        { isDraft: false },
+      ),
     ];
 
     for (const rawPdf of pdfBuffers) {

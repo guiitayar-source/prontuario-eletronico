@@ -27,6 +27,8 @@ function fakeFetch(input, init = {}) {
   }
   if (url.pathname === '/rest/v1/patients') return reply({ cpf: '', street: '', city: '', state: '' });
   if (url.pathname === '/rest/v1/document_profiles') return reply(null);
+  // RCE eletrônica da main (lib/supabase/documents.ts): nenhuma emissão para o documento.
+  if (url.pathname === '/rest/v1/sncr_rce_emissions') return reply(null);
   if (url.pathname.startsWith('/storage/v1/object/')) {
     if (mode === 'network') return Promise.reject(new Error('synthetic storage network error'));
     if (mode === 'missing') return reply({ message: 'not found' }, 404);

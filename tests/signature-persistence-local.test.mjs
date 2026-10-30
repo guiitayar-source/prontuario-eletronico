@@ -7,9 +7,6 @@ import {
   attemptsGuard,
 } from './helpers/signature-trust-db.mjs';
 import { signingHarness } from './helpers/signing-persistence.mjs';
-import { syntheticRceText } from './helpers/rce-fixture.mjs';
-import { MockBirdIdProvider } from '../lib/signature/mock-birdid-provider.ts';
-import { reserveDocument, getNumberingContext } from '../lib/sncr/numbering.ts';
 const env = await signingHarness(),
   { h, fixture, asyncSql, statement, processSign } = env;
 try {
@@ -579,33 +576,26 @@ try {
     assert.equal(f.signatures().length, 0);
     assert.equal(f.doc().status, 'SIGNING');
   });
-  await test('documento reservado ou controlado não pode adquirir pelo caminho comum SQL', async () => {
-    const f = await fixture({
-      kind: 'Receita',
-      text: 'Modalidade: Controle especial\nMED001 - Sintetico',
+  // Modelo da main: categoria em prescription_category (RCE por padrão) e RCE eletrônica em
+  // sncr_rce_emissions. A política por data (lib/sncr/policy.ts) é da aplicação; aqui só o banco.
+  for (const category of ['RET', 'NRA', 'NRB2'])
+    await test(`receita ${category} não adquire pelo caminho comum SQL`, async () => {
+      const f = await fixture({ kind: 'Receita', text: 'MED001 - Sintetico' });
+      h.sql(`update clinical_documents set prescription_category='${category}' where id='${f.documentId}';`);
+      await assert.rejects(
+        () => asyncSql(statement(f.args('acquire', randomUUID(), f.acquireData))),
+        /SNCR/,
+      );
+      assert.equal(f.attempts().length, 0);
+      assert.equal(f.calls(), 0);
+      assert.equal(f.doc().status, 'DRAFT');
     });
-    await assert.rejects(() =>
-      asyncSql(statement(f.args('acquire', randomUUID(), f.acquireData))),
-    );
-    assert.equal(f.attempts().length, 0);
+  await test('receita RCE sem RCE eletrônica adquire pelo caminho comum SQL', async () => {
+    const f = await fixture({ kind: 'Receita', text: 'MED001 - Sintetico' });
+    await asyncSql(statement(f.args('acquire', randomUUID(), f.acquireData)));
+    assert.equal(f.attempts().length, 1);
+    assert.equal(f.doc().status, 'SIGNING');
     assert.equal(f.calls(), 0);
-    assert.equal(f.doc().status, 'DRAFT');
-  });
-  await test('assinatura de receita simples preservada sem reserva SNCR', async () => {
-    const f = await fixture({
-      kind: 'Receita',
-      text: 'Modalidade: Receita simples\nVia de administração: Uso oral\n\nMED001 - Sintetico',
-    });
-    await f.sign();
-    assert.equal(f.doc().status, 'SIGNED');
-    assert.equal(f.signatures()[0].verification_status, 'UNVERIFIED');
-    assert.equal(
-      h.sql(
-        `select count(*) from sncr_reservations where document_id='${f.documentId}';`,
-      ),
-      '0',
-    );
-    assert.equal(f.calls(), 1);
   });
   await test('identidade alterada durante HSM não conclui nem libera outra assinatura', async () => {
     const f = await fixture();
@@ -619,70 +609,6 @@ try {
     await assert.rejects(() => f.sign());
     assert.equal(f.calls(), 1);
   });
-  for (const [modality, label] of [
-    ['notificacao_a', 'NRA'],
-    ['notificacao_b', 'NRB'],
-    ['notificacao_b2', 'NRB2'],
-  ])
-    await test(`${label}: concorrência preserva reserva e original com toda a migração 6E`, async () => {
-      const keys = [
-        'NODE_ENV',
-        'NEXT_PUBLIC_SUPABASE_URL',
-        'PSYWRITE_SNCR_MODE',
-        'ANVISA_SNCR_ENV',
-        'VERCEL',
-        'VERCEL_ENV',
-      ];
-      const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
-      Object.assign(process.env, {
-        NODE_ENV: 'test',
-        NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
-        PSYWRITE_SNCR_MODE: 'local-simulation',
-        ANVISA_SNCR_ENV: 'hmg',
-      });
-      delete process.env.VERCEL;
-      delete process.env.VERCEL_ENV;
-      // eslint-disable-next-line typescript/unbound-method -- Restaurado no protótipo; chamada abaixo usa call(this).
-      const original = MockBirdIdProvider.prototype.signHash;
-      let hsm = 0;
-      MockBirdIdProvider.prototype.signHash = async function (args) {
-        hsm++;
-        return original.call(this, args);
-      };
-      try {
-        const f = await fixture({
-            kind: 'Receita',
-            text: `Modalidade: Notificação de Receita ${label.slice(2)}\n${syntheticRceText}`,
-          }),
-          request = randomUUID();
-        h.sql(
-          `update document_profiles set letterhead_address='Rua Sintética, 200 - Cidade Teste - SP',letterhead_phone='(11) 0000-0000' where user_id='${f.userId}';insert into sncr_local_sandboxes values('${f.clinicId}','synthetic-local-only');insert into sncr_requests(id,clinic_id,prescriber_id,environment,modality,request_key,origin,state) values('${request}','${f.clinicId}','${f.userId}','hmg','${modality}',gen_random_uuid(),'synthetic','completed');insert into sncr_batches(request_id,clinic_id,prescriber_id,environment,modality,council,council_number,council_uf,registration_snapshot,number_prefix,suffix_width,first_suffix,last_suffix,next_suffix,origin,verification_state) values('${request}','${f.clinicId}','${f.userId}','hmg','${modality}','CRM','12345','SP','CRM 12345 SP','SIMULADO.6E.${label}.',7,1,2,1,'synthetic','verified');`,
-        );
-        const actor = { clinicId: f.clinicId, userId: f.userId };
-        const reserved = await reserveDocument(f.db, actor, f.documentId);
-        const results = await Promise.allSettled([f.sign(), f.sign()]);
-        assert.ok(results.some((r) => r.status === 'fulfilled'));
-        const ctx = await getNumberingContext(f.db, actor, f.documentId);
-        assert.equal(ctx.reservation.id, reserved.reservation.id);
-        assert.equal(ctx.reservation.number, reserved.reservation.number);
-        assert.equal(ctx.reservation.state, 'signed');
-        assert.equal(f.doc().status, 'SIGNED');
-        assert.equal(hsm, 1);
-        assert.equal(f.uploads(), 1);
-        assert.equal(f.signatures().length, 1);
-        assert.equal(f.attempts().length, 0);
-        const originalBytes = Buffer.from([...f.files.values()][0]);
-        await f.sign();
-        assert.equal(hsm, 1);
-        assert.equal(f.uploads(), 1);
-        assert.deepEqual([...f.files.values()][0], originalBytes);
-      } finally {
-        MockBirdIdProvider.prototype.signHash = original;
-        for (const [k, v] of Object.entries(saved))
-          if (v === undefined) delete process.env[k];
-          else process.env[k] = v;
-      }
-    });
   await test('metadados históricos órfãos impedem uma nova assinatura da versão', async () => {
     const f = await fixture();
     h.sql(

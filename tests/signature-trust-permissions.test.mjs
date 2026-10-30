@@ -150,11 +150,12 @@ try {
     );
   });
   await test('11 usuário não executa RPC privilegiada SNCR com parâmetros arbitrários', () => {
+    // RPCs SNCR da main: só o backend (service_role) executa.
     denied(
-      `select sncr_finish_signing('${clinic}','${doctor}','${document}',gen_random_uuid());`,
+      `select sncr_store_numbers(gen_random_uuid(),'${clinic}','${doctor}','[]'::jsonb);`,
     );
     denied(
-      `select sncr_auth_operation('${clinic}','${doctor}','hmg','read','{}');`,
+      `select sncr_rce_finish(gen_random_uuid(),'${clinic}','${doctor}',gen_random_uuid(),'x','x',now(),'{}'::jsonb);`,
     );
   });
   await test('12 frontend não forja vínculos documentais nem estado SIGNED por escrita direta', () => {

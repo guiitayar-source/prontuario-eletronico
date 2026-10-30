@@ -7,7 +7,6 @@ import { register } from 'node:module';
 import { createClient } from '@supabase/supabase-js';
 import { createSignatureTrustDb } from './helpers/signature-trust-db.mjs';
 import { startSignatureTrustRest } from './helpers/signature-trust-rest.mjs';
-import { syntheticRceText } from './helpers/rce-fixture.mjs';
 import { MockBirdIdProvider } from '../lib/signature/mock-birdid-provider.ts';
 import { decryptToken } from '../lib/signature/crypto-utils.ts';
 
@@ -24,8 +23,6 @@ const { DocumentSigningService } =
 const { setCustomSignatureProvider } =
   await import('../lib/signature/provider-factory.ts');
 const { documents } = await import('../lib/supabase/documents.ts');
-const { reserveDocument, getNumberingContext, localSimulationEnabled } =
-  await import('../lib/sncr/numbering.ts');
 
 const h = createSignatureTrustDb({ oauth: true, attempts: true });
 const clinic = randomUUID(),
@@ -42,8 +39,6 @@ const envKeys = [
   'SUPABASE_SECRET_KEY',
   'SIGNATURE_ENCRYPTION_KEY',
   'BIRDID_REDIRECT_URI',
-  'PSYWRITE_SNCR_MODE',
-  'ANVISA_SNCR_ENV',
   'VERCEL',
   'VERCEL_ENV',
 ];
@@ -54,8 +49,6 @@ let rest,
   session,
   simple,
   simpleResult,
-  controlled,
-  controlledResult,
   signCalls = 0;
 try {
   rest = await startSignatureTrustRest(h);
@@ -73,8 +66,6 @@ try {
     SUPABASE_SECRET_KEY: tokens.server,
     SIGNATURE_ENCRYPTION_KEY: 'synthetic-6c-only',
     BIRDID_REDIRECT_URI: 'https://synthetic.invalid/api/digital-signature/birdid/callback',
-    PSYWRITE_SNCR_MODE: 'local-simulation',
-    ANVISA_SNCR_ENV: 'hmg',
   });
   delete process.env.VERCEL;
   delete process.env.VERCEL_ENV;
@@ -182,7 +173,7 @@ try {
       state: start.state,
     });
   }
-  async function createDocument(text, kind = 'Receita') {
+  async function createDocument(text, kind = 'Receita', extra = {}) {
     const result = await userDb.rpc('document_write', {
       c: clinic,
       d: {
@@ -194,6 +185,7 @@ try {
         physician_registration: 'CRM 12345 SP',
         document_date: '2026-10-29',
         version: 0,
+        ...extra,
       },
     });
     assert.equal(result.error, null);
@@ -231,9 +223,11 @@ try {
       't',
     );
   });
+  // Documento não-receita: na main, toda receita passa pela política SNCR por data (policy.ts).
   await test('15 assinatura PAdES simulada grava autoria, versão, hashes e UNVERIFIED corretos', async () => {
     simple = await createDocument(
-      `Modalidade: Receita simples\n${syntheticRceText}`,
+      'Declaração inteiramente sintética sem validade clínica.',
+      'Declaração de comparecimento',
     );
     simpleResult = await service.signClinicalDocument({
       db: userDb,
@@ -277,14 +271,8 @@ try {
     assert.equal(doc.error, null);
     assert.equal(doc.data.status, 'SIGNED');
   });
-  await test('18 documento comum e receita simples usam os privilégios legítimos do servidor', async () => {
+  await test('18 documento comum usa os privilégios legítimos do servidor', async () => {
     assert.equal(simpleResult.success, true);
-    assert.equal(
-      h.sql(
-        `select count(*) from sncr_reservations where document_id='${simple.id}';`,
-      ),
-      '0',
-    );
     const doc = await createDocument(
       'Documento inteiramente sintético sem validade clínica.',
       'Atestado',
@@ -301,52 +289,24 @@ try {
     );
     assert.equal(signCalls, 2);
   });
-  await test('19 receita controlada preserva reserva, número, titular e histórico SNCR', async () => {
-    controlled = await createDocument(
-      `Modalidade: Controle especial\n${syntheticRceText}`,
-    );
-    const request = randomUUID();
-    h.sql(`insert into sncr_local_sandboxes values ('${clinic}','synthetic-local-only');
-      insert into sncr_requests(id,clinic_id,prescriber_id,environment,modality,request_key,origin,state) values ('${request}','${clinic}','${doctor}','hmg','controle_especial',gen_random_uuid(),'synthetic','completed');
-      insert into sncr_batches(request_id,clinic_id,prescriber_id,environment,modality,council,council_number,council_uf,registration_snapshot,number_prefix,suffix_width,first_suffix,last_suffix,next_suffix,origin,verification_state)
-        values ('${request}','${clinic}','${doctor}','hmg','controle_especial','CRM','12345','SP','CRM 12345 SP','SIMULADO.6C.',7,1,2,1,'synthetic','verified');`);
-    const reserved = await reserveDocument(backend, actor, controlled.id);
-    controlledResult = await service.signClinicalDocument({
-      db: userDb,
-      ...actor,
-      documentId: controlled.id,
+  await test('19 receita de categoria sem modelo eletrônico é recusada antes do HSM', async () => {
+    const nra = await createDocument('MED001 - Sintetico', 'Receita', {
+      prescription_category: 'NRA',
     });
-    const context = await getNumberingContext(backend, actor, controlled.id);
-    assert.equal(context.reservation.id, reserved.reservation.id);
-    assert.equal(context.reservation.number, reserved.reservation.number);
-    assert.equal(context.reservation.prescriber_id, doctor);
-    assert.equal(context.reservation.state, 'signed');
-    assert.equal(context.document.status, 'SIGNED');
-    assert.equal(
-      h.sql(
-        `select next_suffix-first_suffix from sncr_batches where request_id='${request}';`,
-      ),
-      '1',
+    await assert.rejects(
+      () =>
+        service.signClinicalDocument({
+          db: userDb,
+          ...actor,
+          documentId: nra.id,
+        }),
+      (error) => error.status === 409,
     );
+    assert.equal(signCalls, 2);
     assert.equal(
-      h.sql(
-        `select count(*)>0 from sncr_operation_history where reservation_id='${reserved.reservation.id}';`,
-      ),
-      't',
+      h.sql(`select count(*) from document_signing_attempts where document_id='${nra.id}';`),
+      '0',
     );
-  });
-  await test('20 recuperação controlada conserva original; adulteração ou ausência bloqueiam sem regenerar', async () => {
-    const response = await retrieve(controlled);
-    assert.equal(response.status, 200);
-    const original = files.get(controlledResult.signedPdfPath);
-    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), original);
-    const before = files.size;
-    files.set(controlledResult.signedPdfPath, new Uint8Array([1, 2, 3]));
-    assert.equal((await retrieve(controlled)).status, 503);
-    files.delete(controlledResult.signedPdfPath);
-    assert.equal((await retrieve(controlled)).status, 503);
-    assert.equal(files.size, before - 1);
-    files.set(controlledResult.signedPdfPath, original);
   });
   await test('PostgREST recusa INSERT VALID, troca de sessão/estado e leitura de ciphertext', async () => {
     const doctorDb = client(tokens.doctor),
@@ -371,11 +331,11 @@ try {
         .from('signature_sessions')
         .select('access_token_encrypted'),
       await doctorDb.from('signature_oauth_states').select('*'),
-      await doctorDb.rpc('sncr_finish_signing', {
-        p_clinic: clinic,
-        p_prescriber: doctor,
-        p_document: controlled.id,
-        p_attempt: randomUUID(),
+      await doctorDb.rpc('sncr_store_numbers', {
+        rid: randomUUID(),
+        c: clinic,
+        u: doctor,
+        numbers: [],
       }),
     ])
       assert.equal(result.error?.code, '42501');
@@ -387,20 +347,6 @@ try {
       (await outsideDb.from('digital_signatures').select('id')).data,
       [],
     );
-  });
-  await test('modo produção conserva bloqueio de números sintéticos e emissão oficial', async () => {
-    process.env.NODE_ENV = 'production';
-    assert.equal(localSimulationEnabled(), false);
-    await assert.rejects(
-      () =>
-        service.signClinicalDocument({
-          db: userDb,
-          ...actor,
-          documentId: controlled.id,
-        }),
-      (error) => error.status === 503,
-    );
-    process.env.NODE_ENV = 'test';
   });
 } finally {
   globalThis.fetch = originalFetch;

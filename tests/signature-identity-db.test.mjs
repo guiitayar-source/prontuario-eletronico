@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createSncrDb } from './helpers/sncr-local-db.mjs';
+import { createSignatureTrustDb } from './helpers/signature-trust-db.mjs';
 
-const h = createSncrDb({ signatureIdentityGuard: true });
+// Todas as migrações (inclusive as SNCR da main); a de identidade entra pela cópia sem trava.
+const h = createSignatureTrustDb({ baseline: true });
 const clinic = '10000000-0000-4000-8000-000000000001';
 const doctor = '20000000-0000-4000-8000-000000000001';
 const doc = '30000000-0000-4000-8000-000000000001';
@@ -12,9 +13,11 @@ const guard = "do $$ begin\n raise exception 'Migração de identidade de assina
 try {
   assert.equal(original.split(guard).length, 2);
   assert.throws(() => h.sql(original), /em revisão/);
-  h.sql(`insert into auth.users values ('${doctor}'),(md5('other-doctor')::uuid); insert into clinics values ('${clinic}'),(md5('other-clinic')::uuid);
+  h.sql(`insert into auth.users values ('${doctor}'),(md5('other-doctor')::uuid);
+    insert into clinics(id,name) values ('${clinic}','Clínica sintética'),(md5('other-clinic')::uuid,'Outra clínica sintética');
+    insert into patients(clinic_id,id,name) values ('${clinic}','synthetic','Paciente sintético');
     insert into clinical_documents(id,clinic_id,author_id,patient_id,kind,status,physician_registration,version,text,patient_name,physician_name,document_date)
-    values ('${doc}','${clinic}','${doctor}','synthetic','Receita','DRAFT','CRM 12345 SP',1,'Modalidade: Receita simples','Paciente sintético','Prescritor sintético','2026-10-28');
+    values ('${doc}','${clinic}','${doctor}','synthetic','Atestado','DRAFT','CRM 12345 SP',1,'Atestado sintético','Paciente sintético','Prescritor sintético','2026-10-28');
     update clinical_documents set status='SIGNING' where id='${doc}';`);
   const identityChanges = ["author_id=md5('other-doctor')::uuid", "clinic_id=md5('other-clinic')::uuid", "patient_id='other-patient'", "id=md5('other-document')::uuid", "text='alterado'", 'version=version+1', "physician_name='Outro medico'", "physician_registration='CRM 99999 SP'", "patient_name='Outro paciente'", "document_date='2026-10-27'", "consultation_id=gen_random_uuid()"];
   await test('autor, clinica, identidade, versao e vinculos ficam congelados durante SIGNING', () => {
