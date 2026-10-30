@@ -28,6 +28,13 @@ export type ClinicalDocument = {
   letterhead_title?: string;
   letterhead_address?: string;
   letterhead_phone?: string;
+  // Preenchidos no servidor para o PDF da receita (lib/supabase/document-pdf-data.ts).
+  patient_cpf?: string;
+  patient_birth_date?: string;
+  patient_gender?: string;
+  patient_zip_code?: string;
+  patient_address_number?: string;
+  prescriber_cpf?: string;
   status?: 'DRAFT' | 'FINALIZED' | 'SIGNING' | 'SIGNED' | 'SIGNATURE_FAILED' | 'SUPERSEDED';
   signed_pdf_path?: string | null;
   prescription_category?: PrescriptionCategory | null;

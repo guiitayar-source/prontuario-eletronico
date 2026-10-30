@@ -1,5 +1,5 @@
-// Server only. Completa o documento com o endereço do paciente (receitas) e o
-// timbre do profissional que o escreveu, antes de gerar o PDF.
+// Server only. Completa o documento com os dados do paciente (receitas: endereço, CPF, data de
+// nascimento e sexo) e o timbre do profissional que o escreveu, antes de gerar o PDF.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ClinicalDocument } from '../document-fields.ts';
 
@@ -11,7 +11,7 @@ export async function withPdfData(
   if (doc.kind === 'Receita') {
     const { data: p } = await admin
       .from('patients')
-      .select('street,address_number,complement,neighborhood,city,state')
+      .select('street,address_number,complement,neighborhood,city,state,zip_code,cpf,dob,gender')
       .eq('clinic_id', clinicId)
       .eq('id', doc.patient_id)
       .maybeSingle();
@@ -26,12 +26,17 @@ export async function withPdfData(
         .join(', ');
       doc.patient_city = p.city || '';
       doc.patient_state = p.state || '';
+      doc.patient_zip_code = p.zip_code || '';
+      doc.patient_address_number = p.address_number || '';
+      doc.patient_cpf = p.cpf || '';
+      doc.patient_birth_date = p.dob || '';
+      doc.patient_gender = p.gender || '';
     }
   }
   if (doc.author_id) {
     const { data: profile } = await admin
       .from('document_profiles')
-      .select('letterhead_title,letterhead_address,letterhead_phone')
+      .select('letterhead_title,letterhead_address,letterhead_phone,cpf')
       .eq('clinic_id', clinicId)
       .eq('user_id', doc.author_id)
       .maybeSingle();
@@ -39,6 +44,8 @@ export async function withPdfData(
       doc.letterhead_title = profile.letterhead_title || '';
       doc.letterhead_address = profile.letterhead_address || '';
       doc.letterhead_phone = profile.letterhead_phone || '';
+      // O fluxo de assinatura sobrescreve com o CPF do certificado da tentativa.
+      doc.prescriber_cpf ||= (profile.cpf || '').replace(/\D/g, '');
     }
   }
   return doc;

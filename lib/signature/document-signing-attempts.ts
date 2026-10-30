@@ -358,7 +358,14 @@ export async function signDocumentAttempt(
   try {
     const accessToken = decryptToken(identity.session.access_token_encrypted);
     await withPdfData(db, actor.clinicId, doc);
-    const unsigned = await documentPdf(doc, { isDraft: false });
+    // CPF do prescritor = o do certificado autorizado nesta tentativa. Receitas: a data de
+    // emissão foi fixada pelo banco na aquisição (data da assinatura, RDC 1.000/2025, art. 12).
+    doc.prescriber_cpf = a.signer_cpf;
+    const unsigned = await documentPdf(doc, {
+      isDraft: false,
+      electronic: true,
+      issuedAt: new Date(),
+    });
     const cn = identity.session.certificate_subject.match(/CN=([^,\n/]+)/i);
     const prepared = await padesService.preparePdfForSignature(unsigned, {
       signerName: cn ? cn[1].split(':')[0].trim() : doc.physician_name,

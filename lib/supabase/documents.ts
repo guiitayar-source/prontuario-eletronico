@@ -121,8 +121,8 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
         }
       }
       if (doc.status === 'SIGNING') throw new HttpError(409, 'Aguarde a conclusão da assinatura antes de abrir o PDF.');
-      if (doc.kind === 'Receita' && doc.prescription_category && doc.prescription_category !== 'RCE' && doc.prescription_category !== 'SIMPLES')
-        throw new HttpError(422, 'O PDF atual é exclusivo de Receita de Controle Especial ou receita simples. Utilize o receituário físico adequado para a categoria selecionada.');
+      if (doc.kind === 'Receita' && doc.prescription_category && !['RCE', 'RET', 'SIMPLES'].includes(doc.prescription_category))
+        throw new HttpError(422, 'O PDF atual cobre Receita de Controle Especial, receita sujeita à retenção e receita simples. Utilize o receituário físico adequado para a categoria selecionada.');
 
       await withPdfData(adminClient(), clinic, doc);
       let bytes;
