@@ -66,9 +66,9 @@ grep -qx 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321' /tmp/psywrite-local.e
 
 Só siga se aparecer `LOCAL-OK`.
 
-**2. Aplicar as migrações pendentes SÓ no banco local.** São as SNCR e de receita simples da main
-(`20261030023641` a `20261030023750`) e as de assinatura em revisão (`20261030030000` a
-`20261030030400`). O comando usa uma cópia sem a trava;
+**2. Aplicar as migrações pendentes SÓ no banco local.** São as SNCR, de receita simples e da prorrogação da main
+(`20261030023641` a `20261030030624`) e as de assinatura em revisão (`20261030040000` a
+`20261030040400`). O comando usa uma cópia sem a trava;
 os arquivos do repositório não mudam. Depois do merge com a main (30/10/2026), testei a sequência
 num Postgres descartável a partir do estado de produção: aplica sem erro.
 
@@ -80,7 +80,7 @@ num Postgres descartável a partir do estado de produção: aplica sem erro.
 ```
 
 Se o banco local já tiver as da main (por `supabase migration up --local`), aplique só as de
-assinatura: troque o filtro por `'$3 > "20261030024"'`.
+assinatura: troque o filtro por `'$3 > "20261030035"'`.
 
 **3. Conta e clínica locais.** O convite chega no Mailpit local, em http://127.0.0.1:54324.
 

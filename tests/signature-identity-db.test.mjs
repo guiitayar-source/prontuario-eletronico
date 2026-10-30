@@ -8,7 +8,7 @@ const h = createSignatureTrustDb({ baseline: true });
 const clinic = '10000000-0000-4000-8000-000000000001';
 const doctor = '20000000-0000-4000-8000-000000000001';
 const doc = '30000000-0000-4000-8000-000000000001';
-const original = readFileSync(new URL('../supabase/migrations/20261030030000_signature_identity_guard.sql', import.meta.url), 'utf8');
+const original = readFileSync(new URL('../supabase/migrations/20261030040000_signature_identity_guard.sql', import.meta.url), 'utf8');
 const guard = "do $$ begin\n raise exception 'Migração de identidade de assinatura em revisão: não aplicar';\nend $$;";
 try {
   assert.equal(original.split(guard).length, 2);

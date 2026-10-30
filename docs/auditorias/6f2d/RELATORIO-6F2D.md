@@ -396,13 +396,14 @@ Migrações que ficam, em ordem, depois de `20261016010000`. Os nomes foram atua
 | `20261030023641_sncr_preparation` | main (PR #10, renomeada no PR #11) | aplicada em produção, segundo o PR #11 |
 | `20261030023733_sncr_rce_issuance` | main | aplicada em produção, segundo o PR #11 |
 | `20261030023750_prescription_simple` | main (PR #11) | aplicada em produção, segundo o PR #11 |
-| `20261030030000_signature_identity_guard` | branch (6B), antes `20261028020000` | travada, não aplicada |
-| `20261030030100_signature_trust_permissions` | branch (6C), antes `20261029010000` | travada, não aplicada |
-| `20261030030200_signature_oauth_attempts` | branch (6D), antes `20261029020000` | travada, não aplicada |
-| `20261030030300_document_signing_attempts` | branch (6E), antes `20261029030000`, adaptada ao modelo da main | travada, não aplicada |
-| `20261030030400_revocation_evidence` | branch (6F.2D), antes `20261029040000` | travada, não aplicada |
+| `20261030030624_sncr_transition_extension` | main (PR #12): `sncr_transition_end()` = 04/03/2027 | aplicada em produção |
+| `20261030040000_signature_identity_guard` | branch (6B), antes `20261028020000` | travada, não aplicada |
+| `20261030040100_signature_trust_permissions` | branch (6C), antes `20261029010000` | travada, não aplicada |
+| `20261030040200_signature_oauth_attempts` | branch (6D), antes `20261029020000` | travada, não aplicada |
+| `20261030040300_document_signing_attempts` | branch (6E), antes `20261029030000`, adaptada ao modelo da main | travada, não aplicada |
+| `20261030040400_revocation_evidence` | branch (6F.2D), antes `20261029040000` | travada, não aplicada |
 
-As migrações da branch foram renomeadas para depois da última aplicada em produção. Elas nunca
+As migrações da branch foram renomeadas (duas vezes, a última depois do PR #12) para depois da última aplicada em produção. Elas nunca
 foram aplicadas, e a `…030300` usa `sncr_rce_emissions`, criada na `20261030023733`.
 
 - A sequência aplica sem erro num Postgres descartável a partir do estado de produção.
