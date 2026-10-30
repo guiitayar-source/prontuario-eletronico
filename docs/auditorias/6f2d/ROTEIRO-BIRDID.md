@@ -66,16 +66,20 @@ grep -qx 'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321' /tmp/psywrite-local.e
 
 Só siga se aparecer `LOCAL-OK`.
 
-**2. Aplicar as migrações em revisão SÓ no banco local.** O comando usa uma cópia sem a trava; os
-arquivos do repositório não mudam. Testei antes com ROLLBACK no stack local: as 7 aplicam sem
-erro.
+**2. Aplicar as migrações pendentes SÓ no banco local.** São as SNCR da main (`20261019*`) e as de
+assinatura em revisão (`20261028020000` a `20261029040000`). O comando usa uma cópia sem a trava;
+os arquivos do repositório não mudam. Depois do merge com a main (30/10/2026), testei a sequência
+num Postgres descartável a partir do estado de produção: aplica sem erro.
 
 ```bash
-{ for f in supabase/migrations/2026102[7-9]*.sql; do
+{ for f in $(ls supabase/migrations/*.sql | awk -F/ '$3 > "20261016010000_z"'); do
     perl -0pe "s/do \\\$\\\$ begin\n raise exception '[^']*não aplicar';\nend \\\$\\\$;//" "$f"; echo;
   done; } | docker exec -i supabase_db_prototipo psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q --single-transaction \
   && echo MIGRACOES-LOCAIS-OK
 ```
+
+Se o banco local já tiver as `20261019*` (por `supabase migration up --local`), aplique só as de
+assinatura: troque o filtro por `'$3 > "20261028"'`.
 
 **3. Conta e clínica locais.** O convite chega no Mailpit local, em http://127.0.0.1:54324.
 

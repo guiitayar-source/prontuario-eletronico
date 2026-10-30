@@ -142,8 +142,8 @@ Decisões do Guilherme (29/10/2026):
 - O caminho seguro é `npm run dev` contra o Supabase local.
 - O Preview da Vercel não tem nenhuma variável (todas são só de Production), e configurá-lo
   levaria as chaves de produção para um banco sem as migrações em revisão.
-- Testei as 7 migrações em revisão no stack local, dentro de uma transação com ROLLBACK: aplicam
-  sem erro.
+- Testei as migrações em revisão no stack local, dentro de uma transação com ROLLBACK: aplicam
+  sem erro. Depois do merge com a main, a sequência que fica foi testada de novo; ver seção 6.
 
 ## 2. Testes
 
@@ -382,3 +382,31 @@ Tempo total do processo: 1,4 s.
   `20261029040000` de evidências) precisam ser aplicadas em produção com o aval do Guilherme.
 - O caminho B do roteiro (fluxo completo com gravação no banco local) é opcional.
 - Não houve deploy, migração remota nem assinatura nova.
+
+## 6. Merge com a main (30/10/2026)
+
+O Guilherme escolheu a opção A: fica o SNCR da main (PR #10). A linha SNCR desta branch saiu,
+resumida em `docs/auditorias/sncr-branch-descartada.md`.
+
+Migrações que ficam, em ordem, depois de `20261016010000`, o estado de produção:
+
+| Migração | Origem | Trava |
+|---|---|---|
+| `20261019010000_sncr_preparation` | main (PR #10), "LOCAL/STAGED ONLY" | sem trava |
+| `20261019020000_sncr_rce_issuance` | main (PR #10) | sem trava |
+| `20261028020000_signature_identity_guard` | branch (6B) | travada |
+| `20261029010000_signature_trust_permissions` | branch (6C) | travada |
+| `20261029020000_signature_oauth_attempts` | branch (6D) | travada |
+| `20261029030000_document_signing_attempts` | branch (6E), adaptada ao modelo da main | travada |
+| `20261029040000_revocation_evidence` | branch (6F.2D) | travada |
+
+- A sequência aplica sem erro num Postgres descartável a partir do estado de produção.
+- `clinical_documents` fica só com as guardas SNCR da main: `sncr_document_guard` e
+  `sncr_rce_lock_document`.
+- A `20261029030000` deixou de depender de `sncr_reservations` e `sncr_document_modality`, que
+  eram da linha da branch. Agora recusa no banco, pelo caminho comum, receita de categoria
+  diferente de RCE ou com RCE eletrônica não cancelada (`sncr_rce_emissions`).
+- Nada disso foi aplicado em produção. Continua valendo a análise pré-voo: a `20261029030000`
+  retira de `service_role` o INSERT direto em `digital_signatures`. Ela só pode ir junto com o
+  deploy do código desta branch.
+
