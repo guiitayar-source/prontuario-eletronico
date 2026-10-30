@@ -14,7 +14,7 @@ import {
   signatureProviderLabel,
 } from '@/lib/signature/providers';
 import { prescriptionCategories, prescriptionSigningBlock, type PrescriptionCategory } from '@/lib/sncr/policy';
-import { RceFieldsEditor, RcePanel } from './rce-panel';
+import { RceFieldsEditor, RcePanel, useRceTestEnabled } from './rce-panel';
 import { rceStateLabels } from '@/lib/sncr/rce';
 export function DocumentEditor({
   docs,
@@ -24,6 +24,7 @@ export function DocumentEditor({
   prescription?: boolean;
 }) {
   const ai = useFeature('ia');
+  const rceTest = useRceTestEnabled();
   const [choosingProvider, setChoosingProvider] = useState(false);
   // Validação expirada com a página aberta: revalida direto no mesmo provedor.
   const expiredProvider = isSignatureProviderId(docs.signatureExpired)
@@ -38,6 +39,8 @@ export function DocumentEditor({
   const category = d.prescription_category || 'RCE';
   const signingBlock = isRecipe ? prescriptionSigningBlock(category) : null;
   const noun = prescription ? 'receita' : 'documento';
+  // Both RCE paths are on screen only while the SNCR test is enabled.
+  const transitionOnly = isRecipe && category === 'RCE' && rceTest;
 
   function update(fields: Partial<ClinicalDocument>) {
     if (isSigned || isSigning || rceLocked) return;
@@ -319,15 +322,14 @@ export function DocumentEditor({
         />
       </fieldset>
       {isRecipe && category === 'RCE' && !isSigned && (
-        <section aria-label="RCE eletrônica" style={{ margin: '16px 0' }}>
-          <h3>RCE eletrônica (modelo oficial da Anvisa)</h3>
-          <p>
-            A assinatura digital gera a RCE no modelo eletrônico oficial, com um medicamento por
-            receita, CPF (ou passaporte) e endereço do paciente, e endereço e telefone do
-            consultório. Até 03/03/2027 sai sem numeração SNCR (período de transição). O PDF de
-            duas vias continua disponível para impressão e assinatura manual.
+        <section aria-label="RCE eletrônica" className="rce-fields-section">
+          <h3>RCE eletrônica</h3>
+          <p className="rce-flow-note">
+            Campos impressos no modelo oficial da Anvisa: um medicamento por receita. O CPF e o
+            endereço do paciente vêm do cadastro; o endereço e o telefone do consultório, dos seus
+            dados profissionais.
           </p>
-          <fieldset disabled={docs.busy || isSigning || rceLocked} style={{ border: 0, padding: 0 }}>
+          <fieldset disabled={docs.busy || isSigning || rceLocked} style={{ border: 0, padding: 0, margin: 0 }}>
             <RceFieldsEditor docs={docs} />
           </fieldset>
         </section>
@@ -338,10 +340,18 @@ export function DocumentEditor({
           cadastro). Assinatura digital ICP-Brasil; sem numeração SNCR até 03/03/2027.
         </p>
       )}
-      {isRecipe && category === 'RCE' && !isSigned && <RcePanel key={d.id} docs={docs} fieldsShownAbove />}
-      {rceLocked && <button type="button" className="secondary" onClick={() => docs.open(d, undefined, true)}>Duplicar como novo rascunho</button>}
+      {isRecipe && category === 'RCE' && !isSigned && <RcePanel key={d.id} docs={docs} />}
       <div className="editor-actions">
-        {isSigned ? (
+        {rceLocked ? (
+          <>
+            <p className="rce-footer-note">
+              Esta receita segue pelo passo a passo da RCE com numeração acima; o texto ficou fixado.
+            </p>
+            <button type="button" className="secondary" onClick={() => docs.open(d, undefined, true)}>
+              Duplicar como novo rascunho
+            </button>
+          </>
+        ) : isSigned ? (
           <>
             <button
               type="button"
@@ -448,6 +458,8 @@ export function DocumentEditor({
                 <Lock size={14} />
                 {docs.signingDocId === d.id
                   ? `Assinando com ${signatureProviderLabel(docs.signatureSession?.provider)}…`
+                  : transitionOnly
+                    ? 'Assinar sem número SNCR'
                   : docs.signatureSession
                     ? `Finalizar e assinar (${signatureProviderLabel(docs.signatureSession.provider)})`
                     : expiredProvider
@@ -458,6 +470,12 @@ export function DocumentEditor({
           </>
         )}
       </div>
+      {transitionOnly && !rceLocked && (
+        <p className="rce-footer-note">
+          “Assinar sem número SNCR” usa o fluxo de transição, válido até 03/03/2027. Para a RCE com
+          número de teste, siga o passo a passo acima.
+        </p>
+      )}
       <output
         style={{
           display: 'block',

@@ -427,6 +427,7 @@ export function useDocuments(patient: Patient, enabled = true) {
     dirty,
     preview,
     signatureSession,
+    profile,
     signatureExpired: signatureState.expired,
     signatureNotice,
     signingDocId,

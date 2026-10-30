@@ -10,21 +10,37 @@ import {
 } from '@/lib/sncr/rce';
 import type { RceEmission } from '@/lib/sncr/rce-workflow';
 import type { DocumentsController } from './use-documents';
+import type { DocumentProfile } from '@/lib/document-fields';
 
-export function RcePanel({
-  docs,
-  fieldsShownAbove = false,
-}: {
-  docs: DocumentsController;
-  /** Os campos já aparecem no editor (RCE eletrônica de transição); não repetir aqui. */
-  fieldsShownAbove?: boolean;
-}) {
+// One config request per page; the editor footer and the panel share it.
+let testConfig: Promise<boolean> | null = null;
+export function useRceTestEnabled() {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    testConfig ||= apiFetch('/api/sncr/rce?action=config')
+      .then(async (r) => r.ok && (await r.json()).enabled === true)
+      .catch(() => {
+        testConfig = null;
+        return false;
+      });
+    let alive = true;
+    void testConfig.then((v) => alive && setEnabled(v));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return enabled;
+}
+
+// Os campos ficam na seção "RCE eletrônica" do editor; aqui só o passo a passo.
+export function RcePanel({ docs }: { docs: DocumentsController }) {
   const d = docs.draft!;
   const [enabled, setEnabled] = useState(false),
     [e, setEmission] = useState<RceEmission | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [checked, setChecked] = useState(false),
+    [reviewed, setReviewed] = useState(false),
     [preview, setPreview] = useState('');
   const idRef = useRef(''),
     previewRef = useRef('');
@@ -120,6 +136,7 @@ export function RcePanel({
       });
       showEmission(data.emission);
       setChecked(false);
+      setReviewed(false);
       await docs.load();
     } catch (err) {
       setError((err as Error).message);
@@ -140,6 +157,7 @@ export function RcePanel({
       if (previewRef.current) URL.revokeObjectURL(previewRef.current);
       previewRef.current = URL.createObjectURL(await r.blob());
       setPreview(previewRef.current);
+      if (!original) setReviewed(true);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -173,224 +191,316 @@ export function RcePanel({
       setBusy(false);
     }
   }
+  const state = active?.state;
+  const recovering =
+    !!state && ['SIGNING', 'SIGNATURE_UNCERTAIN', 'FINALIZING'].includes(state);
+  const closed = state === 'BLOCKED' || state === 'CANCELLED';
+  // The next action decides the current step; everything before it is done.
+  const current = !active
+    ? 1
+    : state === 'SIGNED'
+      ? 6
+      : recovering || closed
+        ? 5
+        : !reviewed
+          ? 3
+          : !checked
+            ? 4
+            : 5;
+  const missing = active ? [] : missingForRce(fields, docs.profile);
+  const alert = error && (
+    <p role="alert" className="rce-alert">
+      {error} Os dados foram mantidos.
+    </p>
+  );
   return (
-    <section
-      aria-label="RCE eletrônica de teste"
-      style={{
-        border: '1px solid var(--border)',
-        padding: 16,
-        margin: '16px 0',
-      }}
-    >
-      <h3>RCE eletrônica — teste</h3>
-      <p>
-        Homologação, sem validade para dispensação. Use somente um paciente
-        fictício. Nesta versão, uma medicação por receita.
-      </p>
-      {error && active && <p role="alert">{error} Os dados foram mantidos.</p>}
-      {!active ? (
-        <>
-          <p>
-            Preencha os campos que serão impressos no modelo eletrônico. A
-            posologia deve conter todas as orientações ao paciente.
-          </p>
-          <fieldset disabled={busy || docs.busy}>
-            {!fieldsShownAbove && <RceFieldsEditor docs={docs} />}
-            <button className="primary" type="button" onClick={() => void prepare()}>
-              Preparar RCE de teste para revisar
-            </button>
-          </fieldset>
-          {error && <p role="alert">{error} Os dados foram mantidos.</p>}
-          <p>
-            Se faltar numeração,{' '}
-            <Link href="/sncr" target="_blank">
-              conecte o SNCR e solicite um lote de teste
-            </Link>
-            . O rascunho fica nesta tela.
-          </p>
-        </>
-      ) : (
-        <>
-          <p role="status">{rceStateLabels[active.state]}</p>
-          <p>
-            Número: <strong>{active.number}</strong>
-          </p>
-          {e && (
-            <>
-              <p>
-                Prescritor: {e.snapshot.prescriber.name}, CRM{' '}
-                {e.snapshot.prescriber.crm}/{e.snapshot.prescriber.uf}.
-                Paciente: {e.snapshot.patient.name}.
-              </p>
-              <p>
-                {e.snapshot.medicine.name} — {e.snapshot.medicine.concentration}
-                , {e.snapshot.medicine.pharmaceuticalForm}. Quantidade:{' '}
-                {e.snapshot.medicine.quantity}.
-              </p>
-              <p style={{ whiteSpace: 'pre-wrap' }}>
-                {e.snapshot.medicine.dosage}
-              </p>
-              <button
-                className="secondary"
-                type="button"
-                disabled={busy}
-                onClick={() => void showPdf(e.state === 'SIGNED')}
-              >
-                {e.state === 'SIGNED'
-                  ? 'Abrir original assinado de teste'
-                  : 'Revisar PDF de teste'}
-              </button>
-              {e.state === 'SIGNED' && (
-                <button
-                  className="secondary"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    setBusy(true);
-                    setError('');
-                    void action({ action: 'recoverOriginal', id: e.id })
-                      .then(() => showPdf(true))
-                      .catch((err) => setError(err.message))
-                      .finally(() => setBusy(false));
-                  }}
-                >
-                  Recuperar o mesmo original
-                </button>
-              )}
-              {e.state !== 'SIGNED' && e.state !== 'BLOCKED' && (
-                <>
-                  <p>
-                    <a
-                      href="https://sncr-treinamento.anvisa.gov.br/"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Abrir SNCR de treinamento para conferir este número
-                    </a>
-                  </p>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(event) => setChecked(event.target.checked)}
-                    />{' '}
-                    Revisei a RCE e conferi no SNCR que o número acima pertence
-                    ao meu CRM/UF e está disponível.
-                  </label>
-                  <button
-                    className="primary"
-                    type="button"
-                    disabled={busy || !checked}
-                    onClick={() => void sign()}
-                  >
-                    {['SIGNING', 'SIGNATURE_UNCERTAIN', 'FINALIZING'].includes(
-                      e.state,
-                    )
-                      ? 'Recuperar esta emissão'
-                      : 'Assinar RCE de teste'}
-                  </button>
-                </>
-              )}
-              {e.state === 'AWAITING_REVIEW' && (
-                <button
-                  className="secondary"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    if (
-                      !window.confirm(
-                        'Descartar esta preparação? O número será inutilizado.',
-                      )
-                    )
-                      return;
-                    setBusy(true);
-                    void action({ action: 'cancel', id: e.id })
-                      .then(async () => {
-                        showEmission(null);
-                        idRef.current = '';
-                        await docs.load();
-                      })
-                      .catch((err) => setError(err.message))
-                      .finally(() => setBusy(false));
-                  }}
-                >
-                  Descartar preparação
-                </button>
-              )}
-            </>
+    <section aria-label="RCE eletrônica de teste" className="rce-flow">
+      <header className="rce-flow-head">
+        <h3>RCE com numeração SNCR — teste</h3>
+        <p>
+          Homologação, sem validade para dispensação. Só paciente fictício e
+          uma medicação por receita.
+        </p>
+      </header>
+      <ol className="rce-steps">
+        <Step
+          current={current}
+          n={1}
+          title="Dados da RCE"
+          detail={active ? 'Conteúdo fixado para esta emissão.' : 'Campos da seção “RCE eletrônica” acima.'}
+        >
+          {missing.length ? (
+            <div className="rce-missing">
+              <span>Antes de preparar, falta:</span>
+              <ul>
+                {missing.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="rce-step-note">
+              Tudo preenchido. Ao preparar, um número do seu lote fica reservado
+              para esta receita.
+            </p>
           )}
           <button
-            className="secondary"
+            className="primary"
             type="button"
-            disabled={busy}
-            onClick={() => void load().catch((err) => setError(err.message))}
+            disabled={busy || docs.busy || missing.length > 0}
+            onClick={() => void prepare()}
           >
-            Consultar andamento
+            Preparar e reservar número
           </button>
-        </>
+          {alert}
+          <p className="rce-step-note">
+            Sem lote de teste?{' '}
+            <Link href="/sncr" target="_blank">
+              Solicite a numeração no SNCR
+            </Link>
+            .
+          </p>
+        </Step>
+        <Step
+          current={current}
+          n={2}
+          title="Numeração SNCR"
+          detail={
+            active?.number ? (
+              <>
+                Nº <strong>{active.number}</strong>
+              </>
+            ) : (
+              'Reservada do seu lote ao preparar.'
+            )
+          }
+        />
+        <Step current={current} n={3} title="Revisar o PDF" detail="Modelo oficial da Anvisa, com a marca de homologação.">
+          <button className="primary" type="button" disabled={busy} onClick={() => void showPdf(false)}>
+            Revisar PDF de teste
+          </button>
+          {alert}
+        </Step>
+        <Step current={current} n={4} title="Conferir no SNCR" detail="O número precisa estar no seu CRM/UF.">
+          <a
+            className="secondary rce-link-button"
+            href="https://sncr-treinamento.anvisa.gov.br/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Abrir SNCR de treinamento
+          </a>
+          <label className="rce-check">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(event) => setChecked(event.target.checked)}
+            />
+            Revisei a RCE e conferi no SNCR que o número {active?.number} é do
+            meu CRM/UF e está disponível.
+          </label>
+        </Step>
+        <Step
+          current={current}
+          n={5}
+          title="Assinar"
+          detail={
+            docs.signatureSession
+              ? `Certificado conectado: ${docs.signatureSession.provider === 'vidaas' ? 'VIDaaS' : 'Bird ID'}.`
+              : 'Certificado ainda não conectado nesta sessão.'
+          }
+        >
+          {recovering || closed ? (
+            <div className="rce-recovery">
+              <p>{rceStateLabels[state!]}</p>
+              {recovering && (
+                <div className="rce-actions">
+                  <button className="secondary" type="button" disabled={busy} onClick={() => void sign()}>
+                    Recuperar esta emissão
+                  </button>
+                  <button
+                    className="secondary"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void load().catch((err) => setError(err.message))}
+                  >
+                    Consultar andamento
+                  </button>
+                </div>
+              )}
+              <p className="rce-step-note">
+                Para seguir o teste, use “Duplicar como novo rascunho” abaixo:
+                a cópia recebe outro número.
+              </p>
+            </div>
+          ) : !docs.signatureSession ? (
+            <>
+              <p className="rce-step-note">
+                Conecte o Bird ID logo antes de assinar: a sessão vale poucos
+                minutos.
+              </p>
+              <button
+                className="primary"
+                type="button"
+                disabled={busy || docs.busy}
+                onClick={() => void docs.connectSignature('birdid')}
+              >
+                Conectar Bird ID
+              </button>
+            </>
+          ) : (
+            <button className="primary" type="button" disabled={busy || !checked} onClick={() => void sign()}>
+              Assinar RCE de teste
+            </button>
+          )}
+          {alert}
+        </Step>
+        <Step current={current} n={6} title="Original assinado" detail={state === 'SIGNED' ? rceStateLabels.SIGNED : undefined}>
+          <div className="rce-actions">
+            <button className="primary" type="button" disabled={busy} onClick={() => void showPdf(true)}>
+              Abrir original assinado
+            </button>
+            <button
+              className="secondary"
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                setError('');
+                void action({ action: 'recoverOriginal', id: e!.id })
+                  .then(() => showPdf(true))
+                  .catch((err) => setError(err.message))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              Recuperar o mesmo original
+            </button>
+          </div>
+          {alert}
+        </Step>
+      </ol>
+      {state === 'AWAITING_REVIEW' && (
+        <button
+          className="text-button rce-discard"
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            if (!window.confirm('Descartar esta preparação? O número será inutilizado.')) return;
+            setBusy(true);
+            void action({ action: 'cancel', id: e!.id })
+              .then(async () => {
+                showEmission(null);
+                idRef.current = '';
+                setReviewed(false);
+                await docs.load();
+              })
+              .catch((err) => setError(err.message))
+              .finally(() => setBusy(false));
+          }}
+        >
+          Descartar preparação (o número não volta)
+        </button>
       )}
       {preview && (
-        <>
-          <iframe
-            title="RCE de teste"
-            src={preview}
-            style={{
-              width: '100%',
-              height: 600,
-              border: '1px solid var(--border)',
-            }}
-          />
-          <a href={preview} download="rce-teste.pdf">
-            Baixar PDF de teste
+        <div className="rce-preview">
+          <iframe title="RCE de teste" src={preview} />
+          <a href={preview} download={state === 'SIGNED' ? 'rce-teste-assinada.pdf' : 'rce-teste.pdf'}>
+            Baixar este PDF
           </a>
-        </>
+        </div>
       )}
     </section>
   );
+}
+
+function Step({
+  n,
+  current,
+  title,
+  detail,
+  children,
+}: {
+  n: number;
+  current: number;
+  title: string;
+  detail?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  const state = n < current ? 'done' : n === current ? 'current' : 'pending';
+  return (
+    <li className="rce-step" data-state={state} aria-current={n === current ? 'step' : undefined}>
+      <span className="rce-step-marker" aria-hidden="true">
+        {n < current ? '✓' : n}
+      </span>
+      <div className="rce-step-content">
+        <span className="rce-step-title">{title}</span>
+        {detail && <span className="rce-step-detail">{detail}</span>}
+        {n === current && children && <div className="rce-step-body">{children}</div>}
+      </div>
+    </li>
+  );
+}
+
+/** O que falta antes de preparar; mesmas regras que o servidor confere. */
+export function missingForRce(
+  fields: ReturnType<typeof emptyRceFields>,
+  profile: DocumentProfile,
+) {
+  const out: string[] = [];
+  try {
+    validateRceFields(fields);
+  } catch (err) {
+    out.push((err as Error).message + ' (seção “RCE eletrônica”)');
+  }
+  if (!profile.letterhead_address?.trim() || !profile.letterhead_phone?.trim())
+    out.push('Endereço e telefone do consultório (Ajustes › Meus dados profissionais)');
+  if (!profile.cpf)
+    out.push('Seu CPF, gravado ao conectar o certificado (Ajustes › Assinatura digital)');
+  return out;
 }
 
 /** Campos do modelo eletrônico oficial da RCE (um medicamento por receita). */
 export function RceFieldsEditor({ docs }: { docs: DocumentsController }) {
   const d = docs.draft!;
   const fields = d.rce_fields || emptyRceFields();
+  type Key = keyof typeof fields;
+  const input = (key: Key, label: string, hint?: string) => (
+    <label key={key} className="rce-field">
+      <span>{label}</span>
+      <input
+        value={fields[key]}
+        maxLength={key === 'uf' ? 2 : 200}
+        placeholder={hint}
+        onChange={(event) =>
+          docs.setDraft({
+            ...d,
+            rce_fields: {
+              ...fields,
+              [key]: key === 'uf' ? event.target.value.toUpperCase() : event.target.value,
+            },
+          })
+        }
+      />
+    </label>
+  );
   return (
-    <>
-        {(
-          [
-            ['crm', 'Seu CRM'],
-            ['uf', 'UF do CRM'],
-            ['passport', 'Passaporte, apenas se o paciente não tiver CPF'],
-            ['medicine', 'Medicamento'],
-            ['concentration', 'Concentração'],
-            ['pharmaceuticalForm', 'Forma farmacêutica'],
-            ['quantity', 'Quantidade'],
-          ] as const
-        ).map(([key, label]) => (
-          <label key={key}>
-            {label}
-            <input
-              value={fields[key]}
-              maxLength={key === 'uf' ? 2 : 200}
-              onChange={(event) =>
-                docs.setDraft({
-                  ...d,
-                  rce_fields: {
-                    ...fields,
-                    [key]:
-                      key === 'uf'
-                        ? event.target.value.toUpperCase()
-                        : event.target.value,
-                  },
-                })
-              }
-            />
-          </label>
-        ))}
-        <label>
-          Posologia e orientações
+    <div className="rce-fields">
+      <div className="rce-field-group">
+        <h4>Medicamento</h4>
+        <div className="rce-field-row rce-field-row-medicine">
+          {input('medicine', 'Nome', 'Ex.: Donaren')}
+          {input('concentration', 'Concentração', 'Ex.: 50 mg')}
+        </div>
+        <div className="rce-field-row">
+          {input('pharmaceuticalForm', 'Forma farmacêutica', 'Ex.: Comprimido')}
+          {input('quantity', 'Quantidade', 'Ex.: 60 (sessenta) comprimidos')}
+        </div>
+        <label className="rce-field">
+          <span>Posologia e orientações</span>
           <textarea
             value={fields.dosage}
             maxLength={10000}
+            placeholder="Ex.: Tomar 1 comprimido à noite."
             onChange={(event) =>
               docs.setDraft({
                 ...d,
@@ -399,6 +509,15 @@ export function RceFieldsEditor({ docs }: { docs: DocumentsController }) {
             }
           />
         </label>
-    </>
+      </div>
+      <div className="rce-field-group">
+        <h4>Prescritor e paciente</h4>
+        <div className="rce-field-row rce-field-row-crm">
+          {input('crm', 'Seu CRM')}
+          {input('uf', 'UF')}
+          {input('passport', 'Passaporte do paciente', 'Só se o paciente não tiver CPF')}
+        </div>
+      </div>
+    </div>
   );
 }
