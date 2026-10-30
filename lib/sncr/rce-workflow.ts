@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import { padesService } from '../signature/pades-service.ts';
-import type { PreparedPdf, SignatureResult } from '../signature/types.ts';
+import type {
+  PadesVerificationOptions,
+  PreparedPdf,
+  SignatureResult,
+} from '../signature/types.ts';
 import { rcePdf } from './rce-pdf.ts';
 import { type RceSnapshot } from './rce.ts';
 
@@ -125,6 +129,11 @@ export async function signRce(params: {
   getSigner: () => Promise<RceSigner>;
   now?: () => Date;
   numberCheckMode?: 'prescriber_checked' | 'simulated';
+  /** LCR/OCSP from the server at signing time; absent in offline tests. */
+  revocation?: Pick<
+    PadesVerificationOptions,
+    'revocationEvidenceProvider' | 'onRevocationFetch' | 'onRevocationEvidence'
+  >;
 }): Promise<RceEmission> {
   const { repository: repo, artifacts, getSigner } = params;
   const acquisition = await repo.acquire(
@@ -228,9 +237,15 @@ export async function signRce(params: {
       prepared,
       signature.cmsSignatureBase64,
     );
-    verification = await padesService.verifyPadesSignature(signed);
+    // Same rule as the other prescriptions: a known revocation or an expired
+    // certificate blocks; without an answer from the CA it stays INDETERMINATE.
+    verification = await padesService.verifyPadesSignature(signed, {
+      validationContext: 'LIVE_ISSUANCE',
+      ...params.revocation,
+    });
     if (
       !verification.isValid ||
+      !verification.assessment.issuanceAllowed ||
       verification.signerCpf !== meta.signerCpf ||
       verification.certificateFingerprint !== meta.signerFingerprint ||
       !verification.signedAt ||

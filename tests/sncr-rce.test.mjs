@@ -442,3 +442,31 @@ test('the bucket accepts the CMS artifact the RCE stores before embedding it', a
   assert.match(sql, /array_append\(allowed_mime_types, 'application\/json'\)/);
   assert.match(sql, /id = 'clinical-files'/);
 });
+test('signing checks revocation like the other prescriptions (LIVE_ISSUANCE + server provider)', async () => {
+  const local = await localRceDatabase();
+  const original = padesService.verifyPadesSignature;
+  const seen = [];
+  const provider = { collect: async () => [] };
+  padesService.verifyPadesSignature = async (pdf, options) => {
+    seen.push(options);
+    return original.call(padesService, pdf, options);
+  };
+  try {
+    await local.addNumbers();
+    const e = await local.reserve();
+    const signed = await signRce({
+      repository: local.repo(e.id),
+      artifacts: memoryArtifacts(),
+      reviewedHash: e.snapshot_hash,
+      numberChecked: true,
+      getSigner: (await mockSigner()).get,
+      revocation: { revocationEvidenceProvider: provider },
+    });
+    assert.equal(signed.state, 'SIGNED');
+    assert.equal(seen[0]?.validationContext, 'LIVE_ISSUANCE');
+    assert.equal(seen[0]?.revocationEvidenceProvider, provider);
+  } finally {
+    padesService.verifyPadesSignature = original;
+    await local.db.close();
+  }
+});
