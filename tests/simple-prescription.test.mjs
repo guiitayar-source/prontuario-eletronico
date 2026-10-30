@@ -24,11 +24,13 @@ describe('receita simples na política', () => {
       assert.equal(prescriptionSigningBlock('SIMPLES', now), null);
   });
 
-  it('RCE e notificações continuam sob a política SNCR da main', () => {
-    assert.equal(prescriptionSigningBlock('RCE', T('2026-10-29T12:00:00Z')), null);
-    assert.match(prescriptionSigningBlock('RCE', T('2026-10-30T03:00:00Z')), /SNCR/);
+  it('RCE e RET seguem a transição SNCR; notificações continuam bloqueadas', () => {
+    for (const category of ['RCE', 'RET']) {
+      assert.equal(prescriptionSigningBlock(category, T('2026-10-30T12:00:00Z')), null);
+      assert.equal(prescriptionSigningBlock(category, T('2027-03-04T02:59:59Z')), null);
+      assert.match(prescriptionSigningBlock(category, T('2027-03-04T03:00:00Z')), /SNCR/);
+    }
     assert.match(prescriptionSigningBlock('NRA', T('2026-10-29T12:00:00Z')), /SNCR/);
-    assert.ok(prescriptionSigningBlock('RET', T('2026-10-29T12:00:00Z')));
   });
 
   it('é categoria do documento, mas nunca entra num pedido de numeração SNCR', () => {
@@ -69,7 +71,7 @@ describe('receita simples no PDF', () => {
   it('notificação continua sem PDF eletrônico', async () => {
     await assert.rejects(
       () => documentPdf({ ...base, prescription_category: 'NRA' }, { isDraft: false }),
-      /exclusivo de Receita de Controle Especial ou receita simples/,
+      /Receita de Controle Especial, receita sujeita à retenção e receita simples/,
     );
   });
 });

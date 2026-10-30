@@ -248,10 +248,16 @@ test('cutoff uses São Paulo date; notifications never use legacy RCE signature'
     prescriptionSigningBlock('RCE', new Date('2027-03-04T03:00:00Z')),
     /04\/03\/2027/,
   );
-  for (const category of ['NRA', 'NRB', 'NRB2', 'NRR', 'NRT', 'RET'])
+  for (const category of ['NRA', 'NRB', 'NRB2', 'NRR', 'NRT'])
     assert.ok(
       prescriptionSigningBlock(category, new Date('2026-10-19T12:00:00Z')),
     );
+  // RET tem fluxo próprio: segue o mesmo prazo de transição da RCE.
+  assert.equal(prescriptionSigningBlock('RET', new Date('2026-10-30T12:00:00Z')), null);
+  assert.match(
+    prescriptionSigningBlock('RET', new Date('2027-03-04T03:00:00Z')),
+    /04\/03\/2027/,
+  );
 });
 test('receita simples não depende do SNCR nem entra na numeração', () => {
   for (const at of ['2026-10-19T12:00:00Z', '2026-10-30T03:00:00Z', '2027-06-01T12:00:00Z'])
