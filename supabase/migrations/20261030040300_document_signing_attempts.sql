@@ -176,9 +176,10 @@ begin
  if not found then raise exception 'Usuário sem autorização médica.' using errcode='42501'; end if;
  if d.version<>p_version then raise exception 'Versão documental alterada.' using errcode='40001'; end if;
  -- Receita com RCE eletrônica (reservada ou assinada) segue o fluxo SNCR da main; categorias
- -- além de RCE e receita simples não têm modelo eletrônico neste fluxo (lib/sncr/policy.ts).
+ -- além de RCE, RET e receita simples (notificações) não têm modelo eletrônico neste fluxo
+ -- (lib/sncr/policy.ts). O prazo da transição SNCR é conferido em sncr_document_guard.
  if exists(select 1 from public.sncr_rce_emissions where document_id=d.id and state<>'CANCELLED') or
-  (d.kind='Receita' and coalesce(d.prescription_category,'RCE') not in ('RCE','SIMPLES')) then
+  (d.kind='Receita' and coalesce(d.prescription_category,'RCE') not in ('RCE','RET','SIMPLES')) then
   raise exception 'Receita desta categoria ou com RCE eletrônica segue o fluxo SNCR.' using errcode='23514';
  end if;
  select * into a from public.document_signing_attempts where clinic_id=p_clinic and user_id=p_user and idempotency_key=p_key for update;
@@ -226,7 +227,10 @@ begin
    end if;
    if d.status not in ('DRAFT','FINALIZED','SIGNATURE_FAILED') or d.signed_pdf_path is not null then
     raise exception 'Documento indisponível para aquisição.' using errcode='40001'; end if;
-   if d.document_date is null then
+   -- Receita: a data de emissão é a da assinatura (RDC 1.000/2025, art. 12), fixada aqui,
+   -- antes do instantâneo que congela o documento.
+   if d.document_date is null or
+    (d.kind='Receita' and d.document_date is distinct from (now() at time zone 'America/Sao_Paulo')::date) then
     update public.clinical_documents set document_date=(now() at time zone 'America/Sao_Paulo')::date where id=d.id returning * into d;
    end if;
    insert into public.document_signing_attempts(clinic_id,document_id,document_version,user_id,idempotency_key,session_id,provider,signer_cpf,certificate_fingerprint,certificate_raw,document_snapshot,state,owner_token,lease_until,storage_path)

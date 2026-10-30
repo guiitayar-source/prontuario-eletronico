@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { PDFDocument } from 'pdf-lib';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
@@ -576,10 +577,10 @@ try {
     assert.equal(f.signatures().length, 0);
     assert.equal(f.doc().status, 'SIGNING');
   });
-  // Modelo da main: categoria em prescription_category (RCE por padrão) e RCE eletrônica em
-  // sncr_rce_emissions. A política por data (lib/sncr/policy.ts) é da aplicação; aqui só o banco.
-  for (const category of ['RET', 'NRA', 'NRB2'])
-    await test(`receita ${category} não adquire pelo caminho comum SQL`, async () => {
+  // Categorias (lib/sncr/policy.ts): notificações seguem bloqueadas até a integração SNCR; RCE e
+  // RET assinam até o fim da transição (sncr_transition_end); receita simples, sempre.
+  for (const category of ['NRA', 'NRB2', 'NRT'])
+    await test(`notificação ${category} não adquire pelo caminho comum SQL`, async () => {
       const f = await fixture({ kind: 'Receita', text: 'MED001 - Sintetico' });
       h.sql(`update clinical_documents set prescription_category='${category}' where id='${f.documentId}';`);
       await assert.rejects(
@@ -590,6 +591,9 @@ try {
       assert.equal(f.calls(), 0);
       assert.equal(f.doc().status, 'DRAFT');
     });
+  await test('fim da transição SNCR no banco: 04/03/2027 é o primeiro dia bloqueado', () => {
+    assert.equal(h.sql('select public.sncr_transition_end()::text;'), '2027-03-04');
+  });
   // Receita simples: assinatura independente do SNCR, em qualquer data (decisão do titular).
   await test('receita simples adquire e conclui pelo caminho comum, em qualquer data', async () => {
     const f = await fixture({ kind: 'Receita', text: 'MED001 - Sintetico' });
@@ -600,20 +604,53 @@ try {
     assert.equal(f.signatures()[0].verification_status, 'UNVERIFIED');
     assert.equal(f.calls(), 1);
   });
-  await test('receita RCE pelo caminho comum segue o marco SNCR de 30/10/2026 da main', async () => {
-    const f = await fixture({ kind: 'Receita', text: 'MED001 - Sintetico' });
-    const brasilia = h.sql("select ((now() at time zone 'America/Sao_Paulo')::date>='2026-10-30')::text;");
-    const acquire = () => asyncSql(statement(f.args('acquire', randomUUID(), f.acquireData)));
-    if (brasilia === 'true') {
-      await assert.rejects(acquire, /SNCR/);
-      assert.equal(f.attempts().length, 0);
-      assert.equal(f.doc().status, 'DRAFT');
-    } else {
-      await acquire();
-      assert.equal(f.attempts().length, 1);
-      assert.equal(f.doc().status, 'SIGNING');
-    }
+  const brasiliaToday = () =>
+    h.sql("select ((now() at time zone 'America/Sao_Paulo')::date)::text;");
+  const prepareRx = (f, category, extra = '') =>
+    h.sql(`update clinical_documents set prescription_category='${category}',document_date='2026-10-01'${extra} where id='${f.documentId}';
+      update patients set dob='1990-11-15',gender='Feminino',zip_code='01000-000' where clinic_id='${f.clinicId}';
+      update document_profiles set letterhead_address='Av. Sintética, 200 - Cidade Teste - SP',letterhead_phone='(11) 0000-0000' where clinic_id='${f.clinicId}';`);
+  const signedPdf = async (f) => PDFDocument.load([...f.files.values()][0]);
+  await test('RCE eletrônica: modelo oficial, sem número SNCR, data de emissão = data da assinatura', async () => {
+    const f = await fixture({ kind: 'Receita', text: 'Clonazepam 2 mg' });
+    prepareRx(
+      f,
+      'RCE',
+      `,rce_fields='{"crm":"12345","uf":"SP","passport":"","medicine":"Clonazepam","concentration":"2 mg","pharmaceuticalForm":"Comprimido","quantity":"30 comprimidos","dosage":"1 comprimido à noite"}'::jsonb`,
+    );
+    await f.sign();
+    assert.equal(f.doc().status, 'SIGNED');
+    assert.equal(f.doc().document_date, brasiliaToday());
+    const pdf = await signedPdf(f);
+    assert.equal(pdf.getTitle(), 'Receita de Controle Especial');
+    assert.equal(pdf.getPageCount(), 1);
+    assert.equal(f.calls(), 1);
+  });
+  await test('RET eletrônica: duas vias com idade e sexo, data de emissão = data da assinatura', async () => {
+    const f = await fixture({ kind: 'Receita', text: 'Amoxicilina 500 mg - 8/8 h por 7 dias' });
+    prepareRx(f, 'RET');
+    await f.sign();
+    assert.equal(f.doc().status, 'SIGNED');
+    assert.equal(f.doc().document_date, brasiliaToday());
+    const pdf = await signedPdf(f);
+    assert.equal(pdf.getTitle(), 'Receituário sujeito à retenção');
+    assert.equal(pdf.getPageCount(), 2);
+    assert.equal(f.calls(), 1);
+  });
+  await test('RET sem data de nascimento é barrada antes do HSM', async () => {
+    const f = await fixture({ kind: 'Receita', text: 'Amoxicilina 500 mg' });
+    prepareRx(f, 'RET');
+    h.sql(`update patients set dob=null where clinic_id='${f.clinicId}';`);
+    await assert.rejects(() => f.sign(), (e) => e.status === 503);
     assert.equal(f.calls(), 0);
+    assert.equal(f.signatures().length, 0);
+    assert.equal(f.attempts()[0].state, 'PREPARATION_FAILED');
+  });
+  await test('documento não-receita conserva a data escolhida', async () => {
+    const f = await fixture();
+    h.sql(`update clinical_documents set document_date='2026-10-01' where id='${f.documentId}';`);
+    await f.sign();
+    assert.equal(f.doc().document_date, '2026-10-01');
   });
   await test('identidade alterada durante HSM não conclui nem libera outra assinatura', async () => {
     const f = await fixture();

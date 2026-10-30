@@ -111,6 +111,7 @@ export function createSignatureTrustDb({ baseline = false, oauth = false, attemp
       alter default privileges in schema public grant all on sequences to anon,authenticated,service_role;`);
     const guards = [
       "do $$ begin\n raise exception 'Migração de identidade de assinatura em revisão: não aplicar';\nend $$;",
+      "do $$ begin\n raise exception 'Migração de receitas RCE/RET em revisão: não aplicar';\nend $$;",
     ];
     const history = [];
     for (const file of readdirSync(migrations)
