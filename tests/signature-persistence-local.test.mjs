@@ -641,7 +641,11 @@ try {
     const f = await fixture({ kind: 'Receita', text: 'Amoxicilina 500 mg' });
     prepareRx(f, 'RET');
     h.sql(`update patients set dob=null where clinic_id='${f.clinicId}';`);
-    await assert.rejects(() => f.sign(), (e) => e.status === 503);
+    await assert.rejects(
+      () => f.sign(),
+      (e) => e.status === 503 && /data de nascimento/.test(e.message),
+      'o motivo do PDF chega à tela',
+    );
     assert.equal(f.calls(), 0);
     assert.equal(f.signatures().length, 0);
     assert.equal(f.attempts()[0].state, 'PREPARATION_FAILED');
