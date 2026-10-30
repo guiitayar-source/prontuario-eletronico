@@ -24,7 +24,10 @@ import * as asn1js from 'asn1js';
 
 import { ICP_BRASIL_ROOTS } from './icp-brasil-certs.ts';
 import type { ParsedX509Node } from './icp-chain.ts';
-import { extractCertCrlDistributionPointUris } from './revocation-validator.ts';
+import {
+  extractCertCrlDistributionPointUris,
+  parseCrlDer,
+} from './revocation-validator.ts';
 import type {
   CollectedRevocationEvidence,
   PadesVerificationOptions,
@@ -68,7 +71,10 @@ export interface RevocationFetchPolicy {
   allowedPorts: readonly number[];
   maxCrlBytes: number;
   maxOcspBytes: number;
+  /** Tempo por requisição OCSP (resposta de poucos KB). */
   requestTimeoutMs: number;
+  /** Tempo por requisição de LCR (podem ter centenas de KB a alguns MB). */
+  crlRequestTimeoutMs: number;
   /** Prazo total de uma coleta (todas as requisições da cadeia). */
   collectTimeoutMs: number;
   maxRedirects: number;
@@ -89,10 +95,13 @@ export function defaultRevocationFetchPolicy(
   return {
     blockedHostSuffixes: blocked,
     allowedPorts: [80, 443],
-    maxCrlBytes: 10 * 1024 * 1024,
+    // 4 MB acompanha CRL_MAX_ASN1_NODES (~9 bytes por elemento numa LCR real); acima disso a
+    // análise passaria de ~600 MB de heap numa função serverless.
+    maxCrlBytes: 4 * 1024 * 1024,
     maxOcspBytes: 64 * 1024,
     requestTimeoutMs: 4000,
-    collectTimeoutMs: 12000,
+    crlRequestTimeoutMs: 10000,
+    collectTimeoutMs: 15000,
     maxRedirects: 2,
     maxUrlsPerCertificate: 3,
     maxCacheSeconds: 6 * 60 * 60,
@@ -213,8 +222,17 @@ export interface RevocationHttpRequest {
 export interface RevocationHttpResponse {
   status: number;
   location?: string;
+  /** Content-Encoding recebido; nada é pedido comprimido (sem Accept-Encoding). */
+  contentEncoding?: string;
   body: Buffer;
 }
+
+const sizeLabel = (bytes: number) =>
+  bytes >= 1024 * 1024
+    ? `${+(bytes / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.round(bytes / 1024)} KB`;
+const tooLarge = (max: number) =>
+  new Error(`resposta excede ${sizeLabel(max)}`);
 
 export type RevocationTransport = (
   request: RevocationHttpRequest,
@@ -307,7 +325,7 @@ export function createNodeRevocationTransport(
           const declared = Number(res.headers['content-length']);
           if (Number.isFinite(declared) && declared > req.maxBytes) {
             res.destroy();
-            finish(new Error('resposta grande demais'));
+            finish(tooLarge(req.maxBytes));
             return;
           }
           const chunks: Buffer[] = [];
@@ -316,20 +334,24 @@ export function createNodeRevocationTransport(
             size += chunk.length;
             if (size > req.maxBytes) {
               res.destroy();
-              finish(new Error('resposta grande demais'));
+              finish(tooLarge(req.maxBytes));
               return;
             }
             chunks.push(chunk);
           });
           res.on('end', () =>
-            finish(null, { status, body: Buffer.concat(chunks) }),
+            finish(null, {
+              status,
+              contentEncoding: res.headers['content-encoding'],
+              body: Buffer.concat(chunks),
+            }),
           );
           res.on('error', (e) => finish(e));
         },
       );
       const timer = setTimeout(() => {
         outgoing.destroy();
-        finish(new Error('tempo esgotado'));
+        finish(new Error(`tempo esgotado (${req.timeoutMs / 1000} s)`));
       }, req.timeoutMs);
       const onAbort = () => {
         outgoing.destroy();
@@ -380,15 +402,33 @@ function toArrayBuffer(buf: Buffer): ArrayBuffer {
   ) as ArrayBuffer;
 }
 
-function readCrlWindow(der: Buffer): { nextUpdate?: Date } | null {
-  try {
-    const asn1 = asn1js.fromBER(toArrayBuffer(der));
-    if (asn1.offset === -1 || asn1.offset !== der.length) return null;
-    const crl = new pkijs.CertificateRevocationList({ schema: asn1.result });
-    return { nextUpdate: crl.nextUpdate?.value };
-  } catch {
-    return null;
+const PEM_CRL =
+  /^-----BEGIN X509 CRL-----\r?\n([A-Za-z0-9+/=\r\n]+)-----END X509 CRL-----\s*$/;
+
+/** DER da LCR; aceita também PEM ("X509 CRL"). Outros formatos são recusados com a causa. */
+function crlDerFromBody(body: Buffer): Buffer | { error: string } {
+  if (body.length > 0 && body[0] === 0x30) return body;
+  const text = body.subarray(0, 64).toString('latin1');
+  if (text.startsWith('-----BEGIN')) {
+    const pem = body.toString('latin1').match(PEM_CRL);
+    return pem
+      ? Buffer.from(pem[1].replace(/\s+/g, ''), 'base64')
+      : { error: 'formato: PEM que não é "X509 CRL"' };
   }
+  if (body[0] === 0x1f && body[1] === 0x8b)
+    return { error: 'formato: conteúdo gzip sem Content-Encoding' };
+  if (/^\s*</.test(text)) return { error: 'formato: HTML em vez de LCR' };
+  return { error: 'formato: não é LCR DER nem PEM' };
+}
+
+/**
+ * Lê a validade da LCR com o mesmo analisador (e limites) do revocation-validator. A análise fica
+ * em memória ligada ao Buffer devolvido, que é o mesmo entregue ao validador: uma análise só.
+ */
+function readCrlWindow(der: Buffer): { nextUpdate?: Date } | { error: string } {
+  const parsed = parseCrlDer(der, der);
+  if ('error' in parsed) return { error: `formato: ${parsed.error}` };
+  return { nextUpdate: parsed.crl.nextUpdate?.value };
 }
 
 function readOcspWindow(
@@ -540,8 +580,10 @@ export function createOnlineRevocationProvider(
         continue;
       }
       if (response.status !== 200) throw new Error(`HTTP ${response.status}`);
-      if (response.body.length > base.maxBytes)
-        throw new Error('resposta grande demais');
+      const encoding = response.contentEncoding?.trim().toLowerCase();
+      if (encoding && encoding !== 'identity')
+        throw new Error(`formato: Content-Encoding ${encoding} não suportado`);
+      if (response.body.length > base.maxBytes) throw tooLarge(base.maxBytes);
       return response.body;
     }
   }
@@ -590,18 +632,20 @@ export function createOnlineRevocationProvider(
               method: 'GET',
               accept: 'application/pkix-crl, application/x-pkcs7-crl, */*',
               maxBytes: policy.maxCrlBytes,
-              timeoutMs: policy.requestTimeoutMs,
+              timeoutMs: policy.crlRequestTimeoutMs,
               signal: controller.signal,
             }).then(
-              (der) => {
-                const window = readCrlWindow(der);
-                if (!window) {
+              (body) => {
+                const der = crlDerFromBody(body);
+                const window = Buffer.isBuffer(der) ? readCrlWindow(der) : der;
+                if (!Buffer.isBuffer(der) || 'error' in window) {
                   attempts.push({
                     kind: 'CRL',
                     url,
                     subject,
                     outcome: 'ERROR',
-                    reason: 'LCR ilegível',
+                    reason:
+                      'error' in window ? window.error : 'formato inválido',
                   });
                   return null;
                 }

@@ -21,6 +21,10 @@ import {
 } from '../lib/signature/revocation-fetch.ts';
 import { OID_KP_TIME_STAMPING } from '../lib/signature/rfc3161-timestamp.ts';
 import {
+  CRL_MAX_ASN1_NODES,
+  parseCrlDer,
+} from '../lib/signature/revocation-validator.ts';
+import {
   padesService,
   createSampleUnsignedPdf,
   createSyntheticCertificate,
@@ -267,6 +271,49 @@ const crlOf = (
     revokedList,
   });
 
+// LCR grande montada direto em ASN.1 (o pkijs reanalisa a LCR ao assinar, com o limite padrão
+// de 10 mil elementos, e não consegue gerá-la). Assinatura RSA/SHA-256 verdadeira da AC.
+async function createLargeCrl(issuer, serials, revoked = []) {
+  const time = (d) => new asn1js.UTCTime({ valueDate: d });
+  const alg = () =>
+    new asn1js.Sequence({
+      value: [
+        new asn1js.ObjectIdentifier({ value: '1.2.840.113549.1.1.11' }),
+        new asn1js.Null(),
+      ],
+    });
+  const entry = (serial, date) =>
+    new asn1js.Sequence({
+      value: [new asn1js.Integer({ value: serial }), time(date)],
+    });
+  const tbs = new asn1js.Sequence({
+    value: [
+      new asn1js.Integer({ value: 1 }),
+      alg(),
+      issuer.cert.subject.toSchema(),
+      time(T('2026-05-31T00:00:00Z')),
+      time(T('2026-06-07T00:00:00Z')),
+      new asn1js.Sequence({
+        value: [
+          ...serials.map((n) => entry(n, T('2026-05-01T00:00:00Z'))),
+          ...revoked.map((r) => entry(r.serialNumber, r.revocationDate)),
+        ],
+      }),
+    ],
+  });
+  const tbsDer = tbs.toBER(false);
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    issuer.keyPair.privateKey,
+    tbsDer,
+  );
+  return Buffer.from(
+    new asn1js.Sequence({
+      value: [tbs, alg(), new asn1js.BitString({ valueHex: signature })],
+    }).toBER(false),
+  );
+}
+
 async function serveGoodChain({ withOcsp = false } = {}) {
   const p = await pki();
   routes.clear();
@@ -383,6 +430,28 @@ describe('6F.2D — política de URL', () => {
   });
 });
 
+describe('6F.2D — análise de LCR com limites', () => {
+  it('estrutura com elementos demais é recusada com a causa, sem estourar memória', () => {
+    // SEQUENCE com 600 mil NULLs (2 bytes cada): pouco mais de 1 MB, mas acima do limite.
+    const count = CRL_MAX_ASN1_NODES + 100_000;
+    const content = Buffer.alloc(count * 2);
+    for (let i = 0; i < count; i += 1) content[i * 2] = 0x05;
+    const len = content.length;
+    const header = Buffer.from([
+      0x30,
+      0x83,
+      (len >> 16) & 0xff,
+      (len >> 8) & 0xff,
+      len & 0xff,
+    ]);
+    const r = parseCrlDer(Buffer.concat([header, content]));
+    assert.match(
+      r.error,
+      new RegExp(`mais de ${CRL_MAX_ASN1_NODES} elementos ASN\\.1`),
+    );
+  });
+});
+
 describe('6F.2D — endereços bloqueados', () => {
   it('recusa privados, loopback, link-local, CGNAT, metadados e IPv4 mapeado', () => {
     for (const a of [
@@ -463,8 +532,8 @@ describe('6F.2D — transporte HTTP (servidor local)', () => {
       res.end();
     });
     const transport = localTransport();
-    await assert.rejects(transport(req('/grande')), /grande demais/);
-    await assert.rejects(transport(req('/chunked')), /grande demais/);
+    await assert.rejects(transport(req('/grande')), /resposta excede 1 KB/);
+    await assert.rejects(transport(req('/chunked')), /resposta excede 1 KB/);
   });
   it('tempo esgotado', async () => {
     routes.clear();
@@ -633,7 +702,10 @@ describe('6F.2D — coleta ponta a ponta na verificação PAdES', () => {
     });
     assert.equal(r.revocation.status, 'INDETERMINATE');
     assert.equal(r.assessment.issuanceAllowed, true);
-    assert.ok(attempts.some((a) => a.reason === 'LCR ilegível'));
+    assert.ok(
+      attempts.some((a) => a.reason === 'formato: HTML em vez de LCR'),
+      JSON.stringify(attempts),
+    );
     assert.ok(attempts.some((a) => a.reason === 'HTTP 500'));
 
     const down = createOnlineRevocationProvider({
@@ -810,6 +882,134 @@ describe('6F.2D — coleta ponta a ponta na verificação PAdES', () => {
       verificationTime: T('2026-06-08T00:00:00Z'),
     });
     assert.equal(hitsFor('lcr.ac.test/inter.crl').length, 2);
+  });
+
+  it('regressão 6F.2D: LCR grande (mais de 10 mil elementos ASN.1) é lida e dá GOOD', async () => {
+    // A LCR real da AC Soluti Múltipla v5 (919 KB, 34 mil revogados) estourava o limite padrão
+    // de 10 mil elementos do asn1js e saía como "LCR ilegível".
+    const p = await serveGoodChain();
+    const serials = Array.from({ length: 4000 }, (_, i) => 100000 + i);
+    const big = await createLargeCrl(p.inter, serials);
+    const asn1 = asn1js.fromBER(new Uint8Array(big).buffer);
+    assert.match(
+      asn1.result.error,
+      /node count/,
+      'a fixture precisa passar do limite padrão',
+    );
+    route('lcr.ac.test', '/inter.crl', body('application/pkix-crl', big));
+    const attempts = [];
+    const r = await verify(p.pdf, testProvider(), {
+      validationContext: 'LIVE_ISSUANCE',
+      onRevocationFetch: (a) => attempts.push(...a),
+    });
+    assert.equal(
+      signerResult(r)?.status,
+      'GOOD',
+      JSON.stringify({ attempts, rev: r.revocation }),
+    );
+    assert.equal(r.status, 'VALID');
+    // E a revogação do signatário numa LCR grande continua sendo encontrada.
+    route(
+      'lcr.ac.test',
+      '/inter.crl',
+      body(
+        'application/pkix-crl',
+        await createLargeCrl(p.inter, serials, [
+          { serialNumber: 3, revocationDate: T('2026-05-25T00:00:00Z') },
+        ]),
+      ),
+    );
+    const revoked = await verify(p.pdf, testProvider(), {
+      validationContext: 'LIVE_ISSUANCE',
+    });
+    assert.equal(revoked.assessment.issuanceAllowed, false);
+  });
+
+  it('LCR em PEM é aceita; gzip, Content-Encoding e PEM de outro tipo dizem a causa', async () => {
+    const p = await serveGoodChain();
+    const der = await crlOf(p.inter);
+    const pem = `-----BEGIN X509 CRL-----\n${der
+      .toString('base64')
+      .match(/.{1,64}/g)
+      .join('\n')}\n-----END X509 CRL-----\n`;
+    route(
+      'lcr.ac.test',
+      '/inter.crl',
+      body('application/x-pem-file', Buffer.from(pem)),
+    );
+    let r = await verify(p.pdf, testProvider());
+    assert.equal(signerResult(r)?.status, 'GOOD');
+
+    const { gzipSync } = await import('node:zlib');
+    const cases = [
+      [
+        body('application/pkix-crl', gzipSync(der)),
+        /formato: conteúdo gzip sem Content-Encoding/,
+      ],
+      [
+        (q, res) => {
+          const z = gzipSync(der);
+          res.writeHead(200, {
+            'Content-Encoding': 'gzip',
+            'Content-Length': z.length,
+          });
+          res.end(z);
+        },
+        /formato: Content-Encoding gzip não suportado/,
+      ],
+      [
+        body(
+          'application/x-pem-file',
+          Buffer.from(
+            '-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n',
+          ),
+        ),
+        /formato: PEM que não é "X509 CRL"/,
+      ],
+      [
+        body('application/pkix-crl', Buffer.from('lixo binário')),
+        /formato: não é LCR DER nem PEM/,
+      ],
+      [
+        body('application/pkix-crl', Buffer.concat([der, Buffer.from([0])])),
+        /formato: .*ASN\.1/,
+      ],
+    ];
+    for (const [handler, expected] of cases) {
+      route('lcr.ac.test', '/inter.crl', handler);
+      const attempts = [];
+      r = await verify(p.pdf, testProvider(), {
+        onRevocationFetch: (a) => attempts.push(...a),
+      });
+      assert.ok(
+        attempts.some(
+          (a) => a.url?.endsWith('/inter.crl') && expected.test(a.reason),
+        ),
+        `${expected.source}: ${JSON.stringify(attempts)}`,
+      );
+      assert.notEqual(signerResult(r)?.status, 'GOOD');
+    }
+  });
+
+  it('LCR acima do limite de tamanho: erro diz o limite', async () => {
+    const p = await serveGoodChain();
+    route(
+      'lcr.ac.test',
+      '/inter.crl',
+      body('application/pkix-crl', Buffer.alloc(64 * 1024, 0x30)),
+    );
+    const attempts = [];
+    await verify(
+      p.pdf,
+      testProvider({ policy: { ...testPolicy(), maxCrlBytes: 32 * 1024 } }),
+      {
+        onRevocationFetch: (a) => attempts.push(...a),
+      },
+    );
+    assert.ok(
+      attempts.some((a) => a.reason === 'resposta excede 32 KB'),
+      JSON.stringify(attempts),
+    );
   });
 
   it('cadeia da TSA também é coberta (LCR emitida depois do carimbo)', async () => {

@@ -780,6 +780,58 @@ export interface SingleEvidenceEvaluation {
  * Validates a single CRL (RFC 5280) against a target certificate (`targetNode`) and its verified
  * issuer CA (`issuerNode`) at `referenceTime` / `verificationTime`.
  */
+/**
+ * Limite de elementos ASN.1 ao analisar uma LCR (6F.2D). O padrão do asn1js (10 000) recusa LCRs
+ * reais: a da AC Soluti Múltipla v5 (919 KB, 34 mil revogados) tem cerca de 102 mil elementos e
+ * ocupa ~146 MB de heap durante a análise. 500 mil cobre LCRs de até ~4 MB e limita a memória
+ * mesmo com entrada maliciosa (o tamanho em bytes, sozinho, não limita o número de elementos).
+ */
+export const CRL_MAX_ASN1_NODES = 500_000;
+
+const crlParseCache = new WeakMap<
+  object,
+  { crl: pkijs.CertificateRevocationList } | { error: string }
+>();
+
+/** Analisa uma LCR DER com limites explícitos; o erro diz a causa. */
+export function parseCrlDer(
+  der: Buffer,
+  cacheKey?: object,
+): { crl: pkijs.CertificateRevocationList } | { error: string } {
+  const cached = cacheKey ? crlParseCache.get(cacheKey) : undefined;
+  if (cached) return cached;
+  let result: { crl: pkijs.CertificateRevocationList } | { error: string };
+  const asn1 = asn1js.fromBER(
+    der.buffer.slice(
+      der.byteOffset,
+      der.byteOffset + der.byteLength,
+    ) as ArrayBuffer,
+    { maxNodes: CRL_MAX_ASN1_NODES },
+  );
+  if (!asn1.result || asn1.offset === -1 || asn1.offset !== der.length) {
+    const reason = asn1.result?.error || '';
+    result = {
+      error: /node count/i.test(reason)
+        ? `LCR com mais de ${CRL_MAX_ASN1_NODES} elementos ASN.1 (limite de análise).`
+        : `Falha ao decodificar estrutura ASN.1 DER da CRL X.509${reason ? ` (${reason})` : ''}.`,
+    };
+  } else {
+    try {
+      result = {
+        crl: new pkijs.CertificateRevocationList({ schema: asn1.result }),
+      };
+    } catch (err) {
+      result = {
+        error: `Estrutura CertificateList X.509 inválida: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      };
+    }
+  }
+  if (cacheKey) crlParseCache.set(cacheKey, result);
+  return result;
+}
+
 export async function evaluateCrlForCertificate(params: {
   rawCrl: Buffer | Uint8Array | string;
   targetNode: ParsedX509Node;
@@ -812,34 +864,17 @@ export async function evaluateCrlForCertificate(params: {
     };
   }
 
-  const asn1 = asn1js.fromBER(
-    der.buffer.slice(
-      der.byteOffset,
-      der.byteOffset + der.byteLength,
-    ) as ArrayBuffer,
-  );
-  if (!asn1.result || asn1.offset === -1 || asn1.offset !== der.length) {
+  // A mesma LCR é avaliada contra cada certificado da cadeia; analisa uma vez só.
+  const parsed = parseCrlDer(der, typeof rawCrl === 'string' ? undefined : rawCrl);
+  if ('error' in parsed) {
     return {
       source: 'CRL',
       matchKind: 'INVALID_EVIDENCE',
       subIndication: 'REVOCATION_EVIDENCE_INVALID',
-      error: 'Falha ao decodificar estrutura ASN.1 DER da CRL X.509.',
+      error: parsed.error,
     };
   }
-
-  let crl: pkijs.CertificateRevocationList;
-  try {
-    crl = new pkijs.CertificateRevocationList({ schema: asn1.result });
-  } catch (err) {
-    return {
-      source: 'CRL',
-      matchKind: 'INVALID_EVIDENCE',
-      subIndication: 'REVOCATION_EVIDENCE_INVALID',
-      error: `Estrutura CertificateList X.509 inválida: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    };
-  }
+  const crl = parsed.crl;
 
   // Check if CRL issuer DN matches target certificate's issuer CA DN
   const issuerMatches =

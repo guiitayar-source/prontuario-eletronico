@@ -11,6 +11,7 @@ import type {
   CollectedRevocationEvidence,
   PadesVerificationResult,
 } from './types.ts';
+import { parseCrlDer } from './revocation-validator.ts';
 
 export type RevocationEvidenceChain = 'SIGNER' | 'TSA';
 
@@ -46,15 +47,17 @@ function toArrayBuffer(buf: Buffer): ArrayBuffer {
 function evidenceDates(kind: 'CRL' | 'OCSP', der: Buffer) {
   const iso = (d?: Date) => (d instanceof Date ? d.toISOString() : null);
   try {
-    const asn1 = asn1js.fromBER(toArrayBuffer(der));
     if (kind === 'CRL') {
-      const crl = new pkijs.CertificateRevocationList({ schema: asn1.result });
+      const parsed = parseCrlDer(der, der);
+      if ('error' in parsed) throw new Error(parsed.error);
+      const crl = parsed.crl;
       return {
         this_update: iso(crl.thisUpdate.value),
         next_update: iso(crl.nextUpdate?.value),
         produced_at: null,
       };
     }
+    const asn1 = asn1js.fromBER(toArrayBuffer(der));
     const response = new pkijs.OCSPResponse({ schema: asn1.result });
     const basic = new pkijs.BasicOCSPResponse({
       schema: asn1js.fromBER(
