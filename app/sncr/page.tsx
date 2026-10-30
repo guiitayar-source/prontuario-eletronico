@@ -75,13 +75,19 @@ export default function SncrPreparation() {
     const sessionId = query.get('session_id');
     // Remove the one-use secret immediately; no analytics, logs or storage.
     window.history.replaceState({}, '', '/sncr');
-    const id = sessionStorage.getItem(storageKey) || '';
+    let id = sessionStorage.getItem(storageKey) || '';
     setRequestId(id);
     void (async () => {
       const config = await apiFetch('/api/sncr');
       const status = await config.json();
       if (!config.ok) throw new Error(status.error);
       setEnabled(status.environment === 'hmg');
+      // Another tab (or a lost sessionStorage) must resume the open request.
+      if (!sessionId && status.openRequestId && status.openRequestId !== id) {
+        id = status.openRequestId;
+        sessionStorage.setItem(storageKey, id);
+        setRequestId(id);
+      }
       if (!sessionId) {
         if (id && status.environment === 'hmg') await refresh(id);
         return;

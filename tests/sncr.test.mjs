@@ -12,7 +12,7 @@ import {
 } from '../lib/sncr/client.ts';
 import { prescriptionSigningBlock, sncrTransitionEnd } from '../lib/sncr/policy.ts';
 import { completeNumbering } from '../lib/sncr/workflow.ts';
-import { sncrPreparationConfig } from '../lib/sncr/service.ts';
+import { sncrPreparationConfig, unresolvedStates } from '../lib/sncr/service.ts';
 
 const input = {
   category: 'RCE',
@@ -223,6 +223,17 @@ test('16-digit RCE range returned by homologação on 30/10/2026 is expanded wit
       { numeracoesReceita: ['2610.6-35.000112001'], saldoReceitas: 0 },
     ),
   );
+});
+test('a new tab resumes the same unresolved request the database blocks from repeating', async () => {
+  const sql = await readFile(
+    new URL('../supabase/migrations/20261030023641_sncr_preparation.sql', import.meta.url),
+    'utf8',
+  );
+  const states = sql
+    .match(/sncr_request_unresolved[^;]*state in \(([^)]*)\)/)[1]
+    .match(/'([A-Z_]+)'/g)
+    .map((s) => s.slice(1, -1));
+  assert.deepEqual([...unresolvedStates].sort(), states.sort());
 });
 test('return URL cannot be redirected to untrusted hosts; production requires HTTPS .br', () => {
   assert.match(

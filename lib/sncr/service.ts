@@ -21,6 +21,14 @@ import { completeNumbering, storeParsed } from './workflow.ts';
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const cookieName = 'psywrite_sncr_flow';
+// Same states as the sncr_request_unresolved index.
+export const unresolvedStates = [
+  'AUTH_PENDING',
+  'REQUESTING',
+  'UNKNOWN',
+  'RECEIVED_UNVERIFIED',
+  'CONTRACT_REVIEW',
+];
 const hash = (v: string) => createHash('sha256').update(v).digest('hex');
 function browserSecret(request: Request) {
   return (
@@ -58,11 +66,28 @@ export function sncrPreparationConfig(
 export const sncr = handle(async (request, ctx) => {
   if (!['owner', 'doctor'].includes(ctx.role))
     throw new HttpError(403, 'Apenas prescritores podem utilizar o SNCR.');
-  if (request.method === 'GET' && !new URL(request.url).searchParams.has('id'))
-    return json({
-      environment: process.env.SNCR_ENVIRONMENT === 'hmg' ? 'hmg' : 'disabled',
-      issuanceAvailable: false,
-    });
+  if (request.method === 'GET' && !new URL(request.url).searchParams.has('id')) {
+    const environment =
+      process.env.SNCR_ENVIRONMENT === 'hmg' ? 'hmg' : 'disabled';
+    // The page keeps the request id per tab; a new tab must still find the
+    // unresolved request instead of starting another one.
+    const open =
+      environment === 'hmg'
+        ? check(
+            await adminClient()
+              .from('sncr_numbering_requests')
+              .select('id')
+              .eq('clinic_id', ctx.clinic)
+              .eq('user_id', ctx.user)
+              .eq('environment', 'hmg')
+              .in('state', unresolvedStates)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle(),
+          )
+        : null;
+    return json({ environment, openRequestId: open?.id ?? null, issuanceAvailable: false });
+  }
   const cfg = sncrPreparationConfig(request);
   const admin = adminClient();
   if (request.method === 'GET') {
