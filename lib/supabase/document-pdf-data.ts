@@ -11,12 +11,11 @@ export async function withPdfData(
   if (doc.kind === 'Receita') {
     const { data: p } = await admin
       .from('patients')
-      .select('cpf,street,address_number,complement,neighborhood,city,state')
+      .select('street,address_number,complement,neighborhood,city,state')
       .eq('clinic_id', clinicId)
       .eq('id', doc.patient_id)
       .maybeSingle();
     if (p) {
-      doc.patient_cpf = p.cpf || '';
       doc.patient_address = [
         p.street,
         p.address_number ? `nº ${p.address_number}` : '',

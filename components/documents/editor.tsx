@@ -1,24 +1,21 @@
 'use client';
 import { useState } from 'react';
 import {
-  buildPrescriptionText,
   documentKinds,
   documentTemplate,
-  parsePrescriptionText,
-  prescriptionModalities,
   type ClinicalDocument,
-  type PrescriptionModality,
 } from '@/lib/document-fields';
 import { Download, ShieldCheck, Key, Lock } from 'lucide-react';
 import type { DocumentsController } from './use-documents';
 import { DocumentAiBox } from './ai-box';
 import { useFeature } from '../plan';
-import { rceElectronicTemplate } from '@/lib/sncr/rce-fields';
-import { notificationElectronicTemplate } from '@/lib/sncr/notification-fields';
 import {
   isSignatureProviderId,
   signatureProviderLabel,
 } from '@/lib/signature/providers';
+import { prescriptionCategories, prescriptionSigningBlock, type PrescriptionCategory } from '@/lib/sncr/policy';
+import { RcePanel } from './rce-panel';
+import { rceStateLabels } from '@/lib/sncr/rce';
 export function DocumentEditor({
   docs,
   prescription = false,
@@ -35,23 +32,24 @@ export function DocumentEditor({
   const d = docs.draft;
   if (!d) return null;
   const isSigned = d.status === 'SIGNED' || d.status === 'SUPERSEDED';
-  const reservation=docs.numbering.reservation?.document_id===d.id ? docs.numbering.reservation : null;
-  const controlled=d.kind==='Receita' && parsePrescriptionText(d.text).modality!=='simples';
-  const simulated=!!d.signed_pdf_path?.includes('/sncr-simulations/');
-  const local=docs.numbering.mode==='local-simulation';
-  const frozen=isSigned || d.status==='SIGNING' || !!reservation;
-  const reservationLabels={reserved:'reservada',signing:'assinatura em andamento',uncertain:'resultado incerto — reconciliação necessária',abandoned:'abandonada, com número preservado',signed:'simulação concluída'};
+  const isSigning = d.status === 'SIGNING';
+  const isRecipe = d.kind === 'Receita';
+  const rceLocked = !!d.rce_emission;
+  const category = d.prescription_category || 'RCE';
+  const signingBlock = isRecipe ? prescriptionSigningBlock(category) : null;
   const noun = prescription ? 'receita' : 'documento';
 
   function update(fields: Partial<ClinicalDocument>) {
-    if (frozen) return;
+    if (isSigned || isSigning || rceLocked) return;
     docs.setDraft({ ...d!, ...fields });
   }
 
   return (
     <>
       <h2 id="dialog-title">
-        {simulated ? 'Simulação local — sem validade clínica' : isSigned
+        {rceLocked
+          ? d.rce_emission!.state === 'SIGNED' ? 'RCE de teste assinada' : 'RCE de teste em preparação'
+          : isSigned
           ? prescription
             ? 'Receita assinada digitalmente'
             : 'Documento assinado digitalmente'
@@ -61,6 +59,22 @@ export function DocumentEditor({
               ? 'Nova receita'
               : 'Novo documento'}
       </h2>
+
+      {isRecipe && (
+        <p role="status" className="muted">
+          {rceLocked
+            ? rceStateLabels[d.rce_emission!.state]
+            : isSigned
+            ? 'Assinatura digital registrada. Este documento não possui confirmação de integração ao SNCR.'
+            : isSigning
+              ? 'Assinatura em andamento. Aguarde a conclusão antes de entregar a receita.'
+              : d.status === 'SIGNATURE_FAILED'
+                ? 'Falha na assinatura. O conteúdo foi preservado para revisão.'
+              : 'Rascunho. Salvar no prontuário ou gerar um PDF para assinatura manual não emite uma receita eletrônica.'}
+          {!rceLocked && ' A emissão integrada em produção ainda está indisponível.'}
+        </p>
+      )}
+      {isRecipe && !isSigned && signingBlock && <p role="status">{signingBlock}</p>}
 
       {docs.signatureNotice && (
         <output
@@ -95,9 +109,9 @@ export function DocumentEditor({
             fontSize: '13px',
           }}
         >
-          <strong>{simulated ? 'SIMULAÇÃO LOCAL — SEM VALIDADE CLÍNICA' : '✓ Assinado Digitalmente • ICP-Brasil (PAdES)'}</strong>
+          <strong>✓ Assinado Digitalmente • ICP-Brasil (PAdES)</strong>
           <p style={{ margin: '4px 0 0 0' }}>
-            {simulated ? 'Artefato sintético assinado para teste local. Seu conteúdo é imutável.' : 'Assinatura conferida na emissão; a revogação do certificado ainda não é verificada pelo sistema (confira no validador do ITI). Seu conteúdo é imutável.'} Para realizar alterações, duplique-o como um novo rascunho.
+            A assinatura digital foi registrada e o conteúdo está bloqueado para edição. Para realizar alterações, duplique-o como um novo rascunho.
           </p>
         </div>
       ) : (
@@ -182,7 +196,7 @@ export function DocumentEditor({
           {docs.error} Seu texto foi mantido para revisão.
         </div>
       )}
-      <fieldset disabled={docs.busy || frozen} style={{ border: 0, padding: 0 }}>
+      <fieldset disabled={docs.busy || isSigned || isSigning || rceLocked} style={{ border: 0, padding: 0 }}>
         {!prescription && (
           <>
             <label htmlFor="doctype">Tipo de documento</label>
@@ -205,78 +219,20 @@ export function DocumentEditor({
             </select>
           </>
         )}
+        {isRecipe && (
+          <label>
+            Tipo de receituário
+            <select value={category} onChange={(e) => update({ prescription_category: e.target.value as PrescriptionCategory })}>
+              {Object.entries(prescriptionCategories).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </label>
+        )}
         <label>
           Paciente
           <input value={d.patient_name} readOnly />
         </label>
-        {d.kind === 'Receita' && (
-          <p className="document-template-note" style={{ marginTop: '-4px', marginBottom: '10px' }}>
-            {docs.patientCpf
-              ? `CPF do paciente incluído no PDF (${docs.patientCpf}).`
-              : 'Sem CPF no cadastro do paciente (exigido pela RDC Anvisa nº 1.000/2025 para receitas controladas).'}{' '}
-            {docs.patientHasAddress
-              ? 'Endereço cadastrado.'
-              : 'Sem endereço completo no cadastro.'}
-          </p>
-        )}
-        {d.kind === 'Receita' && (() => {
-          const rxMeta = parsePrescriptionText(d.text);
-          return (
-            <>
-              <label htmlFor="prescription-modality">
-                Modalidade da receita (Anvisa)
-                <select
-                  id="prescription-modality"
-                  value={rxMeta.modality}
-                  disabled={frozen}
-                  onChange={(e) => {
-                    const nextModality = e.target.value as PrescriptionModality;
-                    if (nextModality !== rxMeta.modality && rxMeta.sncrNumber) {
-                      window.alert('Esta receita já contém uma numeração SNCR. Revise e retire a numeração antes de mudar a modalidade; não reutilize o número em outra receita.');
-                      return;
-                    }
-                    update({
-                      text: buildPrescriptionText({
-                        modality: nextModality,
-                        sncrNumber:
-                          nextModality === 'simples' ? '' : rxMeta.sncrNumber,
-                        viaAdmin: rxMeta.viaAdmin,
-                        bodyText: rxMeta.bodyText,
-                      }),
-                    });
-                  }}
-                >
-                  {prescriptionModalities.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {rxMeta.modality!=='simples' && <div style={{marginBottom:12}}>
-                <label>Número vinculado
-                  <input readOnly value={reservation?.number || rxMeta.sncrNumber} placeholder="Sem reserva" />
-                </label>
-                <p role="status">{docs.numbering.loading ? 'Consultando numeração…' : docs.numbering.error ? docs.numbering.error : reservation ? `Numeração ${reservationLabels[reservation.state]} · ${reservation.environment} · versão ${reservation.document_version}` : rxMeta.sncrNumber ? 'Número manual/histórico não verificado. Não autoriza emissão.' : local ? 'Simulação local disponível. Nenhum número reservado.' : 'Emissão controlada bloqueada até autenticação oficial SNCR/gov.br.'}</p>
-                {local && <p>Estoque sintético disponível: {docs.sncrBatches.filter(b=>b.modality===rxMeta.modality).reduce((sum,b)=>sum+b.remaining,0)}</p>}
-                {local && ['controle_especial','notificacao_a','notificacao_b','notificacao_b2'].includes(rxMeta.modality) && <p>
-                  A simulação usa o formulário eletrônico próprio da Anvisa, com um medicamento por documento.
-                  Preencha nome do medicamento ou substância, concentração, forma farmacêutica, quantidade e posologia com esses rótulos, além da via de administração.
-                  Informe a data, CPF ou passaporte do paciente estrangeiro, endereço do paciente e endereço e telefone do prescritor antes de reservar.
-                  Conteúdo que exceda o formulário bloqueia a assinatura; a reserva congela o rascunho.
-                </p>}
-                {local && ['notificacao_a','notificacao_b','notificacao_b2'].includes(rxMeta.modality) && <p>
-                  O QR Code usa a consulta pública oficial da Anvisa para o número sintético desta simulação. Isso não valida nem autoriza a emissão real.
-                </p>}
-                {!reservation && <button type="button" className="secondary" disabled={!local || docs.numbering.loading || docs.busy} onClick={()=>void docs.requestSncrNumber()}>Reservar número sintético local</button>}
-              </div>}
-            </>
-          );
-        })()}
         <label>
-          {d.kind === 'Receita'
-            ? 'Data (opcional na impressão; preenchida ao assinar digitalmente)'
-            : 'Data'}
+          {d.kind === 'Receita' ? 'Data (opcional)' : 'Data'}
           <input
             type="date"
             value={d.document_date || ''}
@@ -314,23 +270,6 @@ export function DocumentEditor({
           </label>
         )}
         <div className="document-tools">
-          {local && !frozen && d.kind === 'Receita' && parsePrescriptionText(d.text).modality === 'controle_especial' && (
-            <button type="button" className="secondary" onClick={() => {
-              // O texto anterior permanece visível para revisão humana. Não há
-              // conversão automática nem substituição de conteúdo clínico.
-              update({ text: rceElectronicTemplate + (d.text.trim() ? `\nTexto anterior para revisão do prescritor (remova este rótulo após conferir):\n${d.text}` : '') });
-            }}>
-              Inserir campos RCE eletrônica (simulação)
-            </button>
-          )}
-          {local && !frozen && d.kind === 'Receita' && ['notificacao_a','notificacao_b','notificacao_b2'].includes(parsePrescriptionText(d.text).modality) && (
-            <button type="button" className="secondary" onClick={() => {
-              const rx = parsePrescriptionText(d.text);
-              update({ text: buildPrescriptionText({ modality: rx.modality, viaAdmin: '[preencher]', bodyText: notificationElectronicTemplate.split('\n').slice(1).join('\n') + (rx.bodyText.trim() ? `\nTexto anterior para revisão do prescritor (remova este rótulo após conferir):\n${rx.bodyText}` : '') }) });
-            }}>
-              Inserir campos da Notificação eletrônica (simulação)
-            </button>
-          )}
           {!isSigned && (
             <button
               className="secondary"
@@ -342,7 +281,7 @@ export function DocumentEditor({
               Preparar modelo
             </button>
           )}
-          {d.kind === 'Receita' && (
+          {d.kind === 'Receita' && category === 'RCE' && (
             <a
               href="/templates/Receituario-padrao.docx"
               download="Receituario-padrao.docx"
@@ -379,6 +318,8 @@ export function DocumentEditor({
           onChange={(e) => update({ text: e.target.value })}
         />
       </fieldset>
+      {isRecipe && category === 'RCE' && !isSigned && <RcePanel key={d.id} docs={docs} />}
+      {rceLocked && <button type="button" className="secondary" onClick={() => docs.open(d, undefined, true)}>Duplicar como novo rascunho</button>}
       <div className="editor-actions">
         {isSigned ? (
           <>
@@ -404,7 +345,7 @@ export function DocumentEditor({
             <button
               type="button"
               className="secondary"
-              disabled={docs.busy || frozen}
+              disabled={docs.busy || isSigning || rceLocked}
               onClick={() => void docs.save()}
             >
               Salvar rascunho
@@ -412,17 +353,12 @@ export function DocumentEditor({
             <button
               type="button"
               className="secondary"
-              disabled={docs.busy || !d.text.trim()}
+              disabled={docs.busy || isSigning || rceLocked || !d.text.trim() || (isRecipe && category !== 'RCE')}
               onClick={() => void docs.pdf()}
             >
-              Prévia / PDF
+              {isRecipe ? 'PDF para impressão e assinatura manual' : 'Prévia / PDF'}
             </button>
-            {controlled ? <>
-              <button type="button" className="primary" disabled={docs.busy || !local || !reservation || reservation.state==='abandoned' || ((reservation.state==='uncertain'||reservation.state==='signing') && !reservation.artifact_metadata)} onClick={()=>void docs.sign(d.id)}>{reservation?.artifact_metadata ? 'Recuperar artefato simulado original' : 'Assinar simulação local (sem validade clínica)'}</button>
-              {reservation && <button type="button" className="secondary" disabled={docs.busy} onClick={()=>docs.open(d,undefined,true)}>Duplicar como novo rascunho</button>}
-            </> : d.status==='SIGNING' ? (
-              <button type="button" className="primary" disabled={docs.busy} onClick={()=>void docs.sign(d.id)}>Consultar ou retomar assinatura</button>
-            ) : !docs.signatureSession && choosingProvider ? (
+            {!docs.signatureSession && choosingProvider ? (
               <div
                 style={{
                   display: 'inline-flex',
@@ -468,7 +404,7 @@ export function DocumentEditor({
               <button
                 type="button"
                 className="primary"
-                disabled={docs.busy || docs.signingDocId === d.id || !d.text.trim()}
+                disabled={docs.busy || isSigning || rceLocked || !!signingBlock || docs.signingDocId === d.id || !d.text.trim()}
                 style={{
                   backgroundColor: docs.signatureSession ? 'var(--success)' : undefined,
                   display: 'inline-flex',
@@ -482,7 +418,7 @@ export function DocumentEditor({
                     return;
                   }
                   const confirmed = window.confirm(
-                    `Deseja assinar digitalmente este documento com seu certificado ${signatureProviderLabel(docs.signatureSession.provider)} ICP-Brasil? Após a assinatura digital, o documento se tornará imutável e terá plena validade jurídica.`
+                    `Revise o conteúdo antes de assinar com seu certificado ${signatureProviderLabel(docs.signatureSession.provider)} ICP-Brasil. Após a assinatura, o documento ficará bloqueado para edição.${isRecipe ? ' Esta receita será assinada pelo fluxo de transição, sem integração com o SNCR.' : ''}`
                   );
                   if (confirmed) {
                     void docs.sign(d.id);
@@ -513,7 +449,7 @@ export function DocumentEditor({
         {docs.busy
           ? 'Processando…'
           : isSigned
-            ? simulated ? 'Simulação local concluída (imutável)' : 'Documento assinado digitalmente (imutável)'
+            ? 'Documento assinado digitalmente (imutável)'
             : docs.dirty
               ? 'Alterações não salvas'
               : d.version
@@ -526,8 +462,8 @@ export function DocumentEditor({
         <>
           <p>
             {isSigned
-              ? simulated ? 'SIMULAÇÃO LOCAL — SEM VALIDADE CLÍNICA.' : 'PDF oficial com assinatura digital ICP-Brasil.'
-              : 'Prévia da versão salva. Use o visualizador para imprimir.'}
+              ? 'Arquivo original com assinatura digital ICP-Brasil.'
+              : isRecipe ? 'PDF sem assinatura digital. Para a via física, imprima, revise os campos obrigatórios e assine manualmente.' : 'Prévia da versão salva. Use o visualizador para imprimir.'}
           </p>
           <iframe
             title="Prévia do documento em PDF"

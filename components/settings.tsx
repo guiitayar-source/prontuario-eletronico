@@ -14,7 +14,6 @@ import { NavigationRail } from './navigation-rail';
 import { useAccess } from './auth';
 import { ProfessionalProfileCard } from './professional-profile';
 import { PlatformPanel } from './platform';
-import { SncrConnection } from './sncr-connection';
 
 const MODE_ICONS: Record<ThemeMode, typeof Moon> = { dark: Moon, light: Sun, system: Monitor };
 
@@ -60,7 +59,6 @@ export default function Settings({
             <div className="settings-content">
               <PlatformPanel />
               {medical && <ProfessionalProfileCard />}
-              {medical && <SncrConnection />}
 
               {/* Card: Modo claro/escuro */}
               <section className="settings-card">

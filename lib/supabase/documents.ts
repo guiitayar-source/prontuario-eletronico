@@ -7,12 +7,11 @@ import {
   writeGuard,
 } from './server.ts';
 import { adminClient } from './admin.ts';
-import { documentKinds, stripSncrNumbers, type ClinicalDocument } from '../document-fields.ts';
+import { documentKinds, type ClinicalDocument } from '../document-fields.ts';
 import { documentPdf } from '../document-pdf.ts';
 import { withPdfData } from './document-pdf-data.ts';
-import { getNumberingContext, localSimulationEnabled, assertSynthetic } from '../sncr/numbering.ts';
-import { simulationPdf } from '../sncr/signing.ts';
 import { createHash } from 'node:crypto';
+import { isPrescriptionCategory } from '../sncr/policy.ts';
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -62,6 +61,14 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
       );
       if (!d) throw new HttpError(404, 'Documento não encontrado.');
       const doc = d as ClinicalDocument;
+      if (doc.kind === 'Receita') {
+        const electronic = await adminClient().from('sncr_rce_emissions').select('id').eq('clinic_id', clinic)
+          .eq('document_id', doc.id).neq('state', 'CANCELLED').maybeSingle();
+        // Keep printing available on checkouts whose RCE migration is not yet
+        // applied, but do not hide other database failures behind a new PDF.
+        if (electronic.error && !['42P01', 'PGRST205'].includes(electronic.error.code)) check(electronic);
+        if (electronic.data) throw new HttpError(409, 'Esta receita possui uma RCE eletrônica. Abra a emissão para revisar ou recuperar o original.');
+      }
 
       // Um documento assinado só pode ser entregue a partir do arquivo original.
       if (doc.status === 'SIGNED' || doc.status === 'SUPERSEDED') {
@@ -113,15 +120,14 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
           throw unavailable();
         }
       }
+      if (doc.status === 'SIGNING') throw new HttpError(409, 'Aguarde a conclusão da assinatura antes de abrir o PDF.');
+      if (doc.kind === 'Receita' && doc.prescription_category && doc.prescription_category !== 'RCE')
+        throw new HttpError(422, 'O PDF atual é exclusivo de Receita de Controle Especial. Utilize o receituário físico adequado para a categoria selecionada.');
 
       await withPdfData(adminClient(), clinic, doc);
       let bytes;
       try {
-        if (doc.kind==='Receita' && localSimulationEnabled()) {
-          const ctx=await getNumberingContext(adminClient(),{clinicId:clinic,userId:user},doc.id);
-          if (ctx.reservation) { assertSynthetic(ctx); doc.sncr_number=ctx.reservation.number; bytes=await simulationPdf(doc); }
-          else bytes=await documentPdf(doc,{isDraft:true});
-        } else bytes = await documentPdf(doc, { isDraft: true });
+        bytes = await documentPdf(doc, { isDraft: true });
       } catch (e) {
         throw new HttpError(422, (e as Error).message);
       }
@@ -134,15 +140,19 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
         },
       });
     }
-    return json({
-      documents: check(
+    const rows = check(
         await db
           .from('clinical_documents')
           .select('*')
           .eq('clinic_id', clinic)
           .eq('patient_id', pid)
           .order('updated_at', { ascending: false }),
-      ),
+      );
+    const electronic = await adminClient().from('sncr_rce_emissions').select('id,document_id,state,number,environment')
+      .eq('clinic_id', clinic).neq('state', 'CANCELLED').in('document_id', rows.map(r => r.id));
+    if (electronic.error && !['42P01', 'PGRST205'].includes(electronic.error.code)) check(electronic);
+    return json({
+      documents: rows.map(r => ({ ...r, rce_emission: electronic.data?.find(e => e.document_id === r.id) || null })),
       profile: await profile(),
       templates: check(
         await db
@@ -195,7 +205,7 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
         await db.rpc('prescription_template_write', {
           c: clinic,
           action: 'save',
-          d: { id: t.id, name, text: stripSncrNumbers(body) },
+          d: { id: t.id, name, text: body },
         }),
       ),
     });
@@ -209,6 +219,7 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
     d.text.length > 100000 ||
     !Number.isInteger(d.version) ||
     d.version < 0 ||
+    (d.kind === 'Receita' && d.prescription_category != null && !isPrescriptionCategory(d.prescription_category)) ||
     typeof d.physician_name !== 'string' ||
     d.physician_name.length > 180 ||
     typeof d.physician_registration !== 'string' ||
@@ -219,6 +230,12 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
     )
   )
     throw new HttpError(422, 'Confira os campos do documento.');
+  if (d.kind === 'Receita') {
+    // An older RPC silently ignores unknown JSON fields. Check schema BEFORE
+    // writing so an undeployed migration cannot turn an NRB/RET into an RCE.
+    const schema = await db.from('clinical_documents').select(d.rce_fields ? 'prescription_category,rce_fields' : 'prescription_category').eq('clinic_id', clinic).limit(0);
+    if (schema.error) throw new HttpError(503, 'A atualização de receitas ainda não foi aplicada ao banco. Seu rascunho foi mantido nesta tela.');
+  }
   return json({
     document: check(await db.rpc('document_write', { c: clinic, d })),
   });

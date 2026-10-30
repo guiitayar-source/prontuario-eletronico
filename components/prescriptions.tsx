@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { Plus, Repeat, Trash2 } from 'lucide-react';
 import {
   documentTemplate,
-  stripSncrNumbers,
   type ClinicalDocument,
   type PrescriptionTemplate,
 } from '@/lib/document-fields';
@@ -23,13 +22,7 @@ const summary = (text: string) =>
   text
     .split('\n')
     .map((l) => l.trim())
-    .filter(
-      (l) =>
-        l &&
-        !/^via\s+de\s+administra/i.test(l) &&
-        !/^modalidade:/i.test(l) &&
-        !/^(?:n[º°o]?\s*)?sncr:/i.test(l),
-    )
+    .filter((l) => l && !/^via\s+de\s+administra/i.test(l))
     .slice(0, 2)
     .join(' · ');
 
@@ -46,7 +39,7 @@ export function PrescriptionWorkspace({
     [error, setError] = useState(''),
     [message, setMessage] = useState('');
   const d = docs.draft;
-  const editable = !!d && d.status !== 'SIGNED' && !docs.busy && docs.numbering.reservation?.document_id!==d.id;
+  const editable = !!d && d.status !== 'SIGNED' && !docs.busy;
   const patientRows = docs.rows.filter((row) => row.kind === 'Receita');
 
   async function newPrescription() {
@@ -73,7 +66,7 @@ export function PrescriptionWorkspace({
     if (!d || !editable) return;
     setMessage('');
     if (append && !blank(d.text)) {
-      docs.setDraft({ ...d, text: `${d.text.trim()}\n\n${stripSncrNumbers(t.text).trim()}` });
+      docs.setDraft({ ...d, text: `${d.text.trim()}\n\n${t.text.trim()}` });
       return;
     }
     if (
@@ -81,7 +74,7 @@ export function PrescriptionWorkspace({
       !window.confirm(`Substituir o texto atual pelo modelo “${t.name}”?`)
     )
       return;
-    docs.setDraft({ ...d, text: stripSncrNumbers(t.text) });
+    docs.setDraft({ ...d, text: t.text });
   }
 
   async function saveTemplate() {
@@ -101,7 +94,7 @@ export function PrescriptionWorkspace({
       await docs.saveTemplate({
         id: existing?.id || crypto.randomUUID(),
         name: name.trim(),
-        text: stripSncrNumbers(d.text),
+        text: d.text,
       });
       setNaming(false);
       setName('');
@@ -164,7 +157,7 @@ export function PrescriptionWorkspace({
               <li key={row.id}>
                 <strong>
                   {formatDate(row)}
-                  {row.signed_pdf_path?.includes('/sncr-simulations/') ? ' · Simulação local — sem validade clínica' : row.status === 'SIGNED' ? ' · Assinada' : ' · Rascunho'}
+                  {row.status === 'SIGNED' ? ' · Assinada' : ' · Rascunho'}
                   {row.id === d?.id ? ' · aberta' : ''}
                 </strong>
                 <span className="prescription-summary">

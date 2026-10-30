@@ -11,7 +11,7 @@
     "start": "next start --hostname 127.0.0.1",
     "lint": "oxlint",
     "format": "oxfmt",
-    "test": "node --test tests/backup-connection.test.mjs tests/clinic-plan.test.mjs tests/digital-signature.test.mjs tests/evolution-save-before-sign.test.mjs tests/exams.test.mjs tests/prescription-new.test.mjs tests/prescription-pdf.test.mjs tests/provision-clinic.test.mjs tests/platform.test.mjs tests/pseudonymize.test.mjs tests/signature-providers.test.mjs tests/sncr.test.mjs tests/timer-utils.test.mjs tests/attachment-delete-db.mjs tests/clinic-features-db.mjs tests/documents-date-db.mjs tests/exams-db.mjs tests/prescription-templates-db.mjs",
+    "test": "node --test tests/backup-connection.test.mjs tests/clinic-plan.test.mjs tests/digital-signature.test.mjs tests/evolution-save-before-sign.test.mjs tests/exams.test.mjs tests/prescription-new.test.mjs tests/prescription-pdf.test.mjs tests/provision-clinic.test.mjs tests/platform.test.mjs tests/pseudonymize.test.mjs tests/signature-providers.test.mjs tests/timer-utils.test.mjs tests/attachment-delete-db.mjs tests/clinic-features-db.mjs tests/documents-date-db.mjs tests/exams-db.mjs tests/prescription-templates-db.mjs tests/sncr.test.mjs tests/sncr-db.test.mjs tests/sncr-rce.test.mjs",
     "test:supabase": "node tests/supabase-flow.mjs",
     "test:consultations": "node tests/consultations.mjs",
     "test:timer": "node --test tests/timer-utils.test.mjs",
@@ -25,13 +25,14 @@
     "test:exams": "node tests/exams.test.mjs && node tests/exams-db.mjs",
     "test:attachment-delete": "node tests/attachment-delete-db.mjs",
     "test:signature": "node tests/digital-signature.test.mjs",
+    "test:sncr": "node --test tests/sncr.test.mjs tests/sncr-db.test.mjs tests/sncr-rce.test.mjs",
     "test:signature-flow": "node tests/evolution-save-before-sign.test.mjs",
-    "test:rce": "node --experimental-strip-types tests/rce-pdf.test.mjs",
-    "test:rce:build": "npm run test:rce && npm run build && node tests/rce-build.test.mjs",
     "test:anamnesator": "node tests/anamnesator-native-db.mjs && node tests/anamnesator-native-http.test.mjs && node tests/anamnesator-private-session.test.mjs",
     "verify-signature": "node scripts/verify-signature.mjs",
     "backup:create": "node --env-file=.env.local scripts/backup.mjs create",
-    "backup:verify": "node scripts/backup.mjs verify"
+    "backup:verify": "node scripts/backup.mjs verify",
+    "test:sncr:lab": "node scripts/sncr-rce-lab.mjs",
+    "test:sncr:build": "node tests/sncr-rce-build.test.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

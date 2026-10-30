@@ -1,13 +1,9 @@
 import crypto from 'node:crypto';
+import { prescriptionSigningBlock } from '../sncr/policy.ts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { adminClient } from '../supabase/admin.ts';
 import { HttpError } from '../supabase/server.ts';
-import { withPdfData } from '../supabase/document-pdf-data.ts';
-import {
-  parsePrescriptionText,
-  type ClinicalDocument,
-} from '../document-fields.ts';
-import { signReservedSimulation } from '../sncr/signing.ts';
+import type { ClinicalDocument } from '../document-fields.ts';
 import {
   formatCpf,
   encryptToken,
@@ -264,20 +260,11 @@ export class DocumentSigningService {
     }
 
     const doc = docRecord as ClinicalDocument;
-
-    if (doc.kind==='Receita' && parsePrescriptionText(doc.text).modality==='simples' && parsePrescriptionText(doc.text).sncrNumber) throw new HttpError(422, 'Número SNCR manual incompatível com receita simples. Revise o rascunho.');
-    if (doc.kind === 'Receita' && parsePrescriptionText(doc.text).modality !== 'simples') {
-      return signReservedSimulation(admin, params, params.documentId, {
-        put: async (path, bytes) => {
-          const { error } = await admin.storage.from('clinical-files').upload(path, bytes, {contentType:'application/pdf',upsert:false});
-          if (error) throw new HttpError(503, 'Falha ao armazenar artefato simulado. Não repetir assinatura.');
-        },
-        get: async (path) => {
-          const {data,error}=await admin.storage.from('clinical-files').download(path);
-          if (error || !data) throw new HttpError(503, 'Artefato original indisponível.');
-          return new Uint8Array(await data.arrayBuffer());
-        },
-      }, {enrich: (d) => withPdfData(admin,params.clinicId,d)});
+    if (doc.author_id !== params.userId)
+      throw new HttpError(403, 'Apenas o autor pode emitir e assinar este documento.');
+    if (doc.kind === 'Receita') {
+      const block = prescriptionSigningBlock(doc.prescription_category || 'RCE');
+      if (block) throw new HttpError(409, block);
     }
 
     return signDocumentAttempt(admin, params, docRecord);
