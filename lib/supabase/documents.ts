@@ -11,7 +11,7 @@ import { documentKinds, type ClinicalDocument } from '../document-fields.ts';
 import { documentPdf } from '../document-pdf.ts';
 import { withPdfData } from './document-pdf-data.ts';
 import { createHash } from 'node:crypto';
-import { isDocumentPrescriptionCategory } from '../sncr/policy.ts';
+import { isPrescriptionCategory } from '../sncr/policy.ts';
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -121,7 +121,7 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
         }
       }
       if (doc.status === 'SIGNING') throw new HttpError(409, 'Aguarde a conclusão da assinatura antes de abrir o PDF.');
-      if (doc.kind === 'Receita' && doc.prescription_category && !['RCE', 'SIMPLES'].includes(doc.prescription_category))
+      if (doc.kind === 'Receita' && doc.prescription_category && doc.prescription_category !== 'RCE' && doc.prescription_category !== 'SIMPLES')
         throw new HttpError(422, 'O PDF atual é exclusivo de Receita de Controle Especial ou receita simples. Utilize o receituário físico adequado para a categoria selecionada.');
 
       await withPdfData(adminClient(), clinic, doc);
@@ -219,7 +219,7 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
     d.text.length > 100000 ||
     !Number.isInteger(d.version) ||
     d.version < 0 ||
-    (d.kind === 'Receita' && d.prescription_category != null && !isDocumentPrescriptionCategory(d.prescription_category)) ||
+    (d.kind === 'Receita' && d.prescription_category != null && !isPrescriptionCategory(d.prescription_category)) ||
     typeof d.physician_name !== 'string' ||
     d.physician_name.length > 180 ||
     typeof d.physician_registration !== 'string' ||

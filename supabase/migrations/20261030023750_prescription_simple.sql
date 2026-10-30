@@ -1,8 +1,5 @@
--- Receita simples (sem retenção nem notificação): assinatura eletrônica independente da
--- integração SNCR. Decisão do titular em 30/10/2026.
--- Depende de 20261019010000_sncr_preparation (main): aplicar junto com as migrações SNCR da main.
--- Não altera RCE, RET nem notificações; continuam sob a política de 20261019010000.
-
+-- Receita simples: não é controlada e não depende do SNCR.
+-- Depende de 20261030023641_sncr_preparation (coluna e guarda).
 alter table public.clinical_documents drop constraint clinical_documents_prescription_category_check;
 alter table public.clinical_documents add constraint clinical_documents_prescription_category_check
   check (prescription_category in ('SIMPLES','RCE','RET','NRA','NRB','NRB2','NRR','NRT'));
@@ -24,13 +21,13 @@ begin
      new.prescription_category is distinct from old.prescription_category then
     raise exception 'Categoria de documento em assinatura ou finalizado é imutável.';
   end if;
-  -- Receita simples não depende do SNCR: a assinatura eletrônica segue liberada.
-  if new.kind='Receita' and coalesce(new.prescription_category,'RCE')<>'SIMPLES' and
-     new.status in ('SIGNING','SIGNED') and
-     (tg_op='INSERT' or new.status is distinct from old.status) then
+  if new.kind='Receita' and new.status in ('SIGNING','SIGNED') and
+     (tg_op='INSERT' or new.status is distinct from old.status) and
+     new.prescription_category is distinct from 'SIMPLES' then
     if coalesce(new.prescription_category,'RCE')<>'RCE' or (now() at time zone 'America/Sao_Paulo')::date>='2026-10-30' then
       raise exception 'Emissão eletrônica indisponível: integração SNCR e modelo devem ser validados. Utilize a via física adequada.';
     end if;
   end if;
   return new;
 end $$;
+notify pgrst,'reload schema';

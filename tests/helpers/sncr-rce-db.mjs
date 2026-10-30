@@ -53,8 +53,8 @@ export async function localRceDatabase(dataDir) {
       '20260912060000_documents.sql',
       '20260921010000_optional_prescription_date.sql',
       '20260925010000_digital_signatures.sql',
-      '20261019010000_sncr_preparation.sql',
-      '20261019020000_sncr_rce_issuance.sql',
+      '20261030023641_sncr_preparation.sql',
+      '20261030023733_sncr_rce_issuance.sql',
     ])
       await db.exec(
         await readFile(

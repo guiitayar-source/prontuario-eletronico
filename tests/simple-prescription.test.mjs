@@ -5,9 +5,6 @@ import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
 
 import {
-  SIMPLE_PRESCRIPTION,
-  documentPrescriptionCategories,
-  isDocumentPrescriptionCategory,
   isPrescriptionCategory,
   prescriptionCategories,
   prescriptionSigningBlock,
@@ -24,7 +21,7 @@ describe('receita simples na política', () => {
       T('2026-10-30T03:00:00Z'), // 00:00 em Brasília
       T('2027-06-01T12:00:00Z'),
     ])
-      assert.equal(prescriptionSigningBlock(SIMPLE_PRESCRIPTION, now), null);
+      assert.equal(prescriptionSigningBlock('SIMPLES', now), null);
   });
 
   it('RCE e notificações continuam sob a política SNCR da main', () => {
@@ -34,13 +31,10 @@ describe('receita simples na política', () => {
     assert.ok(prescriptionSigningBlock('RET', T('2026-10-29T12:00:00Z')));
   });
 
-  it('é categoria de documento, mas não categoria SNCR nem pedido de numeração', () => {
-    assert.equal(isDocumentPrescriptionCategory('SIMPLES'), true);
-    assert.equal(isDocumentPrescriptionCategory('RCE'), true);
-    assert.equal(isDocumentPrescriptionCategory('outra'), false);
-    assert.equal(isPrescriptionCategory('SIMPLES'), false);
-    assert.equal(Object.hasOwn(prescriptionCategories, 'SIMPLES'), false);
-    assert.ok(documentPrescriptionCategories.SIMPLES);
+  it('é categoria do documento, mas nunca entra num pedido de numeração SNCR', () => {
+    assert.equal(isPrescriptionCategory('SIMPLES'), true);
+    assert.equal(isPrescriptionCategory('outra'), false);
+    assert.ok(prescriptionCategories.SIMPLES);
     assert.throws(() =>
       validateNumberingInput({ category: 'SIMPLES', conselho: 'CRM', documento: '12345', uf: 'SP' }),
     );

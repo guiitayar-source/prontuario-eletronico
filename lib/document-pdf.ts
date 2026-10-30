@@ -52,7 +52,6 @@ async function prescriptionPdf(
   d: ClinicalDocument,
   font: PDFFont,
   bold: PDFFont,
-  simple = false,
 ) {
   const clinicName = clean(d.letterhead_title || '');
   const clinicAddress = clean(d.letterhead_address || '');
@@ -74,8 +73,9 @@ async function prescriptionPdf(
     bodyText = bodyText.slice(viaMatch[0].length).trim();
   }
 
-  // Receita simples: uma via, sem os quadros de comprador e fornecedor do controle especial.
-  const vias = simple ? ['Via do paciente'] : ['1ª via - Farmácia', '2ª via - Paciente'];
+  // Receita simples: uma via, sem o título de controle especial.
+  const simple = d.prescription_category === 'SIMPLES';
+  const vias = simple ? [''] : ['1ª via - Farmácia', '2ª via - Paciente'];
 
   for (const viaTitle of vias) {
     const page = pdf.addPage([595.3, 841.89]);
@@ -413,7 +413,6 @@ async function prescriptionPdf(
       color: rgb(0, 0, 0),
     });
 
-    if (!simple) {
     // 6. Dual Boxes: Comprador e Fornecedor
     const boxTop = height - 515.0;
     const boxHeight = 150.0;
@@ -596,8 +595,6 @@ async function prescriptionPdf(
       color: rgb(0, 0, 0),
     });
 
-    }
-
     // 7. Footer (Consultório address and phone). O endereço quebra em linhas
     // para caber na largura útil; a última linha fica em y=40, acima do telefone.
     const addressLines = wrapText(clinicAddress, font, 9, width - 2 * left);
@@ -658,14 +655,12 @@ export async function documentPdf(
         );
 
   // Existing two-copy RCE layout, preserved for printing/legacy transition.
-  // This is not the standardized electronic SNCR model. Receita simples usa o mesmo
-  // desenho em uma via, sem os quadros do controle especial.
+  // This is not the standardized electronic SNCR model.
   if (d.kind === 'Receita') {
-    const simple = d.prescription_category === 'SIMPLES';
-    if (d.prescription_category && d.prescription_category !== 'RCE' && !simple)
+    if (d.prescription_category && d.prescription_category !== 'RCE' && d.prescription_category !== 'SIMPLES')
       throw new Error('O PDF atual é exclusivo de Receita de Controle Especial ou receita simples. Utilize o modelo adequado para a categoria selecionada.');
-    await prescriptionPdf(pdf, d, font, bold, simple);
-    pdf.setTitle(simple ? 'Receituário' : 'Receituário de controle especial');
+    await prescriptionPdf(pdf, d, font, bold);
+    pdf.setTitle(d.prescription_category === 'SIMPLES' ? 'Receituário' : 'Receituário de controle especial');
     pdf.setCreator('PsyWrite');
     return pdf.save();
   }

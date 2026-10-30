@@ -47,7 +47,16 @@ test('SNCR staged schema: isolation, one-use claims, quarantine, duplicate rollb
     await db.exec(
       await readFile(
         new URL(
-          '../supabase/migrations/20261019010000_sncr_preparation.sql',
+          '../supabase/migrations/20261030023641_sncr_preparation.sql',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL(
+          '../supabase/migrations/20261030023750_prescription_simple.sql',
           import.meta.url,
         ),
         'utf8',
@@ -248,6 +257,21 @@ test('SNCR staged schema: isolation, one-use claims, quarantine, duplicate rollb
     await assert.rejects(
       () => write({ ...nr, prescription_category: 'INVALID' }),
       /check constraint/,
+    );
+    // Receita simples não depende do SNCR: assina mesmo depois de 30/10/2026.
+    const simple = await write({
+      ...draft,
+      id: crypto.randomUUID(),
+      prescription_category: 'SIMPLES',
+    });
+    assert.equal(simple.prescription_category, 'SIMPLES');
+    await db.query(
+      "update public.clinical_documents set status='SIGNING' where id=$1",
+      [simple.id],
+    );
+    await db.query(
+      "update public.clinical_documents set status='SIGNED' where id=$1",
+      [simple.id],
     );
     await db.exec("set test.role='secretary'");
     await assert.rejects(
