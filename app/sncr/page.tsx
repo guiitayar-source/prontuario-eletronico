@@ -34,7 +34,8 @@ export default function SncrPreparation() {
     [quantity, setQuantity] = useState(10),
     [message, setMessage] = useState(''),
     [requestId, setRequestId] = useState(''),
-    [terminal, setTerminal] = useState(false);
+    [terminal, setTerminal] = useState(false),
+    [review, setReview] = useState(false);
   const callbackHandled = useRef(false);
   const storageKey = 'psywrite:sncr:hmg:' + clinic;
 
@@ -46,7 +47,26 @@ export default function SncrPreparation() {
     setTerminal(
       ['AUTH_FAILED', 'AUTH_EXPIRED', 'REJECTED'].includes(data.request.state),
     );
+    setReview(data.request.state === 'CONTRACT_REVIEW');
     setMessage(stateLabels[data.request.state] || 'Conferência necessária.');
+  }
+  // Rereads the response already stored for this request; no new Anvisa call.
+  async function reprocess() {
+    setBusy(true);
+    try {
+      const r = await apiFetch('/api/sncr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-SNCR-Action': '1' },
+        body: JSON.stringify({ action: 'reprocess', id: requestId }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error);
+      await refresh();
+    } catch (e) {
+      setMessage((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
   useEffect(() => {
     if (!clinic || callbackHandled.current) return;
@@ -222,6 +242,11 @@ export default function SncrPreparation() {
         </p>
       )}
       {message && <p role="status">{message}</p>}
+      {review && (
+        <button type="button" disabled={busy} onClick={() => void reprocess()}>
+          Conferir de novo o retorno gravado
+        </button>
+      )}
       {terminal && (
         <button
           type="button"

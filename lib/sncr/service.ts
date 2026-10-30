@@ -16,7 +16,7 @@ import {
   validateNumberingInput,
   validCnpj,
 } from './client.ts';
-import { completeNumbering } from './workflow.ts';
+import { completeNumbering, storeParsed } from './workflow.ts';
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -167,6 +167,40 @@ export const sncr = handle(async (request, ctx) => {
       `${cookieName}=${secret}; HttpOnly; SameSite=Lax; Path=/api/sncr; Max-Age=600${cfg.origin.startsWith('https:') ? '; Secure' : ''}`,
     );
     return response;
+  }
+  if (p.action === 'reprocess') {
+    // Same one-row lock as the callback claim; the raw response stays as received.
+    const row = check(
+      await admin.rpc('sncr_reprocess_request', {
+        rid: p.id,
+        c: ctx.clinic,
+        u: ctx.user,
+      }),
+    );
+    const store = {
+      update: async (fields: Record<string, unknown>) =>
+        check(
+          await admin
+            .from('sncr_numbering_requests')
+            .update({ ...fields, updated_at: new Date().toISOString() })
+            .eq('id', p.id)
+            .eq('clinic_id', ctx.clinic)
+            .eq('user_id', ctx.user),
+        ),
+      storeNumbers: async (numbers: string[]) => {
+        check(
+          await admin.rpc('sncr_store_numbers', {
+            rid: p.id,
+            c: ctx.clinic,
+            u: ctx.user,
+            numbers,
+          }),
+        );
+      },
+    };
+    return json(
+      await storeParsed(store, validateNumberingInput(row.input), row.raw_response),
+    );
   }
   if (p.action !== 'complete' || typeof p.sessionId !== 'string')
     throw new HttpError(422, 'Solicitação inválida.');
