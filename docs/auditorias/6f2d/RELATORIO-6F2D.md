@@ -399,6 +399,7 @@ Migrações que ficam, em ordem, depois de `20261016010000`, o estado de produç
 | `20261029020000_signature_oauth_attempts` | branch (6D) | travada |
 | `20261029030000_document_signing_attempts` | branch (6E), adaptada ao modelo da main | travada |
 | `20261029040000_revocation_evidence` | branch (6F.2D) | travada |
+| `20261030010000_simple_prescription_signing` | branch (receita simples, 30/10/2026) | sem trava; vai junto com as `20261019*` |
 
 - A sequência aplica sem erro num Postgres descartável a partir do estado de produção.
 - `clinical_documents` fica só com as guardas SNCR da main: `sncr_document_guard` e
@@ -409,4 +410,19 @@ Migrações que ficam, em ordem, depois de `20261016010000`, o estado de produç
 - Nada disso foi aplicado em produção. Continua valendo a análise pré-voo: a `20261029030000`
   retira de `service_role` o INSERT direto em `digital_signatures`. Ela só pode ir junto com o
   deploy do código desta branch.
+
+**Receita simples (decisão do Guilherme, 30/10/2026).** A assinatura digital de receita simples
+continua funcionando, independentemente da integração SNCR.
+- Categoria `SIMPLES` ("Receita simples (sem retenção)"), escolhida no editor. Fica fora das
+  categorias SNCR e nunca é aceita num pedido de numeração.
+- `prescriptionSigningBlock('SIMPLES')` nunca bloqueia, em qualquer data.
+- O PDF tem uma via e título "Receituário", sem os quadros de comprador e fornecedor.
+- No banco, a `20261030010000` aceita `SIMPLES` na restrição de categoria e isenta a receita
+  simples do bloqueio de `sncr_document_guard`. A `20261029030000` aceita `SIMPLES` no caminho
+  comum.
+- RCE, RET e notificações continuam como na main: a partir de 30/10/2026 a RCE exige SNCR.
+  Receita sem categoria continua valendo como RCE.
+- Testes: `simple-prescription` (5 casos); `signature-persistence-local`, com receita simples
+  concluída e RCE conforme a data; e `signature-trust-flow`, com receita simples assinada pelo
+  fluxo completo e o original recuperado.
 
