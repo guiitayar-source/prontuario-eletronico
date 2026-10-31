@@ -17,6 +17,17 @@ import { rangeNumberPattern } from './client.ts';
 // sncrTransitionEnd), assinada com certificado ICP-Brasil e verificável no ITI.
 export const RCE_TRANSITION_NUMBER_TEXT = 'Sem numeração SNCR (período de transição)';
 export const ITI_VALIDATOR_URL = 'https://validar.iti.gov.br/';
+// Produção: formato que a Anvisa define para o QR da Notificação de Receita, aplicado à RCE por
+// analogia até a Anvisa confirmar (e-mail enviado em 31/10/2026).
+export function rceConsultUrl(
+  environment: 'hmg' | 'prd' | 'transition',
+  number: string | null,
+) {
+  if (environment === 'hmg') return 'https://sncr-treinamento.anvisa.gov.br/';
+  if (environment === 'prd' && number)
+    return `https://sncr.anvisa.gov.br/receita/consultar?numero=${encodeURIComponent(number)}`;
+  return ITI_VALIDATOR_URL;
+}
 export async function rcePdf(
   snapshot: RceSnapshot,
   number: string | null,
@@ -73,11 +84,7 @@ export async function rcePdf(
     );
   // Treinamento e produção usam o portal de cada ambiente (docs/SNCR.md). Sem número SNCR,
   // a conferência disponível é a da assinatura no ITI (RDC 1.000/2025, art. 13, I).
-  const consultUrl = training
-    ? 'https://sncr-treinamento.anvisa.gov.br/'
-    : environment === 'prd'
-      ? 'https://sncr.anvisa.gov.br/'
-      : ITI_VALIDATOR_URL;
+  const consultUrl = rceConsultUrl(environment, number);
   const qr = await result.embedPng(
     await QRCode.toBuffer(consultUrl, {
       errorCorrectionLevel: 'M',
