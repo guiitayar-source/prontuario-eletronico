@@ -6,6 +6,10 @@ export const sncrBases = {
   prd: 'https://api-gateway.prd.apps.anvisa.gov.br/api-sncr/api/v1/',
 } as const;
 export type SncrEnvironment = keyof typeof sncrBases;
+// Only an explicit 'hmg' or 'prd' turns the integration on. Anything else (unset, typo) is off.
+export const configuredSncrEnvironment = (
+  value = process.env.SNCR_ENVIRONMENT,
+): SncrEnvironment | null => (value === 'hmg' || value === 'prd' ? value : null);
 export type NumberingInput = {
   category: PrescriptionCategory;
   conselho: 'CRM'; // PsyWrite currently serves physicians.

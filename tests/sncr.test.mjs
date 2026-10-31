@@ -6,6 +6,7 @@ import {
   SncrClient,
   SncrError,
   sncrLoginUrl,
+  configuredSncrEnvironment,
   parseNumberingResponse,
   validateNumberingInput,
   validCnpj,
@@ -251,9 +252,9 @@ test('return URL cannot be redirected to untrusted hosts; production requires HT
     assert.throws(() => sncrLoginUrl('hmg', url));
   assert.throws(() => sncrLoginUrl('prd', 'http://localhost:3000/sncr'));
 });
-test('the server remains disabled by default and cannot be switched to production via an environment variable', () => {
+test('the server stays disabled unless SNCR_ENVIRONMENT is exactly hmg or prd', () => {
   const request = new Request('http://localhost:3000/api/sncr');
-  for (const environment of ['disabled', 'prd', 'invalid'])
+  for (const environment of [undefined, '', 'disabled', 'PRD', 'production', 'invalid'])
     assert.throws(
       () =>
         sncrPreparationConfig(
@@ -272,6 +273,23 @@ test('the server remains disabled by default and cannot be switched to productio
     () => sncrPreparationConfig(request, 'hmg', 'http://127.0.0.1:3000/sncr'),
     (e) => e.status === 403,
   );
+});
+test('production requires an explicit prd, HTTPS .br return URL and the same origin; localhost is rejected', () => {
+  const live = new Request('https://psywrite.com.br/api/sncr');
+  const cfg = sncrPreparationConfig(live, 'prd', 'https://psywrite.com.br/sncr');
+  assert.equal(cfg.environment, 'prd');
+  assert.match(cfg.loginUrl, /^https:\/\/api-gateway\.prd\.apps\.anvisa\.gov\.br\/api-sncr\/api\/v1\/auth\/login/);
+  assert.throws(
+    () => sncrPreparationConfig(live, 'prd', 'http://localhost:3000/sncr'),
+    (e) => e.status === 503,
+  );
+  assert.throws(
+    () => sncrPreparationConfig(live, 'prd', 'https://outro.com.br/sncr'),
+    (e) => e.status === 403,
+  );
+  assert.equal(configuredSncrEnvironment('prd'), 'prd');
+  assert.equal(configuredSncrEnvironment('hmg'), 'hmg');
+  assert.equal(configuredSncrEnvironment('Prd'), null);
 });
 test('cutoff uses São Paulo date; notifications never use legacy RCE signature', () => {
   assert.equal(

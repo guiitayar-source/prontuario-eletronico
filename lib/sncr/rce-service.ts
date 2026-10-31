@@ -22,6 +22,7 @@ import {
   validateRceSnapshot,
   type RceSnapshot,
 } from './rce.ts';
+import { configuredSncrEnvironment } from './client.ts';
 import { rcePdf } from './rce-pdf.ts';
 import { rceRepository } from './rce-repository.ts';
 import {
@@ -152,19 +153,19 @@ const pdfResponse = (bytes: Uint8Array, filename: string) =>
 export const rce = handle(async (request, ctx) => {
   if (!['owner', 'doctor'].includes(ctx.role))
     throw new HttpError(403, 'A RCE eletrônica é exclusiva do prescritor.');
-  const enabled = process.env.SNCR_ENVIRONMENT === 'hmg';
+  const environment = configuredSncrEnvironment();
   const u = new URL(request.url),
     action = u.searchParams.get('action');
   if (request.method === 'GET' && action === 'config')
     return json({
-      enabled,
-      environment: enabled ? 'hmg' : 'disabled',
-      productionAvailable: false,
+      enabled: environment !== null,
+      environment: environment ?? 'disabled',
+      productionAvailable: environment === 'prd',
     });
-  if (!enabled)
+  if (!environment)
     throw new HttpError(
       503,
-      'A RCE eletrônica está disponível apenas para teste em homologação.',
+      'A RCE eletrônica com numeração SNCR não está habilitada neste servidor.',
     );
   const admin = adminClient();
   const rpc = async <T>(
@@ -182,6 +183,12 @@ export const rce = handle(async (request, ctx) => {
         .maybeSingle(),
     );
     if (!e) throw new HttpError(404, 'Emissão não encontrada.');
+    // Uma emissão de treinamento nunca é aberta pelo servidor de produção, nem o inverso.
+    if (e.environment !== environment)
+      throw new HttpError(
+        503,
+        'Esta emissão pertence a outro ambiente do SNCR e não está disponível neste servidor.',
+      );
     return e as RceEmission;
   };
   const artifacts = rceArtifacts(admin);
@@ -209,14 +216,14 @@ export const rce = handle(async (request, ctx) => {
       e = await get(eid);
     if (action === 'preview')
       return pdfResponse(
-        await rcePdf(e.snapshot, e.number, new Date(), 'hmg'),
-        'rce-previa-teste.pdf',
+        await rcePdf(e.snapshot, e.number, new Date(), e.environment),
+        e.environment === 'hmg' ? 'rce-previa-teste.pdf' : 'rce-previa.pdf',
       );
     if (action === 'original') {
       try {
         return pdfResponse(
           await originalRce({ get: () => get(eid) }, artifacts),
-          'rce-assinada-teste.pdf',
+          e.environment === 'hmg' ? 'rce-assinada-teste.pdf' : 'rce-assinada.pdf',
         );
       } catch (error) {
         throw new HttpError(503, (error as Error).message);
@@ -316,7 +323,7 @@ export const rce = handle(async (request, ctx) => {
       });
       // Check layout before consuming a number; this synthetic value is never
       // saved, signed, submitted or presented as a real SNCR grant.
-      await rcePdf(snapshot, '0000.0-00.0000000', new Date(), 'hmg');
+      await rcePdf(snapshot, '0000.0-00.0000000', new Date(), environment);
     } catch (error) {
       throw new HttpError(422, (error as Error).message);
     }
@@ -327,6 +334,7 @@ export const rce = handle(async (request, ctx) => {
         u: ctx.user,
         did: documentId,
         v: p.version,
+        env: environment,
         s: snapshot,
         h: rceSnapshotHash(snapshot),
       }),

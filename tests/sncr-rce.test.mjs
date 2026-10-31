@@ -148,6 +148,77 @@ test('RCE end to end: reserve, official PDF, explicit review, PAdES, atomic save
     await local.db.close();
   }
 });
+test('production RCE: only prd numbers, no test watermark, signed under the prd path', async () => {
+  const local = await localRceDatabase();
+  try {
+    // Um lote de homologação nunca serve para uma emissão de produção, nem o inverso.
+    await local.addNumbers(['2602.6-53.0000001'], undefined, 'hmg');
+    await assert.rejects(
+      () => local.reserve(undefined, undefined, 'prd'),
+      /Sem numeração RCE disponível/,
+    );
+    await local.addNumbers(['2610.6-35.000112001', '2610.6-35.000112002'], undefined, 'prd');
+    const e = await local.reserve(undefined, undefined, 'prd');
+    assert.equal(e.environment, 'prd');
+    assert.equal(e.number, '2610.6-35.000112001');
+    // Reservar de novo a mesma emissão em outro ambiente é recusado.
+    await assert.rejects(
+      () => local.reserve(undefined, e.id, 'hmg'),
+      /insufficient_privilege|permission denied|privilégio/i,
+    );
+    assert.equal(
+      (
+        await local.db.query(
+          "select state from public.sncr_numbering_items where environment='hmg'",
+        )
+      ).rows[0].state,
+      'QUARANTINED',
+    );
+    const repo = local.repo(e.id),
+      artifacts = memoryArtifacts(),
+      signer = await mockSigner();
+    const signed = await signRce({
+      repository: repo,
+      artifacts,
+      reviewedHash: e.snapshot_hash,
+      numberChecked: true,
+      getSigner: signer.get,
+    });
+    assert.equal(signed.state, 'SIGNED');
+    assert.match(signed.signed_pdf_path, new RegExp(`/sncr/prd/${e.id}/`));
+    assert.equal(signed.verification.environment, 'prd');
+    const pdf = await originalRce(repo, artifacts);
+    const text = Buffer.from(pdf).toString('latin1');
+    assert.ok(!text.includes('HOMOLOGACAO'), 'production PDF carries no test mark');
+    assert.equal((await PDFDocument.load(pdf)).getTitle(), 'Receita de Controle Especial');
+    assert.ok((await padesService.verifyPadesSignature(Buffer.from(pdf))).isValid);
+    assert.equal(
+      (
+        await local.db.query(
+          "select state from public.sncr_numbering_items where number='2610.6-35.000112001'",
+        )
+      ).rows[0].state,
+      'USED',
+    );
+  } finally {
+    await local.db.close();
+  }
+});
+test('production PDF is the official model without the training mark and points to the production portal', async () => {
+  const s = syntheticSnapshot();
+  const prd = await PDFDocument.load(
+    await rcePdf(s, '2610.6-35.000112001', new Date(), 'prd'),
+  );
+  assert.equal(prd.getTitle(), 'Receita de Controle Especial');
+  const hmg = await PDFDocument.load(
+    await rcePdf(s, '2610.6-35.000112001', new Date(), 'hmg'),
+  );
+  assert.match(hmg.getTitle(), /sem validade/);
+  await assert.rejects(
+    () => rcePdf(s, '2610.6-35.00011200', new Date(), 'prd'),
+    /não validado/,
+  );
+});
 test('PDF preserves official page and all required fields; long dosage continues on another page', async () => {
   const s = syntheticSnapshot(),
     pdf = await rcePdf(s, '2602.6-53.0000001', new Date(), 'hmg');
@@ -177,9 +248,10 @@ test('PDF preserves official page and all required fields; long dosage continues
     /não validado/,
   );
   await assert.rejects(
-    () => rcePdf(s, '2602.6-53.0000001', new Date(), 'prd'),
-    /produção/,
+    () => rcePdf(s, '2602.6-53.0000001', new Date(), 'outro'),
+    /Ambiente/,
   );
+  await assert.rejects(() => rcePdf(s, null, new Date(), 'prd'), /não validado/);
   const reordered = JSON.parse(JSON.stringify(s));
   reordered.patient = Object.fromEntries(Object.entries(s.patient).reverse());
   assert.equal(

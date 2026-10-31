@@ -144,7 +144,14 @@ test('compiled RCE route authorizes, reserves and opens the official PDF without
       (await PDFDocument.load(await preview.arrayBuffer())).getPageCount(),
       1,
     );
+    // Uma emissão de homologação não abre num servidor configurado para produção.
     process.env.SNCR_ENVIRONMENT = 'prd';
+    assert.equal(
+      (await GET(new Request(url + '?action=preview&id=' + eid, { headers })))
+        .status,
+      503,
+    );
+    process.env.SNCR_ENVIRONMENT = 'desligado';
     assert.equal(
       (await GET(new Request(url + '?action=preview&id=' + eid, { headers })))
         .status,

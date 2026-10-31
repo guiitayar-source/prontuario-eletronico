@@ -12,6 +12,7 @@ import {
 import {
   SncrClient,
   SncrError,
+  configuredSncrEnvironment,
   sncrLoginUrl,
   validateNumberingInput,
   validCnpj,
@@ -45,41 +46,41 @@ export function sncrPreparationConfig(
   environment = process.env.SNCR_ENVIRONMENT,
   returnUrl = process.env.SNCR_RETURN_URL || '',
 ) {
-  // Deliberate homologation-only gate. Removing it requires the documented
-  // binding/layout/16-digit checks, not simply changing an environment variable.
-  if (environment !== 'hmg')
+  // Production runs only with an explicit SNCR_ENVIRONMENT=prd (and the prd migration applied).
+  const env = configuredSncrEnvironment(environment);
+  if (!env)
     throw new HttpError(
       503,
       'A integração SNCR ainda não está liberada. A emissão integrada permanece indisponível.',
     );
   let loginUrl: string;
   try {
-    loginUrl = sncrLoginUrl('hmg', returnUrl);
+    loginUrl = sncrLoginUrl(env, returnUrl);
   } catch (e) {
     throw new HttpError(503, (e as Error).message);
   }
   const origin = new URL(returnUrl).origin;
   if (new URL(request.url).origin !== origin)
     throw new HttpError(403, 'Origem de retorno SNCR não autorizada.');
-  return { returnUrl, loginUrl, origin, environment: 'hmg' as const };
+  return { returnUrl, loginUrl, origin, environment: env };
 }
 export const sncr = handle(async (request, ctx) => {
   if (!['owner', 'doctor'].includes(ctx.role))
     throw new HttpError(403, 'Apenas prescritores podem utilizar o SNCR.');
   if (request.method === 'GET' && !new URL(request.url).searchParams.has('id')) {
-    const environment =
-      process.env.SNCR_ENVIRONMENT === 'hmg' ? 'hmg' : 'disabled';
+    const configured = configuredSncrEnvironment();
+    const environment = configured ?? 'disabled';
     // The page keeps the request id per tab; a new tab must still find the
     // unresolved request instead of starting another one.
     const open =
-      environment === 'hmg'
+      configured
         ? check(
             await adminClient()
               .from('sncr_numbering_requests')
               .select('id')
               .eq('clinic_id', ctx.clinic)
               .eq('user_id', ctx.user)
-              .eq('environment', 'hmg')
+              .eq('environment', configured)
               .in('state', unresolvedStates)
               .order('created_at', { ascending: false })
               .limit(1)
@@ -88,14 +89,14 @@ export const sncr = handle(async (request, ctx) => {
         : null;
     // Read-only summary of the prescriber's batch for the page; no state changes.
     let lot = null;
-    if (environment === 'hmg') {
+    if (configured) {
       const items = check(
         await adminClient()
           .from('sncr_numbering_items')
           .select('number,state')
           .eq('clinic_id', ctx.clinic)
           .eq('user_id', ctx.user)
-          .eq('environment', 'hmg')
+          .eq('environment', configured)
           .order('number')
           .limit(5000),
       ) as { number: string; state: string }[];
@@ -153,13 +154,19 @@ export const sncr = handle(async (request, ctx) => {
     } catch (e) {
       throw new HttpError(422, (e as Error).message);
     }
+    // Notificações dependem de autorização da Visa e seguem bloqueadas em produção.
+    if (cfg.environment === 'prd' && !['RCE', 'RET'].includes(input.category))
+      throw new HttpError(
+        422,
+        'Em produção, apenas RCE e RET podem ter numeração solicitada por aqui.',
+      );
     if (
       ['RCE', 'RET'].includes(input.category) &&
       !validCnpj(process.env.SNCR_PLATFORM_CNPJ || '')
     )
       throw new HttpError(
         503,
-        'Configure o CNPJ da empresa mantenedora do PsyWrite antes dos testes.',
+        'Configure o CNPJ da empresa mantenedora do PsyWrite antes de solicitar numeração.',
       );
     // Expired authorization never sent a numbering POST and may be abandoned.
     check(
