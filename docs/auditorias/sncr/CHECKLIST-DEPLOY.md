@@ -78,8 +78,9 @@ Para ligar, nesta ordem:
 1. Aplicar a migração `20261031010000` (só com o aval do titular; é aditiva e pode ir antes do
    deploy).
 2. Confirmar com `sncr.integracao@anvisa.gov.br`:
-   - o endereço de consulta que vai no QR (hoje `https://sncr.anvisa.gov.br/`, o do rodapé do
-     modelo oficial; o guia v1.0 só cita o de treinamento);
+   - o endereço de consulta que vai no QR (hoje `https://sncr.anvisa.gov.br/receita/consultar?numero={numero}`,
+     o formato que a Anvisa define para a Notificação de Receita, aplicado à RCE por analogia; e-mail
+     enviado em 31/10/2026);
    - se a mantenedora precisa de habilitação própria.
 3. Na Vercel (Production): `SNCR_ENVIRONMENT=prd`, `SNCR_RETURN_URL=https://www.psywrite.com.br/sncr`,
    `SNCR_PLATFORM_CNPJ`, `SNCR_PLATFORM_NAME`. Redeploy.

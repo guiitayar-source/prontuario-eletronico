@@ -10,7 +10,7 @@ import {
   sha256,
   rceSnapshotHash,
 } from '../lib/sncr/rce-workflow.ts';
-import { rcePdf } from '../lib/sncr/rce-pdf.ts';
+import { rcePdf, rceConsultUrl } from '../lib/sncr/rce-pdf.ts';
 import { localRceDatabase, syntheticSnapshot } from './helpers/sncr-rce-db.mjs';
 
 function memoryArtifacts() {
@@ -214,6 +214,13 @@ test('production PDF is the official model without the training mark and points 
     await rcePdf(s, '2610.6-35.000112001', new Date(), 'hmg'),
   );
   assert.match(hmg.getTitle(), /sem validade/);
+  // O QR de produção leva ao SNCR com o número já preenchido; os outros modos não mudam.
+  assert.equal(
+    rceConsultUrl('prd', '2610.6-35.000112001'),
+    'https://sncr.anvisa.gov.br/receita/consultar?numero=2610.6-35.000112001',
+  );
+  assert.equal(rceConsultUrl('hmg', '2610.6-35.000112001'), 'https://sncr-treinamento.anvisa.gov.br/');
+  assert.equal(rceConsultUrl('transition', null), 'https://validar.iti.gov.br/');
   await assert.rejects(
     () => rcePdf(s, '2610.6-35.00011200', new Date(), 'prd'),
     /não validado/,
