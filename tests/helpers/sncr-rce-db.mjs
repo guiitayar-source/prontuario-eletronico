@@ -55,6 +55,7 @@ export async function localRceDatabase(dataDir) {
       '20260925010000_digital_signatures.sql',
       '20261030023641_sncr_preparation.sql',
       '20261030023733_sncr_rce_issuance.sql',
+      '20261031010000_sncr_production_environment.sql',
     ])
       await db.exec(
         await readFile(
@@ -88,11 +89,12 @@ export async function localRceDatabase(dataDir) {
   async function addNumbers(
     numbers = ['2602.6-53.0000001', '2602.6-53.0000002'],
     identity = { crm: '000001', uf: 'SP' },
+    environment = 'hmg',
   ) {
     const rid = crypto.randomUUID();
     await db.query(
       `insert into public.sncr_numbering_requests(id,clinic_id,user_id,environment,category,input,browser_hash,state,raw_response)
-      values($1,$2,$3,'hmg','RCE',$4::jsonb,'local-synthetic','RECEIVED_UNVERIFIED','{}')`,
+      values($1,$2,$3,$5,'RCE',$4::jsonb,'local-synthetic','RECEIVED_UNVERIFIED','{}')`,
       [
         rid,
         clinic,
@@ -103,18 +105,20 @@ export async function localRceDatabase(dataDir) {
           documento: identity.crm,
           uf: identity.uf,
         }),
+        environment,
       ],
     );
     for (const number of numbers)
       await db.query(
-        `insert into public.sncr_numbering_items(environment,number,request_id,clinic_id,user_id) values('hmg',$1,$2,$3,$4)`,
-        [number, rid, clinic, user],
+        `insert into public.sncr_numbering_items(environment,number,request_id,clinic_id,user_id) values($5,$1,$2,$3,$4)`,
+        [number, rid, clinic, user, environment],
       );
     return rid;
   }
   async function reserve(
     snapshot = syntheticSnapshot(),
     eid = crypto.randomUUID(),
+    environment,
   ) {
     const did = crypto.randomUUID();
     await db.query(
@@ -130,6 +134,8 @@ export async function localRceDatabase(dataDir) {
       v: 1,
       s: snapshot,
       h: rceSnapshotHash(snapshot),
+      // Sem o argumento, vale o padrão do banco ('hmg'), como no código anterior à produção.
+      ...(environment ? { env: environment } : {}),
     });
   }
   return { db, clinic, user, rpc, get, repo, addNumbers, reserve };

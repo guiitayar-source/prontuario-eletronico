@@ -11,7 +11,8 @@ import { validateRceSnapshot, type RceSnapshot } from './rce.ts';
 import { rangeNumberPattern } from './client.ts';
 
 // Original official model, unchanged. Source/hash are documented in assets/sncr/README.md.
-// 'hmg': RCE de treinamento com número de homologação. 'transition': RCE eletrônica sem
+// 'hmg': RCE de treinamento com número de homologação. 'prd': RCE com número real do SNCR,
+// sem marca de teste. 'transition': RCE eletrônica sem
 // numeração SNCR, admitida no período de transição (RDC 1.000/2025 alterada; ver
 // sncrTransitionEnd), assinada com certificado ICP-Brasil e verificável no ITI.
 export const RCE_TRANSITION_NUMBER_TEXT = 'Sem numeração SNCR (período de transição)';
@@ -20,14 +21,18 @@ export async function rcePdf(
   snapshot: RceSnapshot,
   number: string | null,
   issuedAt: Date,
-  environment: 'hmg' | 'transition',
+  environment: 'hmg' | 'prd' | 'transition',
   templateBytes?: Uint8Array,
 ) {
   const s = validateRceSnapshot(snapshot);
-  if (environment !== 'hmg' && environment !== 'transition')
-    throw new Error('Emissão em produção ainda não liberada.');
+  if (environment !== 'hmg' && environment !== 'prd' && environment !== 'transition')
+    throw new Error('Ambiente de emissão desconhecido.');
   const training = environment === 'hmg';
-  if (training ? !rangeNumberPattern.test(number || '') : number !== null)
+  if (
+    environment === 'transition'
+      ? number !== null
+      : !rangeNumberPattern.test(number || '')
+  )
     throw new Error('Formato da numeração ainda não validado.');
   const template = await PDFDocument.load(
     templateBytes ||
@@ -66,12 +71,13 @@ export async function rcePdf(
     throw new Error(
       'Posologia extensa demais. Revise ou divida em novas receitas.',
     );
-  // Only the official training entry point is documented for this environment.
-  // Do not invent a consultation API/path by copying the production route. Sem número SNCR,
+  // Treinamento e produção usam o portal de cada ambiente (docs/SNCR.md). Sem número SNCR,
   // a conferência disponível é a da assinatura no ITI (RDC 1.000/2025, art. 13, I).
   const consultUrl = training
     ? 'https://sncr-treinamento.anvisa.gov.br/'
-    : ITI_VALIDATOR_URL;
+    : environment === 'prd'
+      ? 'https://sncr.anvisa.gov.br/'
+      : ITI_VALIDATOR_URL;
   const qr = await result.embedPng(
     await QRCode.toBuffer(consultUrl, {
       errorCorrectionLevel: 'M',
@@ -149,7 +155,9 @@ export async function rcePdf(
     field(
       training
         ? 'Consulta de teste: sncr-treinamento.anvisa.gov.br'
-        : 'Verifique a assinatura digital em validar.iti.gov.br',
+        : environment === 'prd'
+          ? 'Verifique a numeração em sncr.anvisa.gov.br e a assinatura em validar.iti.gov.br'
+          : 'Verifique a assinatura digital em validar.iti.gov.br',
       26,
       780,
       450,

@@ -39,7 +39,7 @@ export type ClinicalDocument = {
   signed_pdf_path?: string | null;
   prescription_category?: PrescriptionCategory | null;
   rce_fields?: RceFields | null;
-  rce_emission?: { id: string; state: string; number: string; environment: 'hmg' } | null;
+  rce_emission?: { id: string; state: string; number: string; environment: 'hmg' | 'prd' } | null;
 };
 export type DocumentProfile = {
   physician_name: string;

@@ -28,7 +28,7 @@ export type RceEmission = {
   user_id: string;
   document_id: string;
   document_version: number;
-  environment: 'hmg';
+  environment: 'hmg' | 'prd';
   number: string;
   snapshot: RceSnapshot;
   snapshot_hash: string;
@@ -144,12 +144,13 @@ export async function signRce(params: {
   const claimed = acquisition.claimed;
   if (rceSnapshotHash(e.snapshot) !== e.snapshot_hash)
     throw new Error('O conteúdo reservado foi alterado. Interrompa a emissão.');
-  if (e.environment !== 'hmg') throw new Error('Produção ainda não liberada.');
+  if (e.environment !== 'hmg' && e.environment !== 'prd')
+    throw new Error('Ambiente de emissão desconhecido.');
   if (e.state === 'SIGNED' || e.state === 'BLOCKED' || e.state === 'CANCELLED')
     return e;
   if (!claimed && e.state === 'PREPARING') return e;
   const attempt = e.attempt_id!;
-  const prefix = `${e.clinic_id}/sncr/hmg/${e.id}/${attempt}`;
+  const prefix = `${e.clinic_id}/sncr/${e.environment}/${e.id}/${attempt}`;
   const cmsPath = prefix + '/signature.json';
   if (claimed) {
     let signer: RceSigner;
@@ -159,12 +160,20 @@ export async function signRce(params: {
       if (signer.cpf !== e.snapshot.prescriber.cpf)
         throw new Error('O certificado não pertence ao prescritor desta RCE.');
       const issuedAt = (params.now || (() => new Date()))();
-      const unsigned = await rcePdf(e.snapshot, e.number, issuedAt, 'hmg');
+      const unsigned = await rcePdf(
+        e.snapshot,
+        e.number,
+        issuedAt,
+        e.environment,
+      );
       prepared = await padesService.preparePdfForSignature(unsigned, {
         signerName: e.snapshot.prescriber.name,
         doctorCrm: `${e.snapshot.prescriber.crm}/${e.snapshot.prescriber.uf}`,
         drawVisualBox: false,
-        reason: 'RCE de homologação - sem validade para dispensação',
+        reason:
+          e.environment === 'hmg'
+            ? 'RCE de homologação - sem validade para dispensação'
+            : 'Receita de Controle Especial eletrônica',
       });
       const meta: PreparedMeta = {
         path: prefix + '/prepared.pdf',
@@ -277,7 +286,7 @@ export async function signRce(params: {
       signedAt: verification.signedAt!.toISOString(),
       provider: meta.provider,
       sncrBinding: params.numberCheckMode || 'prescriber_checked',
-      environment: 'hmg',
+      environment: e.environment,
     },
   );
 }
@@ -324,7 +333,7 @@ export async function recoverRceOriginal(
   }
   const preparedBytes = await artifacts.read(e.prepared_meta.path);
   const cms = await artifacts.read(
-    `${e.clinic_id}/sncr/hmg/${e.id}/${e.attempt_id}/signature.json`,
+    `${e.clinic_id}/sncr/${e.environment}/${e.id}/${e.attempt_id}/signature.json`,
   );
   if (!preparedBytes || !cms)
     throw new Error(

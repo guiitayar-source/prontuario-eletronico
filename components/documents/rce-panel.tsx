@@ -13,23 +13,30 @@ import type { DocumentsController } from './use-documents';
 import type { DocumentProfile } from '@/lib/document-fields';
 
 // One config request per page; the editor footer and the panel share it.
-let testConfig: Promise<boolean> | null = null;
-export function useRceTestEnabled() {
-  const [enabled, setEnabled] = useState(false);
+type RceEnvironment = 'hmg' | 'prd' | null;
+let rceConfig: Promise<RceEnvironment> | null = null;
+export function useRceEnvironment() {
+  const [environment, setEnvironment] = useState<RceEnvironment>(null);
   useEffect(() => {
-    testConfig ||= apiFetch('/api/sncr/rce?action=config')
-      .then(async (r) => r.ok && (await r.json()).enabled === true)
+    rceConfig ||= apiFetch('/api/sncr/rce?action=config')
+      .then(async (r): Promise<RceEnvironment> => {
+        const config = r.ok ? await r.json() : null;
+        return config?.enabled === true &&
+          (config.environment === 'hmg' || config.environment === 'prd')
+          ? config.environment
+          : null;
+      })
       .catch(() => {
-        testConfig = null;
-        return false;
+        rceConfig = null;
+        return null;
       });
     let alive = true;
-    void testConfig.then((v) => alive && setEnabled(v));
+    void rceConfig.then((v) => alive && setEnvironment(v));
     return () => {
       alive = false;
     };
   }, []);
-  return enabled;
+  return environment;
 }
 
 // Os campos ficam na seção "RCE eletrônica" do editor; aqui só o passo a passo.
@@ -42,6 +49,7 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
     [checked, setChecked] = useState(false),
     [reviewed, setReviewed] = useState(false),
     [preview, setPreview] = useState('');
+  const production = useRceEnvironment() === 'prd';
   const idRef = useRef(''),
     previewRef = useRef('');
   const fields = d.rce_fields || emptyRceFields();
@@ -169,7 +177,9 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
       !e ||
       !checked ||
       !window.confirm(
-        'Assinar esta RCE de teste? O número e o conteúdo permanecerão vinculados a esta emissão. O arquivo não terá validade para dispensação.',
+        production
+          ? 'Assinar esta RCE? O número e o conteúdo ficam vinculados a esta emissão, e a receita passa a valer para dispensação. Não é possível alterar depois.'
+          : 'Assinar esta RCE de teste? O número e o conteúdo permanecerão vinculados a esta emissão. O arquivo não terá validade para dispensação.',
       )
     )
       return;
@@ -214,12 +224,16 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
     </p>
   );
   return (
-    <section aria-label="RCE eletrônica de teste" className="rce-flow">
+    <section
+      aria-label={production ? 'RCE eletrônica' : 'RCE eletrônica de teste'}
+      className="rce-flow"
+    >
       <header className="rce-flow-head">
-        <h3>RCE com numeração SNCR — teste</h3>
+        <h3>{production ? 'RCE com numeração SNCR' : 'RCE com numeração SNCR — teste'}</h3>
         <p>
-          Homologação, sem validade para dispensação. Só paciente fictício e
-          uma medicação por receita.
+          {production
+            ? 'Numeração real da Anvisa e assinatura qualificada ICP-Brasil. Uma medicação por receita.'
+            : 'Homologação, sem validade para dispensação. Só paciente fictício e uma medicação por receita.'}
         </p>
       </header>
       <ol className="rce-steps">
@@ -254,7 +268,7 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
           </button>
           {alert}
           <p className="rce-step-note">
-            Sem lote de teste?{' '}
+            {production ? 'Sem lote?' : 'Sem lote de teste?'}{' '}
             <Link href="/sncr" target="_blank">
               Solicite a numeração no SNCR
             </Link>
@@ -275,20 +289,20 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
             )
           }
         />
-        <Step current={current} n={3} title="Revisar o PDF" detail="Modelo oficial da Anvisa, com a marca de homologação.">
+        <Step current={current} n={3} title="Revisar o PDF" detail={production ? 'Modelo oficial da Anvisa.' : 'Modelo oficial da Anvisa, com a marca de homologação.'}>
           <button className="primary" type="button" disabled={busy} onClick={() => void showPdf(false)}>
-            Revisar PDF de teste
+            {production ? 'Revisar PDF' : 'Revisar PDF de teste'}
           </button>
           {alert}
         </Step>
         <Step current={current} n={4} title="Conferir no SNCR" detail="O número precisa estar no seu CRM/UF.">
           <a
             className="secondary rce-link-button"
-            href="https://sncr-treinamento.anvisa.gov.br/"
+            href={production ? 'https://sncr.anvisa.gov.br/' : 'https://sncr-treinamento.anvisa.gov.br/'}
             target="_blank"
             rel="noreferrer"
           >
-            Abrir SNCR de treinamento
+            {production ? 'Abrir SNCR' : 'Abrir SNCR de treinamento'}
           </a>
           <label className="rce-check">
             <input
@@ -329,7 +343,7 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
                 </div>
               )}
               <p className="rce-step-note">
-                Para seguir o teste, use “Duplicar como novo rascunho” abaixo:
+                {production ? 'Para seguir' : 'Para seguir o teste'}, use “Duplicar como novo rascunho” abaixo:
                 a cópia recebe outro número.
               </p>
             </div>
@@ -350,7 +364,7 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
             </>
           ) : (
             <button className="primary" type="button" disabled={busy || !checked} onClick={() => void sign()}>
-              Assinar RCE de teste
+              {production ? 'Assinar RCE' : 'Assinar RCE de teste'}
             </button>
           )}
           {alert}
@@ -403,8 +417,11 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
       )}
       {preview && (
         <div className="rce-preview">
-          <iframe title="RCE de teste" src={preview} />
-          <a href={preview} download={state === 'SIGNED' ? 'rce-teste-assinada.pdf' : 'rce-teste.pdf'}>
+          <iframe title={production ? 'RCE' : 'RCE de teste'} src={preview} />
+          <a
+            href={preview}
+            download={`rce${production ? '' : '-teste'}${state === 'SIGNED' ? '-assinada' : ''}.pdf`}
+          >
             Baixar este PDF
           </a>
         </div>

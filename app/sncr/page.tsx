@@ -22,7 +22,7 @@ const stateLabels: Record<string, string> = {
   CONTRACT_REVIEW:
     'Retorno preservado para conferência. O lote não está liberado para uso.',
   RECEIVED_UNVERIFIED:
-    'Numeração recebida em homologação e em quarentena. O vínculo com o prescritor ainda precisa ser conferido.',
+    'Numeração recebida e em quarentena. O vínculo com o prescritor ainda precisa ser conferido.',
 };
 type Lot = {
   first: string;
@@ -36,6 +36,7 @@ type Lot = {
 export default function SncrPreparation() {
   const { clinic, role } = useAccess();
   const [enabled, setEnabled] = useState(false),
+    [production, setProduction] = useState(false),
     [busy, setBusy] = useState(false),
     [category, setCategory] = useState<PrescriptionCategory>('RCE'),
     [crm, setCrm] = useState(''),
@@ -48,7 +49,7 @@ export default function SncrPreparation() {
     [requestState, setRequestState] = useState(''),
     [lot, setLot] = useState<Lot | null>(null);
   const callbackHandled = useRef(false);
-  const storageKey = 'psywrite:sncr:hmg:' + clinic;
+  const storageKey = 'psywrite:sncr:' + clinic;
 
   async function reloadLot() {
     const r = await apiFetch('/api/sncr');
@@ -98,7 +99,9 @@ export default function SncrPreparation() {
       const config = await apiFetch('/api/sncr');
       const status = await config.json();
       if (!config.ok) throw new Error(status.error);
-      setEnabled(status.environment === 'hmg');
+      const on = status.environment === 'hmg' || status.environment === 'prd';
+      setEnabled(on);
+      setProduction(status.environment === 'prd');
       setLot(status.lot);
       // Another tab (or a lost sessionStorage) must resume the open request.
       if (!sessionId && status.openRequestId && status.openRequestId !== id) {
@@ -107,7 +110,7 @@ export default function SncrPreparation() {
         setRequestId(id);
       }
       if (!sessionId) {
-        if (id && status.environment === 'hmg') await refresh(id);
+        if (id && on) await refresh(id);
         return;
       }
       if (!id)
@@ -136,6 +139,13 @@ export default function SncrPreparation() {
   }, [clinic]);
 
   async function start() {
+    if (
+      production &&
+      !window.confirm(
+        'Isto pede ao SNCR um lote REAL de numeração e gasta uma das 3 solicitações do mês. O número usado não volta. Continuar?',
+      )
+    )
+      return;
     setBusy(true);
     setMessage('');
     // Retain the id across a lost response/reload. A second click with changed
@@ -177,22 +187,24 @@ export default function SncrPreparation() {
   return (
     <main className="sncr-page">
       <header className="sncr-section">
-        <h1>SNCR — numeração de teste</h1>
+        <h1>{production ? 'SNCR — numeração' : 'SNCR — numeração de teste'}</h1>
         <p className="sncr-note">
-          Homologação da Anvisa, sem validade para dispensação. Esta página só
-          pede e acompanha a numeração; a RCE é feita no editor da receita, no
-          passo a passo “RCE com numeração SNCR”.
+          {production
+            ? 'Numeração real da Anvisa. '
+            : 'Homologação da Anvisa, sem validade para dispensação. '}
+          Esta página só pede e acompanha a numeração; a RCE é feita no editor
+          da receita, no passo a passo “RCE com numeração SNCR”.
         </p>
         {!enabled && (
           <p role="status" className="sncr-alert">
             Integração desabilitada neste servidor (SNCR_ENVIRONMENT diferente
-            de hmg).
+            de hmg e prd).
           </p>
         )}
       </header>
 
       <section className="sncr-section" aria-label="Seu lote">
-        <h2>Seu lote de teste</h2>
+        <h2>{production ? 'Seu lote' : 'Seu lote de teste'}</h2>
         {lot ? (
           <dl className="sncr-lot">
             <div>
@@ -312,7 +324,7 @@ export default function SncrPreparation() {
             )}
             <p className="sncr-note sncr-form-note">
               {['RCE', 'RET'].includes(category)
-                ? 'O SNCR fornece 1.000 números por lote, até 3 pedidos por mês. O login é com a sua conta gov.br (no teste, a conta do gov.br de homologação).'
+                ? `O SNCR fornece 1.000 números por lote, até 3 pedidos por mês. O login é com a sua conta gov.br${production ? '' : ' (no teste, a conta do gov.br de homologação)'}.`
                 : 'Em produção, as notificações dependem de numeração autorizada pela Vigilância Sanitária.'}
             </p>
             <button className="primary" type="button" onClick={() => void start()}>

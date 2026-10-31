@@ -14,7 +14,7 @@ import {
   signatureProviderLabel,
 } from '@/lib/signature/providers';
 import { prescriptionCategories, prescriptionSigningBlock, type PrescriptionCategory } from '@/lib/sncr/policy';
-import { RceFieldsEditor, RcePanel, useRceTestEnabled } from './rce-panel';
+import { RceFieldsEditor, RcePanel, useRceEnvironment } from './rce-panel';
 import { rceStateLabels } from '@/lib/sncr/rce';
 export function DocumentEditor({
   docs,
@@ -24,7 +24,8 @@ export function DocumentEditor({
   prescription?: boolean;
 }) {
   const ai = useFeature('ia');
-  const rceTest = useRceTestEnabled();
+  const rceEnvironment = useRceEnvironment();
+  const rceTest = rceEnvironment !== null;
   const [choosingProvider, setChoosingProvider] = useState(false);
   // Validação expirada com a página aberta: revalida direto no mesmo provedor.
   const expiredProvider = isSignatureProviderId(docs.signatureExpired)
@@ -39,7 +40,7 @@ export function DocumentEditor({
   const category = d.prescription_category || 'RCE';
   const signingBlock = isRecipe ? prescriptionSigningBlock(category) : null;
   const noun = prescription ? 'receita' : 'documento';
-  // Both RCE paths are on screen only while the SNCR test is enabled.
+  // Both RCE paths are on screen only while the SNCR integration is enabled.
   const transitionOnly = isRecipe && category === 'RCE' && rceTest;
 
   function update(fields: Partial<ClinicalDocument>) {
@@ -51,7 +52,7 @@ export function DocumentEditor({
     <>
       <h2 id="dialog-title">
         {rceLocked
-          ? d.rce_emission!.state === 'SIGNED' ? 'RCE de teste assinada' : 'RCE de teste em preparação'
+          ? `${d.rce_emission!.environment === 'prd' ? 'RCE' : 'RCE de teste'} ${d.rce_emission!.state === 'SIGNED' ? 'assinada' : 'em preparação'}`
           : isSigned
           ? prescription
             ? 'Receita assinada digitalmente'
@@ -473,7 +474,7 @@ export function DocumentEditor({
       {transitionOnly && !rceLocked && (
         <p className="rce-footer-note">
           “Assinar sem número SNCR” usa o fluxo de transição, válido até 03/03/2027. Para a RCE com
-          número de teste, siga o passo a passo acima.
+          número {rceEnvironment === 'prd' ? 'SNCR' : 'de teste'}, siga o passo a passo acima.
         </p>
       )}
       <output

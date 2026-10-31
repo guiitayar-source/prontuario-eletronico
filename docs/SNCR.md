@@ -52,7 +52,7 @@ Bases oficiais:
 | Ambiente | Base API | Portal |
 | --- | --- | --- |
 | Homologação | `https://api-gateway.hmg.apps.anvisa.gov.br/api-sncr/api/v1/` | `https://sncr-treinamento.anvisa.gov.br/` |
-| Produção (bloqueada no código nesta etapa) | `https://api-gateway.prd.apps.anvisa.gov.br/api-sncr/api/v1/` | `https://sncr.anvisa.gov.br/` |
+| Produção (código pronto; só liga com `SNCR_ENVIRONMENT=prd`, ver `auditorias/sncr/CHECKLIST-DEPLOY.md`) | `https://api-gateway.prd.apps.anvisa.gov.br/api-sncr/api/v1/` | `https://sncr.anvisa.gov.br/` |
 
 Fluxo implementado, somente homologação: POST autenticado no PsyWrite cria operação durável → GET `auth/login?client_url=...` redireciona ao gov.br → retorno `session_id` → POST autenticado ao PsyWrite, vinculado a clínica/usuário/cookie HttpOnly → troca no servidor por GET `auth/token?session_id=...` com Origin correspondente → token só em memória → uma única chamada de numeração. Não há refresh token; manual informa 30 segundos para session token e access token. Callback `/sncr`, HTTPS em domínio .br ou localhost/127.0.0.1 em homologação. CNPJ e token nunca são aceitos do navegador como credenciais de numeração.
 

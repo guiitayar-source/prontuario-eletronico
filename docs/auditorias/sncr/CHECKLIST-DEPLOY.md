@@ -45,7 +45,7 @@ As migrações abaixo estão travadas com `raise exception '… não aplicar'`.
 
 | Variável | Valor | Quando |
 |---|---|---|
-| `SNCR_ENVIRONMENT` | não definir (desligado) | Até o item 3 ficar pronto. `hmg` em produção abriria o fluxo de teste para todos. |
+| `SNCR_ENVIRONMENT` | não definir (desligado) | Até o dia de ligar o item 3, com `prd`. `hmg` em produção abriria o fluxo de teste para todos. |
 | `SNCR_RETURN_URL` | `https://<domínio>/sncr` | Só junto com o item 3 |
 | `SNCR_PLATFORM_CNPJ` | CNPJ da mantenedora | Só junto com o item 3 |
 | `SNCR_PLATFORM_NAME` | `PsyWrite` | Só junto com o item 3 |
@@ -58,34 +58,37 @@ Sem `SNCR_ENVIRONMENT`, o deploy leva para produção:
 - o novo passo a passo, que só aparece com o teste ligado;
 - a consulta de revogação na assinatura.
 
-## 3. Ambiente `prd` do SNCR (ainda não feito)
+## 3. Ambiente `prd` do SNCR (código pronto, desligado)
 
-O código hoje só aceita `hmg`, de propósito. Ligar `prd` exige, nesta ordem:
+O código aceita `SNCR_ENVIRONMENT=prd` desde a migração `20261031010000_sncr_production_environment`.
+Sem a variável, nada muda: o servidor recusa qualquer valor que não seja exatamente `hmg` ou `prd`.
 
-1. Uma migração travada que aceite `prd`. Ela precisa cobrir:
-   - os `check(environment in (...))` de `sncr_numbering_requests` e `sncr_rce_emissions`;
-   - as funções `sncr_*` que fixam `'hmg'`.
-2. Remover a trava `environment !== 'hmg'` em:
-   - `sncrPreparationConfig` (`lib/sncr/service.ts`);
-   - `rce-service.ts`;
-   - `signRce` (`lib/sncr/rce-workflow.ts`);
-   - `rcePdf` (`lib/sncr/rce-pdf.ts`).
+O que mudou:
+- A migração libera `prd` em `sncr_rce_emissions` e passa o ambiente para `sncr_rce_reserve`
+  (padrão `hmg`, então o código antigo continua funcionando). A reserva só usa números do mesmo
+  ambiente, e `sncr_rce_finish` confere o caminho do original com o ambiente da própria emissão.
+- `sncrPreparationConfig`, `rce-service`, `rce-workflow` e `rcePdf` aceitam `prd`.
+- O PDF de produção não tem a marca "HOMOLOGAÇÃO", aponta para `sncr.anvisa.gov.br` (QR e rodapé)
+  e tem o título "Receita de Controle Especial".
+- Uma emissão de um ambiente não abre num servidor configurado para o outro.
+- Em `prd`, a página `/sncr` pede confirmação antes de solicitar o lote (gasta uma das 3
+  solicitações do mês) e só aceita RCE e RET; notificações seguem bloqueadas.
 
-   Tudo atrás de `SNCR_ENVIRONMENT=prd` explícito.
-3. PDF de produção:
-   - sem a marca "HOMOLOGAÇÃO";
-   - consulta em `sncr.anvisa.gov.br`, que é o endereço impresso no próprio modelo oficial da
-     Anvisa (`assets/sncr/rce-eletronica-anvisa.pdf`, rodapé "VERIFIQUE A NUMERAÇÃO…").
-
-   O guia de integração da Anvisa (v1.0) só cita o ambiente de treinamento,
-   `sncr-treinamento.anvisa.gov.br`. Confirmar o endereço de produção com
-   `sncr.integracao@anvisa.gov.br` antes de imprimir no QR.
-4. A conferência do vínculo do número com o CRM continua manual (a caixa do passo 4). A API não
+Para ligar, nesta ordem:
+1. Aplicar a migração `20261031010000` (só com o aval do titular; é aditiva e pode ir antes do
+   deploy).
+2. Confirmar com `sncr.integracao@anvisa.gov.br`:
+   - o endereço de consulta que vai no QR (hoje `https://sncr.anvisa.gov.br/`, o do rodapé do
+     modelo oficial; o guia v1.0 só cita o de treinamento);
+   - se a mantenedora precisa de habilitação própria.
+3. Na Vercel (Production): `SNCR_ENVIRONMENT=prd`, `SNCR_RETURN_URL=https://www.psywrite.com.br/sncr`,
+   `SNCR_PLATFORM_CNPJ`, `SNCR_PLATFORM_NAME`. Redeploy.
+4. Com o titular presente, em `/sncr`, pedir o primeiro lote real com o gov.br de verdade.
+   Número gasto não volta.
+5. A conferência do vínculo do número com o CRM continua manual (a caixa do passo 4). A API não
    devolve o prescritor do lote.
-5. Testes: os atuais de `hmg` repetidos para `prd`, com o mesmo bloqueio quando a variável não
-   estiver definida.
 
-Estimativa: um dia de trabalho com testes. Fica para depois deste deploy.
+Para voltar atrás: remover `SNCR_ENVIRONMENT` e redeploy. Os números e as emissões ficam no banco.
 
 ## 4. Política de assinatura AD-RB (proposta)
 
