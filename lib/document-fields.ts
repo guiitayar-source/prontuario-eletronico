@@ -49,8 +49,10 @@ export type DocumentProfile = {
   letterhead_phone: string;
   cpf?: string | null;
 };
+/** Modelo de texto do próprio profissional, por tipo de documento (tabela prescription_templates). */
 export type PrescriptionTemplate = {
   id: string;
+  kind: string;
   name: string;
   text: string;
   updated_at?: string;

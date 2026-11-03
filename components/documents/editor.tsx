@@ -8,6 +8,7 @@ import {
 import { Download, ShieldCheck, Key, Lock } from 'lucide-react';
 import type { DocumentsController } from './use-documents';
 import { DocumentAiBox } from './ai-box';
+import { DocumentTemplates } from './templates';
 import { useFeature } from '../plan';
 import {
   isSignatureProviderId,
@@ -27,6 +28,7 @@ export function DocumentEditor({
   const rceEnvironment = useRceEnvironment();
   const rceTest = rceEnvironment !== null;
   const [choosingProvider, setChoosingProvider] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   // Validação expirada com a página aberta: revalida direto no mesmo provedor.
   const expiredProvider = isSignatureProviderId(docs.signatureExpired)
     ? docs.signatureExpired
@@ -36,6 +38,7 @@ export function DocumentEditor({
   const isSigned = d.status === 'SIGNED' || d.status === 'SUPERSEDED';
   const isSigning = d.status === 'SIGNING';
   const isRecipe = d.kind === 'Receita';
+  const myTemplates = docs.templates.filter((t) => (t.kind || 'Receita') === d.kind).length;
   const rceLocked = !!d.rce_emission;
   const category = d.prescription_category || 'RCE';
   const signingBlock = isRecipe ? prescriptionSigningBlock(category) : null;
@@ -285,6 +288,17 @@ export function DocumentEditor({
               Preparar modelo
             </button>
           )}
+          {!prescription && !isSigned && (
+            <button
+              type="button"
+              className="secondary"
+              aria-expanded={templatesOpen}
+              onClick={() => setTemplatesOpen((open) => !open)}
+            >
+              Meus modelos
+              {myTemplates ? ` (${myTemplates})` : ''}
+            </button>
+          )}
           {d.kind === 'Receita' && category === 'RCE' && (
             <a
               href="/templates/Receituario-padrao.docx"
@@ -313,6 +327,11 @@ export function DocumentEditor({
             />
           )}
         </div>
+        {!prescription && !isSigned && templatesOpen && (
+          <section className="document-templates-box" aria-label={`Meus modelos de ${d.kind.toLowerCase()}`}>
+            <DocumentTemplates key={`${d.id}:${d.kind}`} docs={docs} placeholder={templatePlaceholder(d.kind)} />
+          </section>
+        )}
         <textarea
           className="document-editor"
           aria-label="Texto do documento"
@@ -519,5 +538,20 @@ export function DocumentEditor({
         </>
       )}
     </>
+  );
+}
+
+function templatePlaceholder(kind: string) {
+  return (
+    (
+      {
+        'Pedido de exames': 'Ex.: Rotina lítio',
+        Atestado: 'Ex.: Afastamento 3 dias',
+        'Declaração de comparecimento': 'Ex.: Comparecimento com acompanhante',
+        Relatório: 'Ex.: Relatório para perícia',
+        Encaminhamento: 'Ex.: Psicoterapia',
+        Receita: 'Ex.: Sertralina 50 mg',
+      } as Record<string, string>
+    )[kind] || 'Nome do modelo'
   );
 }

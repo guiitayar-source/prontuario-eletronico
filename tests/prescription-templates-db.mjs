@@ -27,6 +27,7 @@ try {
     '20260912060000_documents.sql',
     '20260925010000_digital_signatures.sql',
     '20260929010000_prescription_templates_profiles.sql',
+    '20261103220000_document_templates_by_kind.sql',
   ]) {
     let sql = await readFile(new URL('../supabase/migrations/' + file, import.meta.url), 'utf8');
     // A migração de assinaturas depende de tabelas não relevantes aqui: aplica só o trecho de document_profiles.
@@ -47,6 +48,14 @@ try {
   await tpl('delete', { id });
   assert.equal((await db.query('select count(*)::int as n from public.prescription_templates')).rows[0].n, 0);
 
+  // Modelos por tipo de documento: sem tipo vira 'Receita'; o mesmo nome pode existir em outro tipo.
+  assert.equal((await tpl('save', { id: crypto.randomUUID(), name: 'Rotina', text: 'Receita' })).kind, 'Receita');
+  const exams = await tpl('save', { id: crypto.randomUUID(), kind: 'Pedido de exames', name: 'rotina', text: 'Hemograma' });
+  assert.equal(exams.kind, 'Pedido de exames');
+  await assert.rejects(() => tpl('save', { id: crypto.randomUUID(), kind: 'Pedido de exames', name: 'ROTINA', text: 'x' }), /nome/);
+  await assert.rejects(() => tpl('save', { id: crypto.randomUUID(), kind: 'Inventado', name: 'x', text: 'x' }), /check|violates/);
+  await db.exec('delete from public.prescription_templates');
+
   const profile = async (d) =>
     (await db.query('select public.document_profile_write($1,$2::jsonb) as p', [clinic, JSON.stringify(d)])).rows[0].p;
   await db.exec(`insert into public.document_profiles(clinic_id,user_id,physician_name,physician_registration,cpf) values('${clinic}','${user}','Cert','', '12345678900')`);
@@ -55,7 +64,7 @@ try {
   assert.equal(p.cpf, undefined, 'CPF não é devolvido');
   assert.equal((await db.query(`select cpf from public.document_profiles where user_id='${user}'`)).rows[0].cpf, '12345678900', 'CPF preservado');
   await assert.rejects(() => profile({ letterhead_title: 'x'.repeat(121) }), /tamanho/);
-  console.log('PASS: modelos de receita por usuário e timbre do profissional.');
+  console.log('PASS: modelos por usuário e tipo de documento e timbre do profissional.');
 } finally {
   await db.close();
 }

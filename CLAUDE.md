@@ -34,7 +34,8 @@ Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abe
   (ou `index.ts` reexportando) e a lógica num hook `use-*.ts`, deixando o componente só com a tela:
   - `clinical-record/` — atendimento: `index.tsx` (estado e fluxo), `status-banner`, `actions`,
     `sidebar`, `dialogs`, `types`.
-  - `documents/` — `use-documents.ts`, `use-document-ai.ts`, `editor`, `ai-box`, `history`.
+  - `documents/` — `use-documents.ts`, `use-document-ai.ts`, `editor`, `ai-box`, `history`,
+    `templates` (modelos do profissional por tipo de documento; receita e demais documentos).
   - `capture/` — anexos: `use-attachments.ts` (lógica), `desktop.tsx` (tela), `client.ts` (API).
   - `dialog-frame.tsx` — moldura padrão de diálogo (fundo, foco preso, fechar); `modal.tsx` usa
     `<dialog>` nativo. `topbar.tsx` tem a busca global (desenhada por portal na barra da conta,

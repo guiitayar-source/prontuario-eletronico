@@ -46,6 +46,22 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
         .eq('user_id', user)
         .maybeSingle(),
     );
+  const templates = async () => {
+    const query = (columns: string) =>
+      db
+        .from('prescription_templates')
+        .select(columns)
+        .eq('clinic_id', clinic)
+        .eq('user_id', user)
+        .order('name');
+    const withKind = await query('id,kind,name,text,updated_at');
+    // Antes da migração 20261103220000 não há coluna kind: todos os modelos são de receita.
+    if (withKind.error?.code === '42703') {
+      const rows = check(await query('id,name,text,updated_at')) as unknown as object[];
+      return rows.map((r) => ({ ...r, kind: 'Receita' }));
+    }
+    return check(withKind);
+  };
   if (request.method === 'GET') {
     if (action === 'profile') return json({ profile: await profile() });
     if (!pid) throw new HttpError(400, 'Informe o paciente.');
@@ -154,14 +170,7 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
     return json({
       documents: rows.map(r => ({ ...r, rce_emission: electronic.data?.find(e => e.document_id === r.id) || null })),
       profile: await profile(),
-      templates: check(
-        await db
-          .from('prescription_templates')
-          .select('id,name,text,updated_at')
-          .eq('clinic_id', clinic)
-          .eq('user_id', user)
-          .order('name'),
-      ),
+      templates: await templates(),
     });
   }
   writeGuard(request, 'X-Document-Action');
@@ -197,15 +206,18 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
       return json({ deleted: true });
     }
     const name = text(t.name, 80)?.trim(),
-      body = text(t.text, 20000);
+      body = text(t.text, 20000),
+      kind = t.kind ?? 'Receita';
     if (!name || !body?.trim())
       throw new HttpError(422, 'Preencha o nome e o texto do modelo.');
+    if (typeof kind !== 'string' || !documentKinds.includes(kind))
+      throw new HttpError(422, 'Tipo de documento do modelo inválido.');
     return json({
       template: check(
         await db.rpc('prescription_template_write', {
           c: clinic,
           action: 'save',
-          d: { id: t.id, name, text: body },
+          d: { id: t.id, kind, name, text: body },
         }),
       ),
     });
