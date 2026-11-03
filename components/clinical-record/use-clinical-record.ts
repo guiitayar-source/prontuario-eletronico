@@ -124,7 +124,7 @@ export function useClinicalRecord({
         .then((result) => {
           if (active) {
             setRows(result.consultations);
-            setStatus('Escolha uma consulta ou inicie uma nova.');
+            setStatus('Inicie uma nova consulta ou consulte o histórico.');
             const returnEvoId =
               typeof window !== 'undefined'
                 ? sessionStorage.getItem('birdid_return_evolution_id')

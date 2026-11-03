@@ -1,4 +1,6 @@
 'use client';
+import { useState } from 'react';
+import { ConsultationHistory, ConsultationPreview } from './history';
 import { ImportedHistory } from '../imports';
 import { ClinicalContextEditor } from '../clinical-context';
 import { DocumentHistory, DocumentEditor } from '../documents';
@@ -101,6 +103,10 @@ export default function ClinicalRecord({
     finish,
     anamnesator,
   } = useClinicalRecord({ patient, appointmentId });
+  const [previewId, setPreviewId] = useState<string>();
+  const previousConsultations = rows.filter((entry) => entry.id !== current?.id);
+  const preview = medical && previousConsultations.find((entry) => entry.id === previewId);
+
   // Validação expirada: volta direto ao mesmo provedor, sem perguntar de novo qual usar.
   const connectSignature = () =>
     isSignatureProviderId(signatureExpired)
@@ -144,6 +150,14 @@ export default function ClinicalRecord({
               >
                 Consulta atual
               </button>
+              {medical && (
+                <button
+                  className={tab === 'anteriores' ? 'selected' : ''}
+                  onClick={() => setTab('anteriores')}
+                >
+                  Consultas anteriores
+                </button>
+              )}
               <button
                 className={tab === 'exames' ? 'selected' : ''}
                 onClick={() => setTab('exames')}
@@ -198,6 +212,9 @@ export default function ClinicalRecord({
               }}
               newPrescription={medical ? openPrescription : undefined}
             />
+            {medical && tab === 'anteriores' && (
+              <ConsultationHistory entries={previousConsultations} onOpen={setPreviewId} />
+            )}
             {medical && hasImported && tab === 'importados' && (
               <ImportedHistory key={patient.id} patientId={patient.id} />
             )}
@@ -451,10 +468,6 @@ export default function ClinicalRecord({
                   <RecordSidebar
                     context={clinicalContext}
                     onEditContext={() => setModal('contexto')}
-                    rows={rows}
-                    currentId={current?.id}
-                    busy={busy}
-                    onChoose={(r) => leave(() => choose(r))}
                   />
                 )}
               </div>
@@ -465,6 +478,18 @@ export default function ClinicalRecord({
           </>
         </main>
       </div>
+      {preview && (
+        <ConsultationPreview
+          entry={preview}
+          onClose={() => setPreviewId(undefined)}
+          busy={busy || docs.busy || !!modal}
+          onOpenRecord={() => leave(() => {
+            choose(preview);
+            setPreviewId(undefined);
+            setTab('consulta');
+          })}
+        />
+      )}
       {modal === 'assinatura-detalhes' && current && (
         <EvolutionSignatureDetailsModal
           evolutionId={current.id}
