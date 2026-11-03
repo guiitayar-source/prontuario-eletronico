@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, type PDFFont } from 'pdf-lib';
+import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFile } from 'node:fs/promises';
 import type { ClinicalDocument } from './document-fields.ts';
@@ -54,13 +54,6 @@ async function prescriptionPdf(
   font: PDFFont,
   bold: PDFFont,
 ) {
-  const clinicName = clean(d.letterhead_title || '');
-  const clinicAddress = clean(d.letterhead_address || '');
-  const clinicPhone = clean(d.letterhead_phone || '');
-
-  const physicianName = d.physician_name;
-  const physicianReg = d.physician_registration;
-
   const dateFormatted = d.document_date
     ? d.document_date.split('-').reverse().join('/')
     : '';
@@ -94,29 +87,7 @@ async function prescriptionPdf(
     const contentWidth = right - left;
 
     // 1. Header (Consultório & Médico)
-    page.drawText(clinicName, {
-      x: left,
-      y: height - 45.7,
-      size: 9,
-      font: bold,
-      color: rgb(0, 0, 0),
-    });
-
-    page.drawText(physicianName, {
-      x: left,
-      y: height - 76.0,
-      size: 18,
-      font: bold,
-      color: rgb(0, 0, 0),
-    });
-
-    page.drawText(physicianReg, {
-      x: left,
-      y: height - 97.0,
-      size: 10,
-      font: bold,
-      color: rgb(0, 0, 0),
-    });
+    drawLetterhead(page, d, bold);
 
     // 2. Title & Via
     page.drawText(simple ? 'Receituário' : ret ? 'Receituário sujeito à retenção' : 'Receituário de controle especial', {
@@ -615,30 +586,203 @@ async function prescriptionPdf(
       color: rgb(0, 0, 0),
     });
 
-    // 7. Footer (Consultório address and phone). O endereço quebra em linhas
-    // para caber na largura útil; a última linha fica em y=40, acima do telefone.
-    const addressLines = wrapText(clinicAddress, font, 9, width - 2 * left);
-    addressLines.forEach((line, i) => {
-      const lineW = font.widthOfTextAtSize(line, 9);
-      page.drawText(line, {
-        x: (width - lineW) / 2,
-        y: 40.0 + 12 * (addressLines.length - 1 - i),
-        size: 9,
-        font: font,
-        color: rgb(0.15, 0.15, 0.15),
-      });
-    });
-
-    const footLine2W = font.widthOfTextAtSize(clinicPhone, 9);
-    page.drawText(clinicPhone, {
-      x: (width - footLine2W) / 2,
-      y: 28.0,
-      size: 9,
-      font: font,
-      color: rgb(0.15, 0.15, 0.15),
-    });
+    // 7. Footer (endereço e telefone do consultório).
+    drawFooter(page, d, font);
   }
 }
+const A4: [number, number] = [595.28, 841.89];
+const MARGIN = 51.1;
+const ink = rgb(0, 0, 0);
+const softInk = rgb(0.15, 0.15, 0.15);
+const rule = rgb(0.2, 0.2, 0.2);
+
+/** Timbre do topo, igual ao do receituário: consultório, nome do médico e registro. */
+function drawLetterhead(page: PDFPage, d: ClinicalDocument, bold: PDFFont) {
+  const height = page.getHeight();
+  const title = clean(d.letterhead_title || '');
+  if (title) page.drawText(title, { x: MARGIN, y: height - 45.7, size: 9, font: bold, color: ink });
+  page.drawText(d.physician_name || 'Nome do médico não informado', {
+    x: MARGIN,
+    y: height - 76.0,
+    size: 18,
+    font: bold,
+    color: ink,
+  });
+  page.drawText(d.physician_registration || 'Registro profissional não informado', {
+    x: MARGIN,
+    y: height - 97.0,
+    size: 10,
+    font: bold,
+    color: ink,
+  });
+}
+
+/** Rodapé com endereço (quebrado para caber) e telefone do consultório, centralizados. */
+function drawFooter(page: PDFPage, d: ClinicalDocument, font: PDFFont) {
+  const width = page.getWidth();
+  const addressLines = wrapText(clean(d.letterhead_address || ''), font, 9, width - 2 * MARGIN);
+  addressLines.forEach((line, i) => {
+    page.drawText(line, {
+      x: (width - font.widthOfTextAtSize(line, 9)) / 2,
+      y: 40.0 + 12 * (addressLines.length - 1 - i),
+      size: 9,
+      font,
+      color: softInk,
+    });
+  });
+  const phone = clean(d.letterhead_phone || '');
+  if (phone)
+    page.drawText(phone, {
+      x: (width - font.widthOfTextAtSize(phone, 9)) / 2,
+      y: 28.0,
+      size: 9,
+      font,
+      color: softInk,
+    });
+}
+
+/**
+ * Atestados, declarações, relatórios, pedidos de exames, encaminhamentos e documentos livres:
+ * mesmo timbre e rodapé do receituário, texto em parágrafos e bloco de assinatura ao final.
+ * A faixa inferior (até y=150) fica livre para o rodapé e para o selo da assinatura digital
+ * (lib/signature/pades-service.ts, y=72 a 137).
+ */
+function letterheadPdf(
+  pdf: PDFDocument,
+  d: ClinicalDocument,
+  font: PDFFont,
+  bold: PDFFont,
+  electronic: boolean,
+) {
+  const [width, height] = A4;
+  const left = MARGIN;
+  const right = width - MARGIN;
+  const contentWidth = right - left;
+  const bottom = 160;
+  const size = 10.5;
+  const leading = 15.5;
+  const date = d.document_date ? d.document_date.split('-').reverse().join('/') : '';
+  const patient = clean(d.patient_name || '');
+
+  let page = pdf.addPage(A4);
+  drawLetterhead(page, d, bold);
+  let y = height - 132.0;
+  if (d.kind !== 'Documento livre') {
+    for (const line of wrapText(d.kind, bold, 17, contentWidth)) {
+      page.drawText(line, { x: left, y, size: 17, font: bold, color: ink });
+      y -= 21;
+    }
+    y -= 12;
+  } else y += 6;
+
+  const labeled = (label: string, value: string) => {
+    const labelW = bold.widthOfTextAtSize(label, 10);
+    const lines = wrapText(value, font, 10, contentWidth - labelW);
+    page.drawText(label, { x: left, y, size: 10, font: bold, color: ink });
+    (lines.length ? lines : ['']).forEach((line) => {
+      page.drawText(line, { x: left + labelW, y, size: 10, font, color: ink });
+      y -= 15;
+    });
+  };
+  labeled('Paciente: ', patient);
+  if (date) labeled('Data: ', date);
+  y -= 4;
+  page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 0.5, color: rule });
+  y -= 26;
+
+  const nextPage = () => {
+    page = pdf.addPage(A4);
+    const title = clean(d.letterhead_title || '');
+    let top = height - 45.7;
+    if (title) {
+      page.drawText(title, { x: left, y: top, size: 9, font: bold, color: ink });
+      top -= 16;
+    }
+    page.drawText(d.physician_name || '', { x: left, y: top, size: 11, font: bold, color: ink });
+    top -= 15;
+    const cont = `${d.kind === 'Documento livre' ? 'Documento' : d.kind} · ${patient} (continuação)`;
+    for (const line of wrapText(cont, font, 9, contentWidth)) {
+      page.drawText(line, { x: left, y: top, size: 9, font, color: softInk });
+      top -= 12;
+    }
+    top -= 2;
+    page.drawLine({ start: { x: left, y: top }, end: { x: right, y: top }, thickness: 0.5, color: rule });
+    y = top - 24;
+  };
+
+  const drawLine = (text: string, f: PDFFont) => {
+    if (y < bottom) nextPage();
+    if (text) page.drawText(text, { x: left, y, size, font: f, color: rgb(0.05, 0.05, 0.05) });
+    y -= leading;
+  };
+  for (const raw of clean(d.text).trimEnd().split('\n')) {
+    if (!raw.trim()) {
+      y -= 7;
+      continue;
+    }
+    const trimmed = raw.trim();
+    const f = trimmed.endsWith(':') && trimmed.length <= 90 ? bold : font;
+    // Recuo inicial preservado (listas numeradas com posologia na linha de baixo).
+    const indent = raw.match(/^ */)![0];
+    let chunk = '';
+    for (const word of raw.slice(indent.length).split(' ')) {
+      const trial = chunk ? `${chunk} ${word}` : indent + word;
+      if (f.widthOfTextAtSize(trial, size) <= contentWidth) {
+        chunk = trial;
+        continue;
+      }
+      if (chunk) drawLine(chunk, f);
+      chunk = indent;
+      for (const ch of word) {
+        if (f.widthOfTextAtSize(chunk + ch, size) > contentWidth) {
+          drawLine(chunk, f);
+          chunk = '';
+        }
+        chunk += ch;
+      }
+    }
+    drawLine(chunk, f);
+  }
+
+  // Bloco de assinatura. Na via impressa ele pode descer até perto do rodapé; na eletrônica
+  // fica acima da faixa do selo digital. Só vai para outra página se não couber mesmo.
+  const gap = electronic ? 20 : 48;
+  if (y - gap < (electronic ? bottom - 10 : 89)) nextPage();
+  y -= gap;
+  const center = (text: string, s: number, f: PDFFont) => {
+    for (const line of wrapText(text, f, s, contentWidth)) {
+      page.drawText(line, { x: (width - f.widthOfTextAtSize(line, s)) / 2, y, size: s, font: f, color: ink });
+      y -= s + 4;
+    }
+  };
+  if (!electronic) {
+    const sigW = 250;
+    page.drawLine({
+      start: { x: (width - sigW) / 2, y: y + 14 },
+      end: { x: (width + sigW) / 2, y: y + 14 },
+      thickness: 0.5,
+      color: rule,
+    });
+  }
+  center(d.physician_name || 'Nome do médico não informado', 10, bold);
+  center(d.physician_registration || 'Registro profissional não informado', 9, font);
+
+  const pages = pdf.getPages();
+  pages.forEach((p, i) => {
+    drawFooter(p, d, font);
+    if (pages.length > 1) {
+      const label = `Página ${i + 1} de ${pages.length}`;
+      p.drawText(label, {
+        x: right - font.widthOfTextAtSize(label, 8),
+        y: height - 45.7,
+        size: 8,
+        font,
+        color: softInk,
+      });
+    }
+  });
+}
+
 function formatCpf(raw?: string) {
   const digits = (raw || '').replace(/\D/g, '');
   return digits.length === 11
@@ -674,7 +818,6 @@ function assertElectronicRet(d: ClinicalDocument) {
 export async function documentPdf(
   d: ClinicalDocument,
   options?: {
-    isDraft?: boolean;
     /** PDF que será assinado digitalmente (fluxo de assinatura), e não impressão. */
     electronic?: boolean;
     /** Data da assinatura, impressa no modelo eletrônico da RCE (art. 12). */
@@ -730,80 +873,7 @@ export async function documentPdf(
     return pdf.save();
   }
 
-  let page = pdf.addPage([595.28, 841.89]),
-    y = 780;
-  const next = () => {
-    page = pdf.addPage([595.28, 841.89]);
-    y = 780;
-  };
-  function line(t: string, size = 11, strong = false) {
-    if (y < 85) next();
-    page.drawText(t, {
-      x: 54,
-      y,
-      size,
-      font: strong ? bold : font,
-      color: rgb(0.14, 0.19, 0.17),
-    });
-    y -= size * 1.55;
-  }
-  function paragraph(s: string, size = 11, strong = false) {
-    const f = strong ? bold : font;
-    for (const raw of clean(s).split('\n')) {
-      let chunk = '';
-      for (const word of raw.split(' ')) {
-        const trial = chunk ? chunk + ' ' + word : word;
-        if (f.widthOfTextAtSize(trial, size) <= 487) {
-          chunk = trial;
-          continue;
-        }
-        if (chunk) line(chunk, size, strong);
-        chunk = '';
-        for (const ch of word) {
-          if (f.widthOfTextAtSize(chunk + ch, size) > 487) {
-            line(chunk, size, strong);
-            chunk = '';
-          }
-          chunk += ch;
-        }
-      }
-      line(chunk, size, strong);
-    }
-  }
-  paragraph(d.kind.toUpperCase(), 16, true);
-  y -= 12;
-  paragraph('Paciente: ' + d.patient_name, 11, true);
-  paragraph('Data: ' + (d.document_date || '').split('-').reverse().join('/'));
-  y -= 16;
-  paragraph(d.text);
-  y -= 24;
-  paragraph(d.physician_name || 'Nome do médico não informado', 11, true);
-  paragraph(
-    d.physician_registration || 'Registro profissional não informado',
-    10,
-  );
-  const isDraft =
-    options?.isDraft !== false &&
-    d.status !== 'SIGNED' &&
-    d.status !== 'SIGNING';
-  const pages = pdf.getPages();
-  pages.forEach((p, i) => {
-    p.drawLine({
-      start: { x: 54, y: 58 },
-      end: { x: 541, y: 58 },
-      thickness: 0.5,
-      color: rgb(0.8, 0.83, 0.8),
-    });
-    if (isDraft) {
-      p.drawText('RASCUNHO - SEM ASSINATURA - SEM VALIDADE CLÍNICA', {
-        x: 54,
-        y: 42,
-        font,
-        size: 8,
-      });
-    }
-    p.drawText(`${i + 1} / ${pages.length}`, { x: 505, y: 42, font, size: 8 });
-  });
+  letterheadPdf(pdf, d, font, bold, options?.electronic === true);
   pdf.setTitle(d.kind);
   pdf.setCreator('PsyWrite');
   return pdf.save();

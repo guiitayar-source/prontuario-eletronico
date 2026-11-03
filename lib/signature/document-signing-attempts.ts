@@ -365,7 +365,6 @@ export async function signDocumentAttempt(
     let unsigned: Uint8Array;
     try {
       unsigned = await documentPdf(doc, {
-        isDraft: false,
         electronic: true,
         issuedAt: new Date(),
       });
