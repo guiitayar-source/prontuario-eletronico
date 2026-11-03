@@ -127,7 +127,7 @@ export const documents = handle(async (request, { db, clinic, role, user }) => {
       await withPdfData(adminClient(), clinic, doc);
       let bytes;
       try {
-        bytes = await documentPdf(doc, { isDraft: true });
+        bytes = await documentPdf(doc);
       } catch (e) {
         throw new HttpError(422, (e as Error).message);
       }
