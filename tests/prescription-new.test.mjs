@@ -62,8 +62,7 @@ test('new prescription waits for the current draft to save before replacing the 
   assert.deepEqual(f.calls, [
     'save', [undefined, 'current-consultation', false, 'Modelo inicial da receita', 'Receita'],
   ]);
-  assert.equal(f.state.naming, false);
-  assert.equal(f.state.name, '');
+  // O formulário "Salvar como modelo" é reiniciado pela key do DocumentTemplates (id da receita).
   assert.equal(f.state.busy, false);
 });
 
