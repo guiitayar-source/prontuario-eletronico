@@ -6,6 +6,7 @@ const allowed = {
   medication: ['active', 'stopped'],
   allergy: ['active', 'inactive'],
   allergy_state: ['unknown', 'none', 'known'],
+  medication_state: ['unknown', 'none', 'known'],
 } as const;
 export const clinicalContext = handle(async (request, { db, clinic, role }) => {
   if (!['owner', 'doctor'].includes(role))
@@ -18,7 +19,7 @@ export const clinicalContext = handle(async (request, { db, clinic, role }) => {
   if (!patient || patient.length > 180)
     throw new HttpError(400, 'Informe o paciente.');
   if (request.method === 'GET') {
-    const [conditions, medications, allergies, state, links] = await Promise.all([
+    const [conditions, medications, allergies, state, links, medicationState] = await Promise.all([
       db
         .from('patient_conditions')
         .select('*')
@@ -49,12 +50,16 @@ export const clinicalContext = handle(async (request, { db, clinic, role }) => {
         .eq('clinic_id', clinic)
         .eq('patient_id', patient)
         .order('created_at', { ascending: true }),
+      db.from('patient_medication_states').select('*').eq('clinic_id', clinic).eq('id', patient).maybeSingle(),
     ]);
     return json({
       conditions: check(conditions),
       medications: check(medications),
       allergies: check(allergies),
       allergyState: check(state) || { state: 'unknown', version: 0 },
+      medicationState: medicationState.error && ['42P01', 'PGRST205'].includes(medicationState.error.code)
+        ? { state: 'unknown', version: 0, available: false }
+        : { ...(check(medicationState) || { state: 'unknown', version: 0 }), available: true },
       // Tolerante até a migração 20260930010000 ser aplicada.
       consultationDiagnoses: links.error ? [] : links.data,
     });
@@ -98,11 +103,11 @@ export const clinicalContext = handle(async (request, { db, clinic, role }) => {
   )
     throw new HttpError(422, 'Confira os dados do contexto clínico.');
   if (
-    entity !== 'allergy_state' &&
+    !['allergy_state', 'medication_state'].includes(entity) &&
     (typeof d.id !== 'string' || !uuid.test(d.id))
   )
     throw new HttpError(422, 'Identificador inválido.');
-  const status = entity === 'allergy_state' ? d.state : d.status;
+  const status = ['allergy_state', 'medication_state'].includes(entity) ? d.state : d.status;
   if (
     !(allowed[entity as keyof typeof allowed] as readonly unknown[]).includes(
       status,
@@ -140,7 +145,9 @@ export const clinicalContext = handle(async (request, { db, clinic, role }) => {
       throw new HttpError(422, 'Um dos campos está acima do limite permitido.');
   return json({
     record: check(
-      await db.rpc('clinical_context_write', { c: clinic, entity, d }),
+      await (entity === 'medication_state'
+        ? db.rpc('medication_review_write', { c: clinic, d })
+        : db.rpc('clinical_context_write', { c: clinic, entity, d })),
     ),
   });
 });

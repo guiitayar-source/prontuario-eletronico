@@ -14,6 +14,7 @@ import { NavigationRail } from './navigation-rail';
 import { useAccess } from './auth';
 import { ProfessionalProfileCard } from './professional-profile';
 import { PlatformPanel } from './platform';
+import { BackupStatusPanel } from './backup-status';
 
 const MODE_ICONS: Record<ThemeMode, typeof Moon> = { dark: Moon, light: Sun, system: Monitor };
 
@@ -27,7 +28,8 @@ export default function Settings({
   onTeam: () => void;
 }) {
   const { theme, setTheme, gradient, setGradient, mode, setMode, resolvedMode } = useTheme();
-  const medical = ['owner', 'doctor'].includes(useAccess().role);
+  const { role } = useAccess();
+  const medical = ['owner', 'doctor'].includes(role);
 
   return (
     <div className="app-shell">
@@ -58,6 +60,7 @@ export default function Settings({
 
             <div className="settings-content">
               <PlatformPanel />
+              {role === 'owner' && <BackupStatusPanel />}
               {medical && <ProfessionalProfileCard />}
 
               {/* Card: Modo claro/escuro */}

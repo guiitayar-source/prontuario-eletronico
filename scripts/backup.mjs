@@ -208,6 +208,7 @@ try {
         'pg_dump',
       ];
     } else throw new Error('Escolha --local ou --remote.');
+    const snapshotAt = new Date().toISOString();
     phase = args.includes('--remote') ? 'download do banco hospedado' : 'dump do banco local';
     await processFile(
       [
@@ -257,6 +258,7 @@ try {
     }
     const manifest = {
       version: 1,
+      snapshot_at: snapshotAt,
       created_at: new Date().toISOString(),
       source: new URL(api).hostname,
       counts: counts(),
@@ -365,6 +367,12 @@ try {
         );
     }
     if (storageFailure) throw storageFailure;
+    if (args.includes('--report')) {
+      // Escopo extraído do dump efetivamente restaurado, nunca da origem após a cópia.
+      const clinics = JSON.parse(sql("select coalesce(json_agg(id),'[]') from public.clinics"));
+      if (!manifest.snapshot_at) throw new Error('Backup antigo sem data de início; relatório indisponível.');
+      await writeFile(resolve(value('--report')), JSON.stringify({ source: manifest.source, backup_at: manifest.snapshot_at, occurred_at: new Date().toISOString(), clinics }), { flag: 'wx', mode: 0o600 });
+    }
     completed = true;
     console.log(
       'Restauração verificada em banco e Storage locais descartáveis: tabelas, contagens e bytes dos anexos íntegros. Temporários removidos ao terminar.',

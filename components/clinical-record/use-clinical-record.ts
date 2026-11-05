@@ -40,7 +40,7 @@ async function request(patientId: string, action?: string, data?: unknown) {
     consultations: RecordEntry[];
     consultation: RecordEntry;
   };
-  if (!r.ok) throw new Error(result.error);
+  if (!r.ok) throw Object.assign(new Error(result.error || 'Não foi possível salvar a evolução.'), { status: r.status });
   return result;
 }
 
@@ -72,6 +72,9 @@ export function useClinicalRecord({
     [text, setText] = useState(''),
     [status, setStatus] = useState('Carregando…'),
     [error, setError] = useState(''),
+    [conflict, setConflict] = useState(false),
+    [comparison, setComparison] = useState<RecordEntry | null>(null),
+    [copyMessage, setCopyMessage] = useState(''),
     [busy, setBusy] = useState(false),
     [finalizing, setFinalizing] = useState(false),
     [panel, setPanel] = useState(true),
@@ -87,6 +90,9 @@ export function useClinicalRecord({
   const dirty = text !== saved.current;
   const hasUnsaved = dirty || !!addendum.trim() || docs.dirty;
   function choose(r: RecordEntry) {
+    setConflict(false);
+    setComparison(null);
+    setCopyMessage('');
     saved.current = r.text;
     latest.current = r.text;
     setText(r.text);
@@ -150,14 +156,14 @@ export function useClinicalRecord({
       active = false;
     };
   }, [patient.id, medical, appointmentId]);
-  async function persist(finalize = false): Promise<boolean> {
+  async function persist(finalize = false, base = current): Promise<boolean> {
     if (
-      !current ||
+      !base ||
       flight.current ||
       blocked.current ||
-      current.finalized_at ||
-      current.status === 'SIGNED' ||
-      current.signed_at
+      base.finalized_at ||
+      base.status === 'SIGNED' ||
+      base.signed_at
     )
       return false;
     flight.current = true;
@@ -167,22 +173,25 @@ export function useClinicalRecord({
     const snapshot = latest.current;
     try {
       const result = await request(patient.id, finalize ? 'finalize' : 'save', {
-        id: current.id,
-        version: current.version,
+        id: base.id,
+        version: base.version,
         text: snapshot,
       });
       saved.current = snapshot;
       setCurrent(result.consultation);
       setRows((old) =>
         old.map((r) =>
-          r.id === current.id ? { ...r, ...result.consultation } : r,
+          r.id === base.id ? { ...r, ...result.consultation } : r,
         ),
       );
       setStatus(latest.current === snapshot ? 'Salvo' : 'Alterações pendentes');
       setError('');
+      setConflict(false);
+      setComparison(null);
       return true;
     } catch (e) {
       blocked.current = true;
+      setConflict((e as Error & { status?: number }).status === 409);
       setError((e as Error).message);
       setStatus('Não salvo — seu texto permanece nesta tela');
       return false;
@@ -191,6 +200,33 @@ export function useClinicalRecord({
       setFinalizing(false);
       setBusy(false);
     }
+  }
+  async function copyEvolution() {
+    try {
+      await navigator.clipboard.writeText(latest.current);
+      setCopyMessage('Evolução copiada.');
+    } catch {
+      setCopyMessage('Não foi possível copiar. Selecione o texto da evolução e copie manualmente.');
+    }
+  }
+  async function compareVersions() {
+    if (!current || busy) return;
+    setBusy(true);
+    try {
+      const result = await request(patient.id);
+      const remote = result.consultations.find((r) => r.id === current.id);
+      if (!remote) throw new Error('Evolução não encontrada no servidor. Seu texto permanece nesta tela.');
+      setComparison(remote);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveComparedVersion() {
+    if (!comparison || comparison.id !== current?.id || busy) return;
+    blocked.current = false;
+    await persist(false, comparison);
   }
   async function prepareEvolutionForSignature() {
     if (!current) return false;
@@ -470,6 +506,12 @@ export function useClinicalRecord({
     setText,
     setStatus,
     error,
+    conflict,
+    comparison,
+    copyMessage,
+    copyEvolution,
+    compareVersions,
+    saveComparedVersion,
     setError,
     busy,
     finalizing,

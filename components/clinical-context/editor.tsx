@@ -52,9 +52,10 @@ export function ClinicalContextEditor({
         </button>
       </div>
       {context.error && (
-        <p className="capture-error" role="alert">
-          {context.error}
-        </p>
+        <div className="capture-error" role="alert">
+          <p>{context.error}</p>
+          <button type="button" disabled={context.busy} onClick={() => void context.load().catch(() => {})}>Recarregar contexto</button>
+        </div>
       )}
       {section === 'conditions' && (
         <>
@@ -206,6 +207,18 @@ export function ClinicalContextEditor({
       )}
       {section === 'medications' && (
         <>
+          <fieldset disabled={context.busy || !context.medicationState.available}>
+            <legend>Revisão do uso de medicamentos</legend>
+            <p>Confirme após revisar a lista com o paciente. Suspensões devem ser registradas individualmente.</p>
+            {(['unknown', 'none', 'known'] as const).map((state) => (
+              <button type="button" key={state}
+                disabled={(state === 'none' && context.medications.some((m) => m.status === 'active')) || (state === 'known' && !context.medications.some((m) => m.status === 'active'))}
+                onClick={() => void context.save({ entity: 'medication_state', patient_id: context.patientId, version: context.medicationState.version, state })}>
+                {state === 'unknown' ? 'Marcar como não revisado' : state === 'none' ? 'Confirmar: paciente nega uso' : 'Confirmar lista revisada'}
+              </button>
+            ))}
+          </fieldset>
+          {!context.medicationState.available && <p role="status">O registro de revisão aguarda atualização do banco.</p>}
           <div className="context-list">
             {context.medications.map((x) => (
               <button

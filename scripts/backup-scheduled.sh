@@ -42,14 +42,27 @@ if ! node_modules/.bin/supabase status >/dev/null 2>&1; then
   node_modules/.bin/supabase start >/dev/null || fail 'Não foi possível iniciar o Supabase local.'
   STARTED=1
 fi
-trap 'unset PSYWRITE_BACKUP_PASSPHRASE PSYWRITE_DB_URL; [[ $STARTED == 1 ]] && node_modules/.bin/supabase stop >/dev/null 2>&1 || true' EXIT
+REPORT_DIR=''
+trap 'unset PSYWRITE_BACKUP_PASSPHRASE PSYWRITE_DB_URL; [[ -n $REPORT_DIR ]] && rm -rf -- "$REPORT_DIR"; [[ $STARTED == 1 ]] && node_modules/.bin/supabase stop >/dev/null 2>&1 || true' EXIT
 
 mkdir -p -- "$BACKUP_DIR"
 BACKUP_FILE="$BACKUP_DIR/psywrite-$(date -u +%Y%m%dT%H%M%S)-$RANDOM.psybackup"
 node --env-file=.env.local scripts/backup.mjs create --remote --file "$BACKUP_FILE" \
   || { rm -f -- "$BACKUP_FILE"; fail 'Falha ao criar a cópia. Veja: journalctl --user -u psywrite-backup'; }
-node scripts/backup.mjs verify --file "$BACKUP_FILE" \
+REPORT_ARGS=()
+if [[ "${PSYWRITE_BACKUP_REPORT:-0}" == 1 ]]; then
+  REPORT_DIR="$(mktemp -d)"
+  REPORT_ARGS=(--report "$REPORT_DIR/verification.json")
+fi
+VERIFY_STARTED=$SECONDS
+node scripts/backup.mjs verify --file "$BACKUP_FILE" "${REPORT_ARGS[@]}" \
   || fail "Cópia criada, mas a verificação falhou: $BACKUP_FILE"
+
+# Comunicação opcional, ativada pelo titular após aplicar a migração do painel.
+if [[ "${PSYWRITE_BACKUP_REPORT:-0}" == 1 ]]; then
+  node --env-file=.env.local scripts/backup-report.mjs "$REPORT_DIR/verification.json" "$((SECONDS - VERIFY_STARTED))" \
+    || fail 'Backup verificado, mas o painel não recebeu a atualização. Confira o journal da rotina.'
+fi
 
 # Mantém só as $KEEP cópias mais recentes; nunca apaga a que acabou de ser verificada.
 mapfile -t old < <(ls -1t -- "$BACKUP_DIR"/psywrite-*.psybackup | tail -n +"$((KEEP + 1))")

@@ -40,3 +40,7 @@ work/
 # agent scratch
 .agents/
 .codex/
+
+# Navegador: evidências sintéticas locais
+/test-results/
+/playwright-report/
