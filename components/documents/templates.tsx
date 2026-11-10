@@ -1,7 +1,10 @@
 'use client';
 import { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
-import { documentTemplate, type PrescriptionTemplate } from '@/lib/document-fields';
+import { ArrowRight, BookOpen, Plus, Save, Search, Trash2 } from 'lucide-react';
+import {
+  documentTemplate,
+  type PrescriptionTemplate,
+} from '@/lib/document-fields';
 import type { DocumentsController } from './use-documents';
 
 const summary = (text: string) =>
@@ -23,20 +26,29 @@ export const blankText = (text: string, kind: string) =>
 export function DocumentTemplates({
   docs,
   placeholder,
+  searchable = false,
 }: {
   docs: DocumentsController;
   placeholder: string;
+  searchable?: boolean;
 }) {
   const [naming, setNaming] = useState(false),
     [name, setName] = useState(''),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
-    [message, setMessage] = useState('');
+    [message, setMessage] = useState(''),
+    [query, setQuery] = useState('');
   const d = docs.draft;
   if (!d) return null;
   const kind = d.kind;
-  const editable = d.status !== 'SIGNED' && d.status !== 'SUPERSEDED' && !docs.busy;
+  const editable =
+    d.status !== 'SIGNED' && d.status !== 'SUPERSEDED' && !docs.busy;
   const list = docs.templates.filter((t) => (t.kind || 'Receita') === kind);
+  const filteredList = list.filter((t) =>
+    `${t.name} ${t.text}`
+      .toLocaleLowerCase('pt-BR')
+      .includes(query.trim().toLocaleLowerCase('pt-BR')),
+  );
   const isBlank = blankText(d.text, kind);
 
   function apply(t: PrescriptionTemplate, append: boolean) {
@@ -46,7 +58,11 @@ export function DocumentTemplates({
       docs.setDraft({ ...d, text: `${d.text.trim()}\n\n${t.text.trim()}` });
       return;
     }
-    if (!isBlank && !window.confirm(`Substituir o texto atual pelo modelo “${t.name}”?`)) return;
+    if (
+      !isBlank &&
+      !window.confirm(`Substituir o texto atual pelo modelo “${t.name}”?`)
+    )
+      return;
     docs.setDraft({ ...d, text: t.text });
   }
 
@@ -65,8 +81,14 @@ export function DocumentTemplates({
 
   function save() {
     if (!d || !name.trim() || isBlank) return;
-    const existing = list.find((t) => t.name.trim().toLowerCase() === name.trim().toLowerCase());
-    if (existing && !window.confirm(`Já existe o modelo “${existing.name}”. Substituir?`)) return;
+    const existing = list.find(
+      (t) => t.name.trim().toLowerCase() === name.trim().toLowerCase(),
+    );
+    if (
+      existing &&
+      !window.confirm(`Já existe o modelo “${existing.name}”. Substituir?`)
+    )
+      return;
     void run(async () => {
       await docs.saveTemplate({
         id: existing?.id || crypto.randomUUID(),
@@ -87,24 +109,45 @@ export function DocumentTemplates({
 
   return (
     <div className="document-templates">
+      {searchable && list.length > 0 && (
+        <label className="prescription-search">
+          <Search size={15} aria-hidden />
+          <input
+            type="search"
+            aria-label="Buscar modelos"
+            placeholder="Buscar modelo ou medicamento"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+      )}
       {!list.length && (
-        <p className="muted">
-          Nenhum modelo de {kind.toLowerCase()} salvo. Escreva o texto e use “Salvar como modelo”.
+        <div className="prescription-empty">
+          <BookOpen size={24} aria-hidden />
+          <strong>Crie seu primeiro modelo</strong>
+          <p>
+            Escreva o texto da {kind.toLowerCase()} e use “Salvar como modelo”.
+          </p>
+        </div>
+      )}
+      {list.length > 0 && !filteredList.length && (
+        <p className="prescription-hint" role="status">
+          Nenhum modelo encontrado. Tente outro termo.
         </p>
       )}
-      <ul className="prescription-list">
-        {list.map((t) => (
-          <li key={t.id}>
+      <ul className="prescription-list" aria-label="Modelos salvos">
+        {filteredList.map((t) => (
+          <li key={t.id} className="prescription-library-item">
             <strong>{t.name}</strong>
             <span className="prescription-summary">{summary(t.text)}</span>
             <div className="prescription-item-actions">
               <button
                 type="button"
-                className="text-button"
+                className="text-button prescription-item-primary"
                 disabled={!editable || busy}
                 onClick={() => apply(t, false)}
               >
-                Usar
+                Usar <ArrowRight size={13} aria-hidden />
               </button>
               <button
                 type="button"
@@ -113,16 +156,17 @@ export function DocumentTemplates({
                 onClick={() => apply(t, true)}
                 title="Acrescentar ao final do texto atual"
               >
-                <Plus size={13} /> Acrescentar
+                <Plus size={13} aria-hidden /> Acrescentar
               </button>
               <button
                 type="button"
-                className="text-button danger"
+                className="text-button danger prescription-delete-template"
                 disabled={busy}
                 aria-label={`Excluir modelo ${t.name}`}
+                title={`Excluir modelo ${t.name}`}
                 onClick={() => remove(t)}
               >
-                <Trash2 size={13} />
+                <Trash2 size={14} aria-hidden />
               </button>
             </div>
           </li>
@@ -140,7 +184,12 @@ export function DocumentTemplates({
               if (e.key === 'Enter') save();
             }}
           />
-          <button type="button" className="secondary" disabled={busy || !name.trim()} onClick={save}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy || !name.trim()}
+            onClick={save}
+          >
             Salvar
           </button>
           <button
@@ -157,11 +206,11 @@ export function DocumentTemplates({
       ) : (
         <button
           type="button"
-          className="secondary"
+          className="secondary prescription-save-template"
           disabled={isBlank || busy || !editable}
           onClick={() => setNaming(true)}
         >
-          Salvar como modelo
+          <Save size={14} aria-hidden /> Salvar como modelo
         </button>
       )}
       <p className="document-template-note">

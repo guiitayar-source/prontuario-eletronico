@@ -426,6 +426,38 @@
   color: var(--theme-primary, var(--accent));
   font-size: 13px;
 }
+.spellcheck-privacy {
+  padding: 12px clamp(16px, 3vw, 30px);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.spellcheck-privacy-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  text-align: left;
+  color: var(--text-muted);
+  font-size: inherit;
+}
+.spellcheck-privacy-toggle svg {
+  flex-shrink: 0;
+}
+.spellcheck-privacy-toggle[aria-expanded='true'] svg:last-child {
+  transform: rotate(180deg);
+}
+.spellcheck-privacy-content {
+  margin-top: 10px;
+  color: var(--text-muted);
+}
+.spellcheck-privacy-content p + p {
+  margin-top: 8px;
+}
+.spellcheck-privacy-content button {
+  margin-top: 12px;
+}
 #evolution {
   width: 100%;
   display: block;

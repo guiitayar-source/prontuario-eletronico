@@ -120,6 +120,67 @@ Isso muda a assinatura de **todos** os documentos, não só da RCE. Proposta:
 O validador do ITI já aprova as assinaturas atuais; a política é um ganho de conformidade, não um
 bloqueio.
 
+## 4A. Interface de receitas e RCE recolhida (10/11/2026)
+
+Alteração de apresentação feita a pedido do titular para reduzir a poluição visual. Este registro
+orienta revisões futuras por pessoas e agentes de IA; não libera produção nem substitui os itens
+1–3 deste checklist.
+
+- `components/prescriptions.tsx` e `app/styles/prescriptions.css`: biblioteca lateral com opções
+  **Salvas** e **Modelos**, busca, filtro de rascunhos, estados e destaque da receita aberta.
+- `components/documents/templates.tsx`: busca e apresentação dos modelos; aplicar, acrescentar,
+  excluir e salvar modelos continuam usando os mesmos métodos do controlador.
+- `components/documents/editor.tsx`: nas receitas de controle especial ainda não assinadas e
+  sem emissão vinculada, os campos específicos e o passo a passo ficam recolhidos. O botão
+  **Colocar numeração da Anvisa** somente abre/recolhe essa área; não solicita lote, não reserva
+  número, não assina e não habilita o ambiente `prd`.
+- O estado de abertura é associado ao ID da receita nesta montagem do editor. Outra receita
+  começa recolhida; não há alteração do conteúdo salvo ao abrir/recolher.
+- `RceFieldsEditor` e `RcePanel` permanecem montados, com a mesma chave por ID do documento.
+  O atributo `hidden` controla a visibilidade; recolher não reinicia revisão, prévia, carregamento
+  ou operações em andamento. A consulta de configuração e a recuperação já existentes no painel
+  continuam com seu ciclo de vida anterior.
+- Se `draft.rce_emission` existir, a área fica aberta e o botão de recolher não aparece. As travas
+  de edição e o fluxo de recuperação existentes continuam aplicados. Documentos já assinados
+  mantêm a apresentação anterior de documento assinado.
+
+**Escopo preservado:** não foram alterados `lib/sncr`, `lib/signature`, `lib/supabase`, rotas
+`app/api` ou migrações `supabase/migrations` nesta repaginação. Transporte Anvisa, autenticação,
+formatos de numeração, separação `hmg`/`prd`, reserva exclusiva, conferência do vínculo,
+assinatura, persistência e recuperação do original continuam no código existente. O fluxo de
+transição sem número mantém suas validações; os campos necessários ficam acessíveis pelo botão.
+
+**Verificação local em 10/11:** lint, TypeScript do código-fonte (excluindo referências geradas
+antigas de `.next`) e `git diff --check`; regressões existentes abaixo, com dados sintéticos,
+PGlite e serviços/assinador simulados, sem comunicação com Anvisa, Supabase ou provedor real:
+
+```sh
+node --test tests/prescription-new.test.mjs
+node --test tests/sncr.test.mjs tests/sncr-db.test.mjs tests/sncr-rce.test.mjs tests/prescription-rce-ret.test.mjs
+```
+
+Também foi feita uma conferência em Chromium com componentes reais e controlador/API fictícios:
+busca, filtro, modelos, RCE inicialmente recolhida, preservação de campos ao recolher/reabrir,
+outra receita inicialmente fechada e emissão vinculada visível. Layout inspecionado em computador
+e celular, incluindo tema escuro. A bancada temporária ficou em `/tmp/psywrite-prescription-ui`;
+não é parte da aplicação nem evidência de homologação ou de emissão real.
+
+**Ao conferir a futura ativação real**, além dos itens 1–3 e 5:
+
+1. Em ambiente isolado e autorizado, abrir uma RCE nova: campos específicos inicialmente
+   recolhidos; clicar no botão deve apenas exibi-los, sem consumir numeração.
+2. Preencher, recolher/reabrir e salvar/reabrir o rascunho: conferir a preservação dos campos.
+   Trocar para outra receita deve manter a separação dos conteúdos e da abertura do painel.
+3. Com a integração habilitada, executar o percurso já preparado: obter lote, reservar número,
+   conferir vínculo, revisar, assinar, persistir e recuperar exatamente o original.
+4. Reabrir uma emissão já vinculada, inclusive em estado incerto: acompanhamento deve aparecer
+   automaticamente, sem permitir editar o conteúdo fixado ou reservar outro número indevidamente.
+5. Conferir também a impressão manual e a assinatura no fluxo de transição sem número. A mudança
+   de visibilidade não torna opcionais os campos exigidos pelo servidor para assinatura eletrônica.
+
+Essas verificações locais não garantem estabilidade em produção. Não houve novo teste externo,
+alteração de configuração, migração remota ou liberação de emissão real nesta mudança.
+
 ## 5. Teste depois do deploy
 
 1. Atestado simples assinado com Bird ID:

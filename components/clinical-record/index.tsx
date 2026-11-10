@@ -25,6 +25,7 @@ import { EvolutionSignatureDetailsModal } from '../evolution-signature-details-m
 import { ConsultationTimer } from '../consultation-timer';
 import { date, type RecordEntry } from './types';
 import { EvolutionStatusBanner } from './status-banner';
+import { SpellcheckPrivacyNotice } from './spellcheck-privacy-notice';
 import { EvolutionActions } from './actions';
 import { RecordSidebar } from './sidebar';
 import {
@@ -332,6 +333,7 @@ export default function ClinicalRecord({
                       </button>
                     )}
                   </div>
+                  {medical && <SpellcheckPrivacyNotice />}
                   {error && (
                     <div className="capture-error" role="alert">
                       {error}

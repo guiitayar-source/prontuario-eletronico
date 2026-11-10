@@ -1,11 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import {
   documentKinds,
   documentTemplate,
   type ClinicalDocument,
 } from '@/lib/document-fields';
-import { Download, ShieldCheck, Key, Lock } from 'lucide-react';
+import { ChevronDown, Download, Hash, ShieldCheck, Key, Lock } from 'lucide-react';
 import type { DocumentsController } from './use-documents';
 import { DocumentAiBox } from './ai-box';
 import { DocumentTemplates } from './templates';
@@ -29,6 +29,8 @@ export function DocumentEditor({
   const rceTest = rceEnvironment !== null;
   const [choosingProvider, setChoosingProvider] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [rceExpandedFor, setRceExpandedFor] = useState<string | null>(null);
+  const rceDetailsId = useId();
   // Validação expirada com a página aberta: revalida direto no mesmo provedor.
   const expiredProvider = isSignatureProviderId(docs.signatureExpired)
     ? docs.signatureExpired
@@ -40,6 +42,7 @@ export function DocumentEditor({
   const isRecipe = d.kind === 'Receita';
   const myTemplates = docs.templates.filter((t) => (t.kind || 'Receita') === d.kind).length;
   const rceLocked = !!d.rce_emission;
+  const rceExpanded = rceLocked || rceExpandedFor === d.id;
   const category = d.prescription_category || 'RCE';
   const signingBlock = isRecipe ? prescriptionSigningBlock(category) : null;
   const noun = prescription ? 'receita' : 'documento';
@@ -342,17 +345,36 @@ export function DocumentEditor({
         />
       </fieldset>
       {isRecipe && category === 'RCE' && !isSigned && (
-        <section aria-label="RCE eletrônica" className="rce-fields-section">
-          <h3>RCE eletrônica</h3>
-          <p className="rce-flow-note">
-            Campos impressos no modelo oficial da Anvisa: um medicamento por receita. O CPF e o
-            endereço do paciente vêm do cadastro; o endereço e o telefone do consultório, dos seus
-            dados profissionais.
-          </p>
-          <fieldset disabled={docs.busy || isSigning || rceLocked} style={{ border: 0, padding: 0, margin: 0 }}>
-            <RceFieldsEditor docs={docs} />
-          </fieldset>
-        </section>
+        <div className="rce-disclosure">
+          {!rceLocked && (
+            <button
+              type="button"
+              className="secondary rce-disclosure-toggle"
+              aria-expanded={rceExpanded}
+              aria-controls={rceDetailsId}
+              onClick={() => setRceExpandedFor(rceExpanded ? null : d.id)}
+            >
+              <Hash size={16} aria-hidden />
+              Colocar numeração da Anvisa
+              <ChevronDown size={15} aria-hidden />
+            </button>
+          )}
+          <div id={rceDetailsId} hidden={!rceExpanded}>
+            <section aria-label="RCE eletrônica" className="rce-fields-section">
+              <h3>RCE eletrônica</h3>
+              <p className="rce-flow-note">
+                Campos impressos no modelo oficial da Anvisa: um medicamento por receita. O CPF e o
+                endereço do paciente vêm do cadastro; o endereço e o telefone do consultório, dos seus
+                dados profissionais.
+              </p>
+              <fieldset disabled={docs.busy || isSigning || rceLocked} style={{ border: 0, padding: 0, margin: 0 }}>
+                <RceFieldsEditor docs={docs} />
+              </fieldset>
+            </section>
+            {/* Recolher só oculta: mantém revisão, prévia e operações em andamento. */}
+            <RcePanel key={d.id} docs={docs} />
+          </div>
+        </div>
       )}
       {isRecipe && category === 'RET' && !isSigned && (
         <p className="document-template-note">
@@ -360,7 +382,6 @@ export function DocumentEditor({
           cadastro). Assinatura digital ICP-Brasil; sem numeração SNCR até 03/03/2027.
         </p>
       )}
-      {isRecipe && category === 'RCE' && !isSigned && <RcePanel key={d.id} docs={docs} />}
       <div className="editor-actions">
         {rceLocked ? (
           <>
@@ -493,7 +514,7 @@ export function DocumentEditor({
       {transitionOnly && !rceLocked && (
         <p className="rce-footer-note">
           “Assinar sem número SNCR” usa o fluxo de transição, válido até 03/03/2027. Para a RCE com
-          número {rceEnvironment === 'prd' ? 'SNCR' : 'de teste'}, siga o passo a passo acima.
+          número {rceEnvironment === 'prd' ? 'SNCR' : 'de teste'}, abra “Colocar numeração da Anvisa”.
         </p>
       )}
       <output
