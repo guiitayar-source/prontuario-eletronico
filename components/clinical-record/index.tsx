@@ -65,6 +65,12 @@ export default function ClinicalRecord({
     setText,
     setStatus,
     error,
+    conflict,
+    comparison,
+    copyMessage,
+    copyEvolution,
+    compareVersions,
+    saveComparedVersion,
     setError,
     busy,
     finalizing,
@@ -342,7 +348,7 @@ export default function ClinicalRecord({
                         recarregar se precisar preservá-lo.
                       </p>
                       <button
-                        disabled={busy}
+                        disabled={busy || conflict}
                         onClick={() => {
                           blocked.current = false;
                           void persist();
@@ -350,6 +356,9 @@ export default function ClinicalRecord({
                       >
                         Tentar salvar
                       </button>
+                      <button type="button" onClick={() => void copyEvolution()}>Copiar evolução</button>
+                      {conflict && <button type="button" disabled={busy} onClick={() => void compareVersions()}>Comparar versões</button>}
+                      {copyMessage && <p role="status">{copyMessage}</p>}
                       <button
                         disabled={busy}
                         onClick={() =>
@@ -368,6 +377,22 @@ export default function ClinicalRecord({
                         Recarregar do servidor
                       </button>
                     </div>
+                  )}
+                  {comparison && (
+                    <section className="evolution-comparison" aria-label="Comparação de versões">
+                      <h3>Confira as duas versões antes de salvar</h3>
+                      <p>Revise seu texto no editor abaixo. Salvar sua versão substitui somente o rascunho do servidor, com controle de versão.</p>
+                      <div className="evolution-comparison-columns">
+                        <label>Sua versão atual<textarea readOnly value={text} /></label>
+                        <label>Versão do servidor<textarea readOnly value={comparison.text} /></label>
+                      </div>
+                      {comparison.finalized_at || comparison.signed_at || comparison.status === 'SIGNED' ? (
+                        <p role="alert">A consulta foi finalizada ou assinada em outra janela. Copie seu texto e use um adendo após carregar a versão do servidor.</p>
+                      ) : (
+                        <button type="button" disabled={busy} onClick={() => void saveComparedVersion()}>Salvar minha versão após revisão</button>
+                      )}
+                      <button type="button" disabled={busy} onClick={() => leave(() => choose(comparison))}>Carregar versão do servidor</button>
+                    </section>
                   )}
                   <label className="sr-only" htmlFor="evolution">
                     Evolução em texto livre
@@ -424,6 +449,7 @@ export default function ClinicalRecord({
                     <span role="status">
                       <Check size={14} />
                       {save}
+                      {current?.updated_at && <> · Último salvamento confirmado: {date(current.updated_at)}</>}
                     </span>
                     <span>
                       {text.trim() ? text.trim().split(/\s+/).length : 0}{' '}

@@ -4,6 +4,7 @@ export type RecordEntry = {
   text: string;
   version: number;
   created_at: string;
+  updated_at?: string;
   finalized_at: string | null;
   author_id: string;
   finalized_by: string | null;

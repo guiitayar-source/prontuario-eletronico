@@ -62,6 +62,7 @@ function fixture({ failure, changedDuringSave = false, finalized = false, clean 
     },
     sendTabToProvider: () => {},
     apiFetch, window, sessionStorage: { setItem: (key, value) => storage.set(key, value) },
+    setConflict: () => {}, setComparison: () => {}, setCopyMessage: () => {},
     setCurrent: () => {}, setRows: () => {}, setFinalizing: () => {}, setBusy: () => {}, setAddendum: () => {},
     setText: (value) => { state.text = value; },
     setError: (value) => { state.error = value; },

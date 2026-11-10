@@ -24,3 +24,23 @@ jobs:
       - run: npx tsc --noEmit -p .
       - run: npm run lint
       - run: npm test
+
+  navegador:
+    name: Fluxos no navegador (dados sintéticos)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: evidencias-navegador-sintetico
+          path: test-results/
+          retention-days: 7

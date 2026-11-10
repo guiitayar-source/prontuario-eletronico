@@ -67,9 +67,13 @@ export function ClinicalContextSummary({
             </p>
           ))
         ) : (
-          <p className="muted">Nenhum medicamento em uso.</p>
+          <p className="muted">{context.medicationState.state === 'none' ? 'Paciente nega uso de medicamentos.' : 'Uso de medicamentos não revisado.'}</p>
         )}
       </section>
+      <p className="muted">
+        {activeM.length > 0 && (context.medicationState.state === 'known' ? 'Medicamentos revisados. ' : 'Medicamentos registrados; revisão pendente. ')}
+        {context.medicationState.reviewed_at && <>Última revisão: {new Date(context.medicationState.reviewed_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.</>}
+      </p>
       <section className="mini-section">
         <div className="card-heading">
           <span>Alergias</span>

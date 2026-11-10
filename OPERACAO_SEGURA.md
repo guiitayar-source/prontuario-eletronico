@@ -28,7 +28,7 @@ O banco protege SELECT, gravações por RPC e Storage com o nível da sessão (`
 
 Anexos podem conter informação clínica: o acesso da secretária a eles é uma decisão explícita do fluxo atual, não isolamento total de dados de saúde. Use contas individuais e retire vínculos quando alguém deixar a equipe. A alteração de papel não transfere autoria; consultas finalizadas recebem adendos.
 
-**Auditoria**, no topo, mostra os últimos 100 eventos com conta, operação, entidade e horário. Alterações persistidas, importações, reversões, exigência de MFA e solicitações de exportação são registradas. `export_snapshot` registra a preparação do conjunto de dados, não a conclusão do download. Não inclui conteúdo clínico no evento. A lista não cobre toda leitura direta do banco; logs do provedor e eventual solução de auditoria de leituras precisam integrar a revisão operacional. A conta administrativa do Supabase continua privilegiada; isso não é um registro externamente imutável.
+**Auditoria**, no topo, consulta eventos em páginas de 100, com filtros no servidor por período, conta, paciente e operação (após aplicar a migração de pesquisa). Mostra conta, operação, entidade e horário. Alterações persistidas, importações, reversões, exigência de MFA e solicitações de exportação são registradas. `export_snapshot` registra a preparação do conjunto de dados, não a conclusão do download. Não inclui conteúdo clínico no evento. A lista não cobre toda leitura direta do banco; logs do provedor e eventual solução de auditoria de leituras precisam integrar a revisão operacional. A conta administrativa do Supabase continua privilegiada; isso não é um registro externamente imutável.
 
 ## Retenção proposta
 
@@ -109,6 +109,10 @@ unset PSYWRITE_DB_URL
 Depois copie o `.psybackup` para o armazenamento privado externo e rode `backup:verify` sobre **essa cópia**. A senha precisa continuar disponível no ambiente durante a verificação. Uma cópia no mesmo disco não cobre perda/falha do computador.
 
 Os [backups do Supabase não incluem os bytes do Storage](https://supabase.com/docs/guides/platform/backups); por isso o script os inclui separadamente. Configurações de SMTP, DNS, Vercel, segredos do projeto, código/fontes e papéis personalizados de infraestrutura não são recriados por esse dump. Mantenha código e inventário de configurações em local privado. Uma recuperação para outro projeto hospedado exige configurar esses serviços e repetir login/MFA/perfis/consulta/anexos antes de trocar o endereço do aplicativo. Nenhuma substituição do projeto em uso é automatizada.
+
+## Acompanhamento de backups no aplicativo
+
+O painel em **Ajustes → Recuperação por backup**, exclusivo do titular, separa verificações automáticas de declarações de cópia externa. Sua ativação exige a migração correspondente e a opção `PSYWRITE_BACKUP_REPORT=1` na rotina. Sem comunicação de verificação, o painel informa ausência de evidência, mesmo que existam arquivos locais. Consulte [ativação, limites e testes](docs/MELHORIAS_OPERACIONAIS.md).
 
 ## Exportação FHIR R4
 

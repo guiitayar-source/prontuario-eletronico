@@ -39,7 +39,9 @@ export type Allergy = {
   version: number;
 };
 type AllergyState = { state: 'unknown' | 'none' | 'known'; version: number };
+export type MedicationState = AllergyState & { reviewed_at?: string | null; available?: boolean };
 type ClinicalContextResponse = {
+  medicationState?: MedicationState;
   error?: string;
   conditions: Condition[];
   medications: Medication[];
@@ -99,6 +101,7 @@ const emptyAllergy = (
 export function useClinicalContext(patientId: string, enabled = true) {
   const [conditions, setConditions] = useState<Condition[]>([]),
     [medications, setMedications] = useState<Medication[]>([]),
+    [medicationState, setMedicationState] = useState<MedicationState>({ state: 'unknown', version: 0, available: false }),
     [allergies, setAllergies] = useState<Allergy[]>([]),
     [allergyState, setAllergyState] = useState<AllergyState>({
       state: 'unknown',
@@ -108,14 +111,14 @@ export function useClinicalContext(patientId: string, enabled = true) {
       ConsultationDiagnosis[]
     >([]),
     [error, setError] = useState(''),
-    [busy, setBusy] = useState(false),
-    [revision, setRevision] = useState(0);
+    [busy, setBusy] = useState(false);
   async function load() {
     const d = await fetchClinicalContext(patientId);
     setConditions(d.conditions);
     setMedications(d.medications);
     setAllergies(d.allergies);
     setAllergyState(d.allergyState);
+    setMedicationState(d.medicationState || { state: 'unknown', version: 0, available: false });
     setConsultationDiagnoses(d.consultationDiagnoses || []);
     setError('');
   }
@@ -129,6 +132,7 @@ export function useClinicalContext(patientId: string, enabled = true) {
           setMedications(d.medications);
           setAllergies(d.allergies);
           setAllergyState(d.allergyState);
+          setMedicationState(d.medicationState || { state: 'unknown', version: 0, available: false });
           setConsultationDiagnoses(d.consultationDiagnoses || []);
           setError('');
         })
@@ -138,7 +142,7 @@ export function useClinicalContext(patientId: string, enabled = true) {
     return () => {
       active = false;
     };
-  }, [patientId, enabled, revision]);
+  }, [patientId, enabled]);
   async function save(record: Record<string, unknown>) {
     setBusy(true);
     setError('');
@@ -159,7 +163,7 @@ export function useClinicalContext(patientId: string, enabled = true) {
         throw new Error(
           d.error || 'Não foi possível salvar o contexto clínico.',
         );
-      setRevision((v) => v + 1);
+      await load();
       return true;
     } catch (e) {
       setError((e as Error).message);
@@ -174,6 +178,7 @@ export function useClinicalContext(patientId: string, enabled = true) {
     medications,
     allergies,
     allergyState,
+    medicationState,
     consultationDiagnoses,
     error,
     busy,

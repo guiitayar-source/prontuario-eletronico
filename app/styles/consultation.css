@@ -587,3 +587,20 @@
   padding: 6px 10px;
   border-top: 1px solid var(--border);
 }
+
+.evolution-comparison {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+.evolution-comparison-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.evolution-comparison-columns textarea { width: 100%; min-height: 180px; }
+@media (max-width: 700px) {
+  .evolution-comparison-columns { grid-template-columns: 1fr; }
+}
