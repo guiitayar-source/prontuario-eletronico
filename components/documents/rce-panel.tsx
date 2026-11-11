@@ -4,8 +4,10 @@ import Link from 'next/link';
 import { apiFetch } from '@/lib/supabase/http';
 import {
   emptyRceFields,
+  numberedCategoryOf,
+  numberedLabels,
+  numberedStateLabel,
   rceClinicalText,
-  rceStateLabels,
   validateRceFields,
 } from '@/lib/sncr/rce';
 import type { RceEmission } from '@/lib/sncr/rce-workflow';
@@ -50,6 +52,9 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
     [reviewed, setReviewed] = useState(false),
     [preview, setPreview] = useState('');
   const production = useRceEnvironment() === 'prd';
+  const category = numberedCategoryOf(d.prescription_category);
+  const name = numberedLabels[category];
+  const notification = category !== 'RCE';
   const idRef = useRef(''),
     previewRef = useRef('');
   const fields = d.rce_fields || emptyRceFields();
@@ -116,12 +121,12 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
         d.text.trim() &&
         d.text !== rceClinicalText(f) &&
         !window.confirm(
-          'O texto desta receita será substituído pelos campos preenchidos abaixo. Confira se todas as orientações estão na posologia. Continuar?',
+          'O texto desta receita será substituído pelos campos preenchidos acima. Confira se todas as orientações estão na posologia. Continuar?',
         )
       ) {
         // A blocked dialog also returns false; never leave the click silent.
         setError(
-          'Preparação cancelada: o texto da receita não foi substituído pelos campos da RCE.',
+          'Preparação cancelada: o texto da receita não foi substituído pelos campos do modelo eletrônico.',
         );
         return;
       }
@@ -178,8 +183,8 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
       !checked ||
       !window.confirm(
         production
-          ? 'Assinar esta RCE? O número e o conteúdo ficam vinculados a esta emissão, e a receita passa a valer para dispensação. Não é possível alterar depois.'
-          : 'Assinar esta RCE de teste? O número e o conteúdo permanecerão vinculados a esta emissão. O arquivo não terá validade para dispensação.',
+          ? `Assinar esta ${name.short}? O número e o conteúdo ficam vinculados a esta emissão, e a receita passa a valer para dispensação. Não é possível alterar depois.`
+          : `Assinar esta ${name.short} de teste? O número e o conteúdo permanecerão vinculados a esta emissão. O arquivo não terá validade para dispensação.`,
       )
     )
       return;
@@ -225,11 +230,11 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
   );
   return (
     <section
-      aria-label={production ? 'RCE eletrônica' : 'RCE eletrônica de teste'}
+      aria-label={production ? `${name.short} eletrônica` : `${name.short} eletrônica de teste`}
       className="rce-flow"
     >
       <header className="rce-flow-head">
-        <h3>{production ? 'RCE com numeração SNCR' : 'RCE com numeração SNCR — teste'}</h3>
+        <h3>{production ? `${name.short} com numeração SNCR` : `${name.short} com numeração SNCR — teste`}</h3>
         <p>
           {production
             ? 'Numeração real da Anvisa e assinatura qualificada ICP-Brasil. Uma medicação por receita.'
@@ -240,9 +245,15 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
         <Step
           current={current}
           n={1}
-          title="Dados da RCE"
-          detail={active ? 'Conteúdo fixado para esta emissão.' : 'Campos da seção “RCE eletrônica” acima.'}
+          title={`Dados da ${name.short}`}
+          detail={active ? 'Conteúdo fixado para esta emissão.' : `Campos da seção “${name.full} eletrônica” acima.`}
         >
+          {notification && !active && (
+            <p className="rce-step-note">
+              O número vem da numeração eletrônica que a Vigilância Sanitária do seu
+              município autorizou para você, buscada antes na página do SNCR.
+            </p>
+          )}
           {missing.length ? (
             <div className="rce-missing">
               <span>Antes de preparar, falta:</span>
@@ -270,7 +281,7 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
           <p className="rce-step-note">
             {production ? 'Sem lote?' : 'Sem lote de teste?'}{' '}
             <Link href="/sncr" target="_blank">
-              Solicite a numeração no SNCR
+              {notification ? 'Busque no SNCR a numeração autorizada pela Vigilância' : 'Solicite a numeração no SNCR'}
             </Link>
             .
           </p>
@@ -310,7 +321,7 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
               checked={checked}
               onChange={(event) => setChecked(event.target.checked)}
             />
-            Revisei a RCE e conferi no SNCR que o número {active?.number} é do
+            Revisei a {name.short} e conferi no SNCR que o número {active?.number} é do
             meu CRM/UF e está disponível.
           </label>
         </Step>
@@ -326,7 +337,7 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
         >
           {recovering || closed ? (
             <div className="rce-recovery">
-              <p>{rceStateLabels[state!]}</p>
+              <p>{numberedStateLabel(state!, category, active?.environment)}</p>
               {recovering && (
                 <div className="rce-actions">
                   <button className="secondary" type="button" disabled={busy} onClick={() => void sign()}>
@@ -364,12 +375,12 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
             </>
           ) : (
             <button className="primary" type="button" disabled={busy || !checked} onClick={() => void sign()}>
-              {production ? 'Assinar RCE' : 'Assinar RCE de teste'}
+              {production ? `Assinar ${name.short}` : `Assinar ${name.short} de teste`}
             </button>
           )}
           {alert}
         </Step>
-        <Step current={current} n={6} title="Original assinado" detail={state === 'SIGNED' ? rceStateLabels.SIGNED : undefined}>
+        <Step current={current} n={6} title="Original assinado" detail={state === 'SIGNED' ? numberedStateLabel('SIGNED', category, active?.environment) : undefined}>
           <div className="rce-actions">
             <button className="primary" type="button" disabled={busy} onClick={() => void showPdf(true)}>
               Abrir original assinado
@@ -417,10 +428,10 @@ export function RcePanel({ docs }: { docs: DocumentsController }) {
       )}
       {preview && (
         <div className="rce-preview">
-          <iframe title={production ? 'RCE' : 'RCE de teste'} src={preview} />
+          <iframe title={production ? name.short : `${name.short} de teste`} src={preview} />
           <a
             href={preview}
-            download={`rce${production ? '' : '-teste'}${state === 'SIGNED' ? '-assinada' : ''}.pdf`}
+            download={`${{ RCE: 'rce', NRA: 'notificacao-a', NRB: 'notificacao-b' }[category]}${production ? '' : '-teste'}${state === 'SIGNED' ? '-assinada' : ''}.pdf`}
           >
             Baixar este PDF
           </a>
@@ -467,7 +478,7 @@ export function missingForRce(
   try {
     validateRceFields(fields);
   } catch (err) {
-    out.push((err as Error).message + ' (seção “RCE eletrônica”)');
+    out.push((err as Error).message + ' (campos do modelo eletrônico, acima)');
   }
   if (!profile.letterhead_address?.trim() || !profile.letterhead_phone?.trim())
     out.push('Endereço e telefone do consultório (Ajustes › Meus dados profissionais)');

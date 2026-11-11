@@ -6,7 +6,7 @@ import type {
   SignatureResult,
 } from '../signature/types.ts';
 import { rcePdf } from './rce-pdf.ts';
-import { type RceSnapshot } from './rce.ts';
+import { numberedLabels, snapshotCategory, type RceSnapshot } from './rce.ts';
 
 export const sha256 = (bytes: Uint8Array | string) =>
   createHash('sha256').update(bytes).digest('hex');
@@ -158,7 +158,7 @@ export async function signRce(params: {
     try {
       signer = await getSigner();
       if (signer.cpf !== e.snapshot.prescriber.cpf)
-        throw new Error('O certificado não pertence ao prescritor desta RCE.');
+        throw new Error('O certificado não pertence ao prescritor desta receita.');
       const issuedAt = (params.now || (() => new Date()))();
       const unsigned = await rcePdf(
         e.snapshot,
@@ -172,8 +172,8 @@ export async function signRce(params: {
         drawVisualBox: false,
         reason:
           e.environment === 'hmg'
-            ? 'RCE de homologação - sem validade para dispensação'
-            : 'Receita de Controle Especial eletrônica',
+            ? `${numberedLabels[snapshotCategory(e.snapshot)].full} de homologação - sem validade para dispensação`
+            : `${numberedLabels[snapshotCategory(e.snapshot)].full} eletrônica`,
       });
       const meta: PreparedMeta = {
         path: prefix + '/prepared.pdf',

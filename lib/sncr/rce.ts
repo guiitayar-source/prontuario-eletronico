@@ -21,8 +21,28 @@ export const emptyRceFields = (): RceFields => ({
   quantity: '',
   dosage: '',
 });
+// Receituários emitidos pelo passo a passo com numeração SNCR: RCE (lote gerado pelo SNCR) e
+// Notificações de Receita A e B (números autorizados antes pela Vigilância Sanitária).
+// B2, retinoides e talidomida têm modelos e termos próprios e seguem fora.
+export const numberedCategories = ['RCE', 'NRA', 'NRB'] as const;
+export type NumberedCategory = (typeof numberedCategories)[number];
+export const isNumberedCategory = (v: unknown): v is NumberedCategory =>
+  typeof v === 'string' && (numberedCategories as readonly string[]).includes(v);
+/** Categoria do documento como receituário numerado; legado sem categoria é RCE. */
+export const numberedCategoryOf = (value: unknown): NumberedCategory =>
+  isNumberedCategory(value || 'RCE') ? ((value || 'RCE') as NumberedCategory) : 'RCE';
+export const numberedLabels: Record<
+  NumberedCategory,
+  { short: string; full: string }
+> = {
+  RCE: { short: 'RCE', full: 'Receita de Controle Especial' },
+  NRA: { short: 'Notificação A', full: 'Notificação de Receita A' },
+  NRB: { short: 'Notificação B', full: 'Notificação de Receita B' },
+};
 export type RceSnapshot = {
   schema: 1;
+  // Ausente na RCE: mantém o hash das emissões gravadas antes das notificações.
+  category?: 'NRA' | 'NRB';
   patient: { name: string; identifier: string; address: string };
   prescriber: {
     name: string;
@@ -77,8 +97,12 @@ export function rceClinicalText(fields: RceFields) {
   // Same layout as the handwritten prescriptions: one item line, then the dosage.
   return `1) ${fields.medicine} ${fields.concentration} · ${fields.pharmaceuticalForm} · Quantidade: ${fields.quantity}\nPosologia: ${fields.dosage}`;
 }
+export const snapshotCategory = (s: Pick<RceSnapshot, 'category'>): NumberedCategory =>
+  s.category ?? 'RCE';
 export function validateRceSnapshot(v: RceSnapshot): RceSnapshot {
   if (v?.schema !== 1) throw new Error('Versão da RCE inválida.');
+  if (v.category !== undefined && v.category !== 'NRA' && v.category !== 'NRB')
+    throw new Error('Tipo de receituário inválido.');
   const fields = validateRceFields({
     crm: v.prescriber?.crm,
     uf: v.prescriber?.uf,
@@ -105,6 +129,7 @@ export function validateRceSnapshot(v: RceSnapshot): RceSnapshot {
     throw new Error('Confira o CPF ou passaporte do paciente.');
   return {
     schema: 1,
+    ...(v.category ? { category: v.category } : {}),
     patient: {
       name: required(v.patient?.name, 'o nome do paciente', 180),
       identifier,
@@ -146,3 +171,15 @@ export const rceStateLabels: Record<string, string> = {
     'A verificação do documento falhou. O número foi bloqueado para impedir reutilização.',
   CANCELLED: 'Preparação descartada. O número não será reutilizado.',
 };
+/** Estado da emissão com o nome do receituário e o ambiente certos. */
+export function numberedStateLabel(
+  state: string,
+  category: NumberedCategory = 'RCE',
+  environment: 'hmg' | 'prd' = 'hmg',
+) {
+  if (state !== 'SIGNED') return rceStateLabels[state] || state;
+  const name = numberedLabels[category].short;
+  return environment === 'prd'
+    ? `${name} assinada. Original disponível para baixar e entregar ao paciente.`
+    : `${name} de teste assinada. Original disponível para baixar; sem validade para dispensação.`;
+}

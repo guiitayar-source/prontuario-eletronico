@@ -18,8 +18,11 @@ import { validateIcpChain } from '../signature/icp-chain.ts';
 import { getSignatureProvider } from '../signature/provider-factory.ts';
 import { liveIssuanceRevocationOptions } from '../signature/revocation-fetch.ts';
 import {
+  isNumberedCategory,
+  numberedLabels,
   validateRceFields,
   validateRceSnapshot,
+  type NumberedCategory,
   type RceSnapshot,
 } from './rce.ts';
 import { configuredSncrEnvironment } from './client.ts';
@@ -81,6 +84,7 @@ async function activeSigner(
   admin: SupabaseClient,
   clinic: string,
   user: string,
+  documentAlias: string,
 ): Promise<RceSigner> {
   const session = check(
     await admin
@@ -97,7 +101,7 @@ async function activeSigner(
   if (!session?.certificate_raw)
     throw new HttpError(
       422,
-      'Conecte seu certificado Bird ID ou VIDaaS antes de assinar a RCE.',
+      'Conecte seu certificado Bird ID ou VIDaaS antes de assinar a receita.',
     );
   const cert = parseX509Certificate(
     session.certificate_raw,
@@ -136,10 +140,14 @@ async function activeSigner(
         accessToken: token,
         certificateAlias: session.certificate_alias,
         hashHex: digest,
-        documentAlias: 'RCE de teste - sem validade',
+        documentAlias,
       }),
   };
 }
+const fileStem = (category: RceSnapshot['category']) =>
+  ({ RCE: 'rce', NRA: 'notificacao-a', NRB: 'notificacao-b' })[
+    (category ?? 'RCE') as NumberedCategory
+  ];
 const pdfResponse = (bytes: Uint8Array, filename: string) =>
   new Response(new Uint8Array(bytes), {
     headers: {
@@ -152,7 +160,7 @@ const pdfResponse = (bytes: Uint8Array, filename: string) =>
 
 export const rce = handle(async (request, ctx) => {
   if (!['owner', 'doctor'].includes(ctx.role))
-    throw new HttpError(403, 'A RCE eletrônica é exclusiva do prescritor.');
+    throw new HttpError(403, 'A receita eletrônica numerada é exclusiva do prescritor.');
   const environment = configuredSncrEnvironment();
   const u = new URL(request.url),
     action = u.searchParams.get('action');
@@ -165,7 +173,7 @@ export const rce = handle(async (request, ctx) => {
   if (!environment)
     throw new HttpError(
       503,
-      'A RCE eletrônica com numeração SNCR não está habilitada neste servidor.',
+      'A receita eletrônica com numeração SNCR não está habilitada neste servidor.',
     );
   const admin = adminClient();
   const rpc = async <T>(
@@ -208,22 +216,23 @@ export const rce = handle(async (request, ctx) => {
       if (emissions[0] && emissions[0].user_id !== ctx.user)
         throw new HttpError(
           403,
-          'Esta RCE está vinculada a outro prescritor. Solicite a ele o original ou o andamento.',
+          'Esta receita está vinculada a outro prescritor. Solicite a ele o original ou o andamento.',
         );
       return json({ emission: emissions[0] || null });
     }
     const eid = id(u.searchParams.get('id')),
       e = await get(eid);
+    const file = fileStem(e.snapshot.category);
     if (action === 'preview')
       return pdfResponse(
         await rcePdf(e.snapshot, e.number, new Date(), e.environment),
-        e.environment === 'hmg' ? 'rce-previa-teste.pdf' : 'rce-previa.pdf',
+        e.environment === 'hmg' ? `${file}-previa-teste.pdf` : `${file}-previa.pdf`,
       );
     if (action === 'original') {
       try {
         return pdfResponse(
           await originalRce({ get: () => get(eid) }, artifacts),
-          e.environment === 'hmg' ? 'rce-assinada-teste.pdf' : 'rce-assinada.pdf',
+          e.environment === 'hmg' ? `${file}-assinada-teste.pdf` : `${file}-assinada.pdf`,
         );
       } catch (error) {
         throw new HttpError(503, (error as Error).message);
@@ -245,14 +254,11 @@ export const rce = handle(async (request, ctx) => {
         .eq('author_id', ctx.user)
         .maybeSingle(),
     );
-    if (
-      !doc ||
-      doc.kind !== 'Receita' ||
-      (doc.prescription_category || 'RCE') !== 'RCE'
-    )
+    const category: unknown = doc?.prescription_category || 'RCE';
+    if (!doc || doc.kind !== 'Receita' || !isNumberedCategory(category))
       throw new HttpError(
         422,
-        'Selecione uma Receita de Controle Especial de sua autoria.',
+        'Selecione uma RCE ou Notificação de Receita A ou B de sua autoria.',
       );
     const profile = check(
       await admin
@@ -285,10 +291,11 @@ export const rce = handle(async (request, ctx) => {
         !patient.state
       )
         throw new Error(
-          'Complete logradouro, número, cidade e UF do paciente antes de preparar a RCE.',
+          'Complete logradouro, número, cidade e UF do paciente antes de preparar a receita.',
         );
       snapshot = validateRceSnapshot({
         schema: 1,
+        ...(category === 'RCE' ? {} : { category }),
         patient: {
           name: doc.patient_name,
           identifier:
@@ -370,7 +377,7 @@ export const rce = handle(async (request, ctx) => {
   )
     throw new HttpError(
       422,
-      'Revise a RCE e confira o número antes de assinar.',
+      'Revise a receita e confira o número antes de assinar.',
     );
   const repo = rceRepository({
     id: eid,
@@ -386,7 +393,16 @@ export const rce = handle(async (request, ctx) => {
         artifacts,
         reviewedHash: p.reviewedHash,
         numberChecked: true,
-        getSigner: () => activeSigner(admin, ctx.clinic, ctx.user),
+        getSigner: async () => {
+          const e = await get(eid);
+          const name = numberedLabels[e.snapshot.category ?? 'RCE'].full;
+          return activeSigner(
+            admin,
+            ctx.clinic,
+            ctx.user,
+            e.environment === 'hmg' ? `${name} de teste - sem validade` : name,
+          );
+        },
         revocation: liveIssuanceRevocationOptions(),
       }),
     });
