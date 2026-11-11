@@ -2,7 +2,7 @@
 import type { ClinicalDocument } from '@/lib/document-fields';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import type { DocumentsController } from './use-documents';
-import { rceStateLabels } from '@/lib/sncr/rce';
+import { numberedCategoryOf, numberedStateLabel } from '@/lib/sncr/rce';
 export function DocumentHistory({
   docs,
   onOpen,
@@ -29,7 +29,7 @@ export function DocumentHistory({
         <div className="consultation-history-link" key={d.id}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <strong>{d.kind}</strong>
-            {d.kind === 'Receita' && <span className="muted">{d.rce_emission ? rceStateLabels[d.rce_emission.state] : 'SNCR sem confirmação'}</span>}
+            {d.kind === 'Receita' && <span className="muted">{d.rce_emission ? numberedStateLabel(d.rce_emission.state, numberedCategoryOf(d.prescription_category), d.rce_emission.environment) : 'SNCR sem confirmação'}</span>}
             {d.rce_emission ? null : d.status === 'SIGNED' ? (
               <span style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--success)', fontSize: '11px', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <CheckCircle2 size={12} /> Assinado ICP-Brasil

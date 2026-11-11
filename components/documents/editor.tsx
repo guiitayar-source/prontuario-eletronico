@@ -16,7 +16,7 @@ import {
 } from '@/lib/signature/providers';
 import { prescriptionCategories, prescriptionSigningBlock, type PrescriptionCategory } from '@/lib/sncr/policy';
 import { RceFieldsEditor, RcePanel, useRceEnvironment } from './rce-panel';
-import { rceStateLabels } from '@/lib/sncr/rce';
+import { isNumberedCategory, numberedCategoryOf, numberedLabels, numberedStateLabel } from '@/lib/sncr/rce';
 export function DocumentEditor({
   docs,
   prescription = false,
@@ -48,6 +48,10 @@ export function DocumentEditor({
   const noun = prescription ? 'receita' : 'documento';
   // Both RCE paths are on screen only while the SNCR integration is enabled.
   const transitionOnly = isRecipe && category === 'RCE' && rceTest;
+  // RCE mostra os campos mesmo sem SNCR (transição); notificações A e B só existem numeradas.
+  const numbered = isRecipe && isNumberedCategory(category) ? category : null;
+  const showNumbered = !!numbered && !isSigned && (numbered === 'RCE' || rceTest);
+  const numberedName = numberedLabels[numbered || 'RCE'];
 
   function update(fields: Partial<ClinicalDocument>) {
     if (isSigned || isSigning || rceLocked) return;
@@ -58,7 +62,7 @@ export function DocumentEditor({
     <>
       <h2 id="dialog-title">
         {rceLocked
-          ? `${d.rce_emission!.environment === 'prd' ? 'RCE' : 'RCE de teste'} ${d.rce_emission!.state === 'SIGNED' ? 'assinada' : 'em preparação'}`
+          ? `${numberedName.short}${d.rce_emission!.environment === 'prd' ? '' : ' de teste'} ${d.rce_emission!.state === 'SIGNED' ? 'assinada' : 'em preparação'}`
           : isSigned
           ? prescription
             ? 'Receita assinada digitalmente'
@@ -73,7 +77,7 @@ export function DocumentEditor({
       {isRecipe && (
         <p role="status" className="muted">
           {rceLocked
-            ? rceStateLabels[d.rce_emission!.state]
+            ? numberedStateLabel(d.rce_emission!.state, numberedCategoryOf(category), d.rce_emission!.environment)
             : isSigned
             ? 'Assinatura digital registrada. Este documento não possui confirmação de integração ao SNCR.'
             : isSigning
@@ -81,7 +85,7 @@ export function DocumentEditor({
               : d.status === 'SIGNATURE_FAILED'
                 ? 'Falha na assinatura. O conteúdo foi preservado para revisão.'
               : 'Rascunho. Salvar no prontuário ou gerar um PDF para assinatura manual não emite uma receita eletrônica.'}
-          {!rceLocked && ' A emissão integrada em produção ainda está indisponível.'}
+          {!rceLocked && rceEnvironment !== 'prd' && ' A emissão integrada em produção ainda está indisponível.'}
         </p>
       )}
       {isRecipe && !isSigned && signingBlock && <p role="status">{signingBlock}</p>}
@@ -344,7 +348,7 @@ export function DocumentEditor({
           onChange={(e) => update({ text: e.target.value })}
         />
       </fieldset>
-      {isRecipe && category === 'RCE' && !isSigned && (
+      {showNumbered && (
         <div className="rce-disclosure">
           {!rceLocked && (
             <button
@@ -360,12 +364,14 @@ export function DocumentEditor({
             </button>
           )}
           <div id={rceDetailsId} hidden={!rceExpanded}>
-            <section aria-label="RCE eletrônica" className="rce-fields-section">
-              <h3>RCE eletrônica</h3>
+            <section aria-label={`${numberedName.short} eletrônica`} className="rce-fields-section">
+              <h3>{numberedName.full} eletrônica</h3>
               <p className="rce-flow-note">
                 Campos impressos no modelo oficial da Anvisa: um medicamento por receita. O CPF e o
                 endereço do paciente vêm do cadastro; o endereço e o telefone do consultório, dos seus
                 dados profissionais.
+                {numbered !== 'RCE' &&
+                  ' Uma notificação por substância; o número sai da numeração eletrônica que a Vigilância Sanitária autorizou para você.'}
               </p>
               <fieldset disabled={docs.busy || isSigning || rceLocked} style={{ border: 0, padding: 0, margin: 0 }}>
                 <RceFieldsEditor docs={docs} />
@@ -386,7 +392,7 @@ export function DocumentEditor({
         {rceLocked ? (
           <>
             <p className="rce-footer-note">
-              Esta receita segue pelo passo a passo da RCE com numeração acima; o texto ficou fixado.
+              Esta receita segue pelo passo a passo com numeração SNCR acima; o texto ficou fixado.
             </p>
             <button type="button" className="secondary" onClick={() => docs.open(d, undefined, true)}>
               Duplicar como novo rascunho

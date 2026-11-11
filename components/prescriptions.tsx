@@ -285,7 +285,7 @@ function prescriptionState(row: ClinicalDocument) {
     return `Em conferência · Nº ${e.number}`;
   if (e?.state === 'AWAITING_REVIEW') return `Nº ${e.number} reservado`;
   if (e?.state === 'CANCELLED' || e?.state === 'BLOCKED')
-    return 'RCE descartada';
+    return 'Emissão numerada descartada';
   if (row.status === 'SIGNED' || row.status === 'SUPERSEDED') return 'Assinada';
   if (row.status === 'SIGNING') return 'Assinando';
   if (row.status === 'SIGNATURE_FAILED') return 'Falha na assinatura';

@@ -25,6 +25,7 @@ const stateLabels: Record<string, string> = {
     'Numeração recebida e em quarentena. O vínculo com o prescritor ainda precisa ser conferido.',
 };
 type Lot = {
+  category: PrescriptionCategory;
   first: string;
   last: string;
   total: number;
@@ -47,13 +48,13 @@ export default function SncrPreparation() {
     [terminal, setTerminal] = useState(false),
     [review, setReview] = useState(false),
     [requestState, setRequestState] = useState(''),
-    [lot, setLot] = useState<Lot | null>(null);
+    [lots, setLots] = useState<Lot[]>([]);
   const callbackHandled = useRef(false);
   const storageKey = 'psywrite:sncr:' + clinic;
 
   async function reloadLot() {
     const r = await apiFetch('/api/sncr');
-    if (r.ok) setLot((await r.json()).lot);
+    if (r.ok) setLots((await r.json()).lots || []);
   }
   async function refresh(id = requestId) {
     if (!id) return;
@@ -102,7 +103,7 @@ export default function SncrPreparation() {
       const on = status.environment === 'hmg' || status.environment === 'prd';
       setEnabled(on);
       setProduction(status.environment === 'prd');
-      setLot(status.lot);
+      setLots(status.lots || []);
       // Another tab (or a lost sessionStorage) must resume the open request.
       if (!sessionId && status.openRequestId && status.openRequestId !== id) {
         id = status.openRequestId;
@@ -142,7 +143,9 @@ export default function SncrPreparation() {
     if (
       production &&
       !window.confirm(
-        'Isto pede ao SNCR um lote REAL de numeração e gasta uma das 3 solicitações do mês. O número usado não volta. Continuar?',
+        whiteRecipe
+          ? 'Isto pede ao SNCR um lote REAL de numeração e gasta uma das 3 solicitações do mês. O número usado não volta. Continuar?'
+          : 'Isto busca no SNCR números REAIS que a Vigilância Sanitária autorizou para você (até 50 por dia). O número usado não volta. Continuar?',
       )
     )
       return;
@@ -184,6 +187,12 @@ export default function SncrPreparation() {
       </main>
     );
   const pending = !!requestId && requestState !== '' && !terminal;
+  const whiteRecipe = ['RCE', 'RET'].includes(category);
+  // Em produção só aparecem os tipos que o PsyWrite emite ou numera.
+  const offered = Object.entries(prescriptionCategories).filter(
+    ([key]) =>
+      key !== 'SIMPLES' && (!production || ['RCE', 'RET', 'NRA', 'NRB'].includes(key)),
+  );
   return (
     <main className="sncr-page">
       <header className="sncr-section">
@@ -192,8 +201,8 @@ export default function SncrPreparation() {
           {production
             ? 'Numeração real da Anvisa. '
             : 'Homologação da Anvisa, sem validade para dispensação. '}
-          Esta página só pede e acompanha a numeração; a RCE é feita no editor
-          da receita, no passo a passo “RCE com numeração SNCR”.
+          Esta página só pede e acompanha a numeração; a receita é feita no
+          editor, no passo a passo “Colocar numeração da Anvisa”.
         </p>
         {!enabled && (
           <p role="status" className="sncr-alert">
@@ -204,30 +213,35 @@ export default function SncrPreparation() {
       </header>
 
       <section className="sncr-section" aria-label="Seu lote">
-        <h2>{production ? 'Seu lote' : 'Seu lote de teste'}</h2>
-        {lot ? (
-          <dl className="sncr-lot">
-            <div>
-              <dt>Faixa</dt>
-              <dd>
-                {lot.first} a {lot.last}
-              </dd>
+        <h2>{production ? 'Seus lotes' : 'Seus lotes de teste'}</h2>
+        {lots.length ? (
+          lots.map((lot) => (
+            <div key={lot.category}>
+              <h3>{prescriptionCategories[lot.category] || lot.category}</h3>
+              <dl className="sncr-lot">
+                <div>
+                  <dt>Faixa</dt>
+                  <dd>
+                    {lot.first} a {lot.last}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Disponíveis</dt>
+                  <dd>
+                    {lot.available} de {lot.total}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Reservados</dt>
+                  <dd>{lot.reserved}</dd>
+                </div>
+                <div>
+                  <dt>Usados</dt>
+                  <dd>{lot.used}</dd>
+                </div>
+              </dl>
             </div>
-            <div>
-              <dt>Disponíveis</dt>
-              <dd>
-                {lot.available} de {lot.total}
-              </dd>
-            </div>
-            <div>
-              <dt>Reservados</dt>
-              <dd>{lot.reserved}</dd>
-            </div>
-            <div>
-              <dt>Usados</dt>
-              <dd>{lot.used}</dd>
-            </div>
-          </dl>
+          ))
         ) : (
           <p className="sncr-note">Nenhum lote recebido ainda.</p>
         )}
@@ -293,13 +307,11 @@ export default function SncrPreparation() {
                 value={category}
                 onChange={(e) => setCategory(e.target.value as PrescriptionCategory)}
               >
-                {Object.entries(prescriptionCategories)
-                  .filter(([key]) => key !== 'SIMPLES')
-                  .map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
+                {offered.map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="sncr-field">
@@ -310,7 +322,7 @@ export default function SncrPreparation() {
               <span>UF</span>
               <input maxLength={2} value={uf} onChange={(e) => setUf(e.target.value.toUpperCase())} />
             </label>
-            {!['RCE', 'RET'].includes(category) && (
+            {!whiteRecipe && (
               <label className="sncr-field">
                 <span>Quantidade (10 a 50)</span>
                 <input
@@ -323,9 +335,9 @@ export default function SncrPreparation() {
               </label>
             )}
             <p className="sncr-note sncr-form-note">
-              {['RCE', 'RET'].includes(category)
+              {whiteRecipe
                 ? `O SNCR fornece 1.000 números por lote, até 3 pedidos por mês. O login é com a sua conta gov.br${production ? '' : ' (no teste, a conta do gov.br de homologação)'}.`
-                : 'Em produção, as notificações dependem de numeração autorizada pela Vigilância Sanitária.'}
+                : `Antes, peça à Vigilância Sanitária do seu município numeração para emissão eletrônica (é diferente da do talão). Aqui o SNCR entrega de 10 a 50 desses números por pedido, até 50 por dia. O login é com a sua conta gov.br${production ? '' : ' (no teste, a conta do gov.br de homologação)'}.`}
             </p>
             <button className="primary" type="button" onClick={() => void start()}>
               Solicitar lote com gov.br
