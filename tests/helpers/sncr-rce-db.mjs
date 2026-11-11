@@ -56,6 +56,7 @@ export async function localRceDatabase(dataDir) {
       '20261030023641_sncr_preparation.sql',
       '20261030023733_sncr_rce_issuance.sql',
       '20261031010000_sncr_production_environment.sql',
+      '20261111120000_sncr_notificacoes_ab.sql',
     ])
       await db.exec(
         await readFile(
@@ -90,22 +91,24 @@ export async function localRceDatabase(dataDir) {
     numbers = ['2602.6-53.0000001', '2602.6-53.0000002'],
     identity = { crm: '000001', uf: 'SP' },
     environment = 'hmg',
+    category = 'RCE',
   ) {
     const rid = crypto.randomUUID();
     await db.query(
       `insert into public.sncr_numbering_requests(id,clinic_id,user_id,environment,category,input,browser_hash,state,raw_response)
-      values($1,$2,$3,$5,'RCE',$4::jsonb,'local-synthetic','RECEIVED_UNVERIFIED','{}')`,
+      values($1,$2,$3,$5,$6,$4::jsonb,'local-synthetic','RECEIVED_UNVERIFIED','{}')`,
       [
         rid,
         clinic,
         user,
         JSON.stringify({
           conselho: 'CRM',
-          category: 'RCE',
+          category,
           documento: identity.crm,
           uf: identity.uf,
         }),
         environment,
+        category,
       ],
     );
     for (const number of numbers)
@@ -119,12 +122,13 @@ export async function localRceDatabase(dataDir) {
     snapshot = syntheticSnapshot(),
     eid = crypto.randomUUID(),
     environment,
+    category = 'RCE',
   ) {
     const did = crypto.randomUUID();
     await db.query(
       `insert into public.clinical_documents(id,clinic_id,patient_id,author_id,kind,patient_name,document_date,text,prescription_category)
-      values($1,$2,'synthetic-patient',$3,'Receita','PACIENTE FICTICIO - TESTE',null,'CONTEUDO FICTICIO','RCE')`,
-      [did, clinic, user],
+      values($1,$2,'synthetic-patient',$3,'Receita','PACIENTE FICTICIO - TESTE',null,'CONTEUDO FICTICIO',$4)`,
+      [did, clinic, user, category],
     );
     return rpc('sncr_rce_reserve', {
       eid,

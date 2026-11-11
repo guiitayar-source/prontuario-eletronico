@@ -31,6 +31,10 @@ export function prescriptionSigningBlock(
   }).format(now);
   // Receita simples não é controlada: não depende do SNCR.
   if (category === 'SIMPLES') return null;
+  // Notificações A e B saem só pelo passo a passo com numeração SNCR (rce-service), com
+  // números que a Vigilância Sanitária autorizou para emissão eletrônica; nunca por aqui.
+  if (category === 'NRA' || category === 'NRB')
+    return 'A Notificação de Receita eletrônica só sai pelo passo a passo “Colocar numeração da Anvisa”, com numeração SNCR autorizada pela Vigilância Sanitária para emissão eletrônica. Sem ela, utilize o talonário físico.';
   if (category !== 'RCE' && category !== 'RET')
     return 'A emissão eletrônica desta notificação exige integração com o SNCR e modelo próprio. Esse fluxo ainda não está disponível no PsyWrite. Utilize o receituário físico autorizado pela Vigilância Sanitária.';
   if (day >= sncrTransitionEnd)

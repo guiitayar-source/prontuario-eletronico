@@ -87,36 +87,54 @@ export const sncr = handle(async (request, ctx) => {
               .maybeSingle(),
           )
         : null;
-    // Read-only summary of the prescriber's batch for the page; no state changes.
-    let lot = null;
+    // Read-only summary of the prescriber's batches, one per receituário; no state changes.
+    let lots: Record<string, unknown>[] = [];
     if (configured) {
       const items = check(
         await adminClient()
           .from('sncr_numbering_items')
-          .select('number,state')
+          .select('number,state,request_id')
           .eq('clinic_id', ctx.clinic)
           .eq('user_id', ctx.user)
           .eq('environment', configured)
           .order('number')
           .limit(5000),
-      ) as { number: string; state: string }[];
-      if (items.length) {
-        const count = (state: string) => items.filter((i) => i.state === state).length;
-        lot = {
-          first: items[0].number,
-          last: items[items.length - 1].number,
-          total: items.length,
+      ) as { number: string; state: string; request_id: string }[];
+      const requestIds = [...new Set(items.map((i) => i.request_id))];
+      const requests = requestIds.length
+        ? (check(
+            await adminClient()
+              .from('sncr_numbering_requests')
+              .select('id,category')
+              .eq('clinic_id', ctx.clinic)
+              .eq('user_id', ctx.user)
+              .in('id', requestIds),
+          ) as { id: string; category: string }[])
+        : [];
+      const categoryOf = new Map(requests.map((r) => [r.id, r.category]));
+      const byCategory = new Map<string, typeof items>();
+      for (const item of items) {
+        const category = categoryOf.get(item.request_id) || 'RCE';
+        byCategory.set(category, [...(byCategory.get(category) || []), item]);
+      }
+      lots = [...byCategory].map(([category, list]) => {
+        const count = (state: string) => list.filter((i) => i.state === state).length;
+        return {
+          category,
+          first: list[0].number,
+          last: list[list.length - 1].number,
+          total: list.length,
           available: count('QUARANTINED'),
           reserved: count('RESERVED'),
           used: count('USED'),
           void: count('VOID'),
         };
-      }
+      });
     }
     return json({
       environment,
       openRequestId: open?.id ?? null,
-      lot,
+      lots,
       issuanceAvailable: false,
     });
   }
@@ -154,11 +172,12 @@ export const sncr = handle(async (request, ctx) => {
     } catch (e) {
       throw new HttpError(422, (e as Error).message);
     }
-    // Notificações dependem de autorização da Visa e seguem bloqueadas em produção.
-    if (cfg.environment === 'prd' && !['RCE', 'RET'].includes(input.category))
+    // Notificações A e B: o SNCR só entrega números que a Vigilância Sanitária já autorizou
+    // para emissão eletrônica. B2, retinoides e talidomida seguem fora (modelos próprios).
+    if (cfg.environment === 'prd' && !['RCE', 'RET', 'NRA', 'NRB'].includes(input.category))
       throw new HttpError(
         422,
-        'Em produção, apenas RCE e RET podem ter numeração solicitada por aqui.',
+        'Em produção, só RCE, RET e Notificações de Receita A e B podem ter numeração solicitada por aqui.',
       );
     if (
       ['RCE', 'RET'].includes(input.category) &&

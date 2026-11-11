@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import {
   PDFDocument,
@@ -7,18 +8,57 @@ import {
   type PDFFont,
 } from 'pdf-lib';
 import QRCode from 'qrcode';
-import { validateRceSnapshot, type RceSnapshot } from './rce.ts';
+import {
+  numberedLabels,
+  snapshotCategory,
+  validateRceSnapshot,
+  type NumberedCategory,
+  type RceSnapshot,
+} from './rce.ts';
 import { rangeNumberPattern } from './client.ts';
 
-// Original official model, unchanged. Source/hash are documented in assets/sncr/README.md.
+// Original official models, unchanged. Source/hash are documented in assets/sncr/README.md.
+// The three electronic models (RCE, Notificação A, Notificação B) share the same layout; the
+// pinned hash makes sure the server only fills a file someone checked against that layout.
+export const numberedTemplates: Record<
+  NumberedCategory,
+  { file: string; sha256: string | null }
+> = {
+  RCE: {
+    file: 'rce-eletronica-anvisa.pdf',
+    sha256: '112946ead832ec07f9343f81b35b3571065eb51dea5526cf5c949e0259c11fde',
+  },
+  // Pendente: conferir o arquivo oficial com o mesmo layout e fixar o hash.
+  NRA: { file: 'notificacao-receita-a-eletronica.pdf', sha256: null },
+  NRB: { file: 'notificacao-receita-b-eletronica.pdf', sha256: null },
+};
+async function officialTemplate(category: NumberedCategory) {
+  const t = numberedTemplates[category];
+  const name = numberedLabels[category].full;
+  if (!t.sha256)
+    throw new Error(
+      `O modelo eletrônico oficial da ${name} ainda não foi conferido neste servidor. A emissão eletrônica fica indisponível até lá; use o talonário físico.`,
+    );
+  let bytes: Uint8Array;
+  try {
+    // Same filesystem asset convention as document-pdf.ts. A relative
+    // import.meta URL is rewritten to /_next/ by the server webpack bundle.
+    bytes = await readFile(process.cwd() + '/assets/sncr/' + t.file);
+  } catch {
+    throw new Error(`O modelo oficial da ${name} não está instalado neste servidor.`);
+  }
+  if (createHash('sha256').update(bytes).digest('hex') !== t.sha256)
+    throw new Error(`O modelo oficial da ${name} diverge do arquivo conferido.`);
+  return bytes;
+}
 // 'hmg': RCE de treinamento com número de homologação. 'prd': RCE com número real do SNCR,
 // sem marca de teste. 'transition': RCE eletrônica sem
 // numeração SNCR, admitida no período de transição (RDC 1.000/2025 alterada; ver
 // sncrTransitionEnd), assinada com certificado ICP-Brasil e verificável no ITI.
 export const RCE_TRANSITION_NUMBER_TEXT = 'Sem numeração SNCR (período de transição)';
 export const ITI_VALIDATOR_URL = 'https://validar.iti.gov.br/';
-// Produção: formato que a Anvisa define para o QR da Notificação de Receita, aplicado à RCE por
-// analogia até a Anvisa confirmar (e-mail enviado em 31/10/2026).
+// Produção: formato que a Anvisa define para o QR da Notificação de Receita (página "Receituário
+// eletrônico" do SNCR), aplicado à RCE por analogia até a Anvisa confirmar (e-mail de 31/10/2026).
 export function rceConsultUrl(
   environment: 'hmg' | 'prd' | 'transition',
   number: string | null,
@@ -36,8 +76,13 @@ export async function rcePdf(
   templateBytes?: Uint8Array,
 ) {
   const s = validateRceSnapshot(snapshot);
+  const category = snapshotCategory(s);
+  const label = numberedLabels[category].full;
   if (environment !== 'hmg' && environment !== 'prd' && environment !== 'transition')
     throw new Error('Ambiente de emissão desconhecido.');
+  // Só a RCE tem período de transição sem número; a notificação sempre leva o da Visa.
+  if (environment === 'transition' && category !== 'RCE')
+    throw new Error('A Notificação de Receita eletrônica exige numeração SNCR.');
   const training = environment === 'hmg';
   if (
     environment === 'transition'
@@ -46,12 +91,7 @@ export async function rcePdf(
   )
     throw new Error('Formato da numeração ainda não validado.');
   const template = await PDFDocument.load(
-    templateBytes ||
-      // Same filesystem asset convention as document-pdf.ts. A relative
-      // import.meta URL is rewritten to /_next/ by the server webpack bundle.
-      (await readFile(
-        process.cwd() + '/assets/sncr/rce-eletronica-anvisa.pdf',
-      )),
+    templateBytes || (await officialTemplate(category)),
   );
   const result = await PDFDocument.create();
   const font = await result.embedFont(StandardFonts.Helvetica),
@@ -188,9 +228,7 @@ export async function rcePdf(
       field(`Página ${index + 1}/${chunks.length}`, 489, 690, 76, 1, 7);
   }
   result.setTitle(
-    training
-      ? 'RCE de teste - sem validade para dispensação'
-      : 'Receita de Controle Especial',
+    training ? `${label} de teste - sem validade para dispensação` : label,
   );
   return result.save({ useObjectStreams: false });
 }
