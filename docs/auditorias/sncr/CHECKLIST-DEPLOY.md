@@ -181,6 +181,24 @@ não é parte da aplicação nem evidência de homologação ou de emissão real
 Essas verificações locais não garantem estabilidade em produção. Não houve novo teste externo,
 alteração de configuração, migração remota ou liberação de emissão real nesta mudança.
 
+## 4B. Notificações de Receita A e B eletrônicas (11/11/2026)
+
+Mesmo passo a passo da RCE com numeração (editor › “Colocar numeração da Anvisa”), escolhendo
+“Notificação de Receita A” ou “B” no tipo de receituário. B2, retinoides e talidomida seguem fora.
+
+- Numeração: o prescritor pede à Vigilância Sanitária do município numeração **para emissão
+  eletrônica** (diferente da do talão). Depois, em `/sncr`, escolhe A ou B e busca de 10 a 50
+  desses números (até 50 por dia), com login gov.br. Em `prd` a página agora aceita RCE, RET, A e B.
+- Migração `20261111120000_sncr_notificacoes_ab` (aditiva): coluna `category` em
+  `sncr_rce_emissions` e `sncr_rce_reserve` que tira o número do lote do mesmo tipo do documento.
+  Aplicar antes do deploy do código (só com o aval do titular, `--dry-run` antes).
+- Modelos oficiais: faltam os PDFs de A e B em `assets/sncr/` e o hash fixado em
+  `numberedTemplates` (`lib/sncr/rce-pdf.ts`); ver `assets/sncr/README.md`. Sem isso a notificação
+  para antes de reservar número.
+- O formato de 14 dígitos continua sendo o único aceito para notificações. Um retorno de 16 fica
+  em `CONTRACT_REVIEW` e pode ser relido depois sem nova chamada à Anvisa.
+- Teste: `node tests/sncr-notificacoes.test.mjs`.
+
 ## 5. Teste depois do deploy
 
 1. Atestado simples assinado com Bird ID:
