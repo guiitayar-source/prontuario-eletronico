@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
 import { MockBirdIdProvider } from '../lib/signature/mock-birdid-provider.ts';
 import { padesService } from '../lib/signature/pades-service.ts';
@@ -19,15 +19,6 @@ import {
 import { localRceDatabase, syntheticSnapshot } from './helpers/sncr-rce-db.mjs';
 
 const nr = (category) => ({ ...syntheticSnapshot(), category });
-// Os modelos oficiais de A e B ainda não estão no repositório. Para exercitar o fluxo, estes
-// testes apontam a categoria para o modelo da RCE, que tem o mesmo layout.
-function withRceTemplate(category, run) {
-  const original = numberedTemplates[category];
-  numberedTemplates[category] = numberedTemplates.RCE;
-  return Promise.resolve(run()).finally(() => {
-    numberedTemplates[category] = original;
-  });
-}
 function memoryArtifacts() {
   const files = new Map();
   return {
@@ -60,8 +51,8 @@ async function mockSigner() {
   });
 }
 
-test('Notificação A em produção: número do lote NRA, modelo oficial, assinatura e QR do SNCR', () =>
-  withRceTemplate('NRA', async () => {
+test('Notificação A em produção: número do lote NRA, modelo oficial, assinatura e QR do SNCR', async () => {
+  {
     const local = await localRceDatabase();
     try {
       // Um lote de RCE nunca serve para a notificação, nem o inverso.
@@ -106,10 +97,11 @@ test('Notificação A em produção: número do lote NRA, modelo oficial, assina
     } finally {
       await local.db.close();
     }
-  }));
+  }
+});
 
-test('Notificação B de teste sai com a marca de homologação e o número do lote NRB', () =>
-  withRceTemplate('NRB', async () => {
+test('Notificação B de teste sai com a marca de homologação e o número do lote NRB', async () => {
+  {
     const local = await localRceDatabase();
     try {
       await local.addNumbers(['2611.1-35.0000201'], undefined, 'hmg', 'NRB');
@@ -120,7 +112,8 @@ test('Notificação B de teste sai com a marca de homologação e o número do l
     } finally {
       await local.db.close();
     }
-  }));
+  }
+});
 
 test('o conteúdo congelado precisa ser do mesmo tipo do documento', async () => {
   const local = await localRceDatabase();
@@ -159,17 +152,38 @@ test('RCE antiga mantém o hash: o snapshot sem categoria continua sem categoria
 });
 
 test('sem o modelo oficial conferido, a notificação para antes de gastar número', async () => {
-  assert.equal(numberedTemplates.NRA.sha256 === null || typeof numberedTemplates.NRA.sha256 === 'string', true);
-  if (numberedTemplates.NRA.sha256) return; // já conferido: o teste de layout abaixo cobre
-  await assert.rejects(
-    () => rcePdf(nr('NRA'), '2611.1-35.0000101', new Date(), 'prd'),
-    /ainda não foi conferido/,
-  );
+  const pinned = numberedTemplates.NRA.sha256;
+  numberedTemplates.NRA.sha256 = null;
+  try {
+    await assert.rejects(
+      () => rcePdf(nr('NRA'), '2611.1-35.0000101', new Date(), 'prd'),
+      /ainda não foi conferido/,
+    );
+  } finally {
+    numberedTemplates.NRA.sha256 = pinned;
+  }
+  numberedTemplates.NRA.sha256 = '0'.repeat(64);
+  try {
+    await assert.rejects(
+      () => rcePdf(nr('NRA'), '2611.1-35.0000101', new Date(), 'prd'),
+      /diverge do arquivo conferido/,
+    );
+  } finally {
+    numberedTemplates.NRA.sha256 = pinned;
+  }
   // Notificação nunca sai sem número (a transição sem SNCR é só da RCE).
   await assert.rejects(
     () => rcePdf(nr('NRA'), null, new Date(), 'transition'),
     /exige numeração SNCR/,
   );
+});
+
+test('dados longos cabem nos quadros mais estreitos das notificações', async () => {
+  const s = nr('NRB');
+  s.medicine.name = 'NOME DE MEDICAMENTO FICTICIO MUITO LONGO PARA TESTE DE LARGURA';
+  s.medicine.dosage = Array.from({ length: 30 }, (_, i) => `Orientacao ficticia ${i + 1}`).join('\n');
+  const doc = await PDFDocument.load(await rcePdf(s, '2611.1-35.0000201', new Date(), 'prd'));
+  assert.equal(doc.getPageCount(), 3);
 });
 
 test('numeração de notificação segue no formato publicado (14 dígitos)', () => {
@@ -192,33 +206,52 @@ test('A e B não assinam pelo botão comum: só pelo passo a passo numerado', ()
   assert.match(prescriptionSigningBlock('NRB2'), /ainda não está disponível/);
 });
 
-// Os três modelos eletrônicos vêm do mesmo desenho; o preenchimento usa as coordenadas da RCE.
-// Quando os arquivos de A e B estiverem em assets/sncr, confere rótulo a rótulo.
-test('modelos de A e B têm os rótulos nas mesmas posições do modelo da RCE', (t) => {
-  const files = ['NRA', 'NRB'].map((c) => 'assets/sncr/' + numberedTemplates[c].file);
-  if (!files.every(existsSync)) return t.skip('modelos oficiais de A e B ainda não instalados');
+// As notificações têm uma faixa colorida à esquerda; cada bloco fica deslocado em relação à
+// RCE. Confere, rótulo a rótulo, que os deslocamentos de numberedTemplates batem com os arquivos
+// oficiais, e que os arquivos são os mesmos do hash fixado.
+test('posições dos campos de A e B batem com os rótulos dos modelos oficiais', (t) => {
   try {
     execFileSync('pdftotext', ['-v'], { stdio: 'ignore' });
   } catch {
     return t.skip('pdftotext indisponível');
   }
   const labels = (file) => {
-    const html = execFileSync('pdftotext', ['-bbox', file, '-'], { encoding: 'utf8' });
+    const html = execFileSync('pdftotext', ['-bbox', 'assets/sncr/' + file, '-'], {
+      encoding: 'utf8',
+    });
     const out = new Map();
     for (const m of html.matchAll(
       /<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="[\d.]+" yMax="[\d.]+">([^<]+)<\/word>/g,
     ))
-      if (!out.has(m[3])) out.set(m[3], [Number(m[1]), Number(m[2])]);
+      out.set(m[3], [...(out.get(m[3]) || []), [Number(m[1]), Number(m[2])]]);
     return out;
   };
-  const rce = labels('assets/sncr/' + numberedTemplates.RCE.file);
-  for (const file of files) {
+  const rce = labels(numberedTemplates.RCE.file);
+  for (const category of ['NRA', 'NRB']) {
+    const { file, sha256: pinned, layout } = numberedTemplates[category];
+    assert.equal(sha256(readFileSync('assets/sncr/' + file)), pinned, file);
     const other = labels(file);
-    for (const word of ['NOME:', 'TELEFONE:', 'CONCENTRAÇÃO:', 'QUANTIDADE:', 'POSOLOGIA:', 'PLATAFORMA', 'N.º']) {
-      const a = rce.get(word),
-        b = other.get(word);
-      assert.ok(a && b, `${word} em ${file}`);
-      assert.ok(Math.abs(a[0] - b[0]) < 1 && Math.abs(a[1] - b[1]) < 1, `${word} fora do lugar em ${file}`);
+    // [rótulo, ocorrência (0 = primeira), bloco]
+    const checks = [
+      ['N.º', 0, { dx: 0, dy: 0 }],
+      ['INSCRIÇÃO', 0, layout.emitter],
+      ['TELEFONE:', 0, layout.emitter],
+      ['NOME:', 0, layout.patient],
+      ['CPF', 0, layout.patient],
+      ['ENDEREÇO', 1, layout.patient],
+      ['CONCENTRAÇÃO:', 0, layout.prescription],
+      ['QUANTIDADE:', 0, layout.prescription],
+      ['POSOLOGIA:', 0, layout.prescription],
+      ['PLATAFORMA', 0, layout.footer],
+      ['DIGITAL', 0, layout.footer],
+    ];
+    for (const [word, n, offset] of checks) {
+      const [ax, ay] = rce.get(word)[n],
+        [bx, by] = other.get(word)[n];
+      assert.ok(
+        Math.abs(ax + offset.dx - bx) < 1 && Math.abs(ay + offset.dy - by) < 1,
+        `${word} fora do lugar em ${file}: esperado ${ax + offset.dx},${ay + offset.dy}; modelo ${bx},${by}`,
+      );
     }
   }
 });

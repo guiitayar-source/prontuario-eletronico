@@ -18,19 +18,55 @@ import {
 import { rangeNumberPattern } from './client.ts';
 
 // Original official models, unchanged. Source/hash are documented in assets/sncr/README.md.
-// The three electronic models (RCE, Notificação A, Notificação B) share the same layout; the
-// pinned hash makes sure the server only fills a file someone checked against that layout.
+// The three electronic models have the same fields. The notifications add a colored band on the
+// left, so each block sits a few points away from the RCE position. Every coordinate below is
+// the RCE one plus the block offset measured on the official file (pdftotext -bbox of the labels
+// and the QR placeholder; tests/sncr-notificacoes.test.mjs checks them against the files). The
+// pinned hash makes sure the server only fills the exact file those offsets came from.
+type Offset = { dx: number; dy: number };
+export type TemplateLayout = {
+  emitter: Offset;
+  patient: Offset;
+  prescription: Offset & { width: number };
+  footer: Offset & { width: number };
+  // White box over the placeholder, then the QR image (left/top from the top of the page).
+  qr: { x: number; top: number; boxX: number; boxTop: number };
+};
+const rceLayout: TemplateLayout = {
+  emitter: { dx: 0, dy: 0 },
+  patient: { dx: 0, dy: 0 },
+  prescription: { dx: 0, dy: 0, width: 527 },
+  footer: { dx: 0, dy: 0, width: 450 },
+  qr: { x: 492, top: 710, boxX: 489, boxTop: 697 },
+};
+// Notificações: quadros mais estreitos (63–588 pt) por causa da faixa colorida.
+const notificationLayout = (footerDx: number, qr: TemplateLayout['qr']): TemplateLayout => ({
+  emitter: { dx: 38.3, dy: 0 },
+  patient: { dx: 27.3, dy: 5.15 },
+  prescription: { dx: 35.5, dy: -1.25, width: 507 },
+  footer: { dx: footerDx, dy: 5.25, width: 430 },
+  qr,
+});
 export const numberedTemplates: Record<
   NumberedCategory,
-  { file: string; sha256: string | null }
+  { file: string; sha256: string | null; layout: TemplateLayout }
 > = {
   RCE: {
     file: 'rce-eletronica-anvisa.pdf',
     sha256: '112946ead832ec07f9343f81b35b3571065eb51dea5526cf5c949e0259c11fde',
+    layout: rceLayout,
   },
-  // Pendente: conferir o arquivo oficial com o mesmo layout e fixar o hash.
-  NRA: { file: 'notificacao-receita-a-eletronica.pdf', sha256: null },
-  NRB: { file: 'notificacao-receita-b-eletronica.pdf', sha256: null },
+  // Recebidos do titular em 11/11/2026 (baixados da página de modelos eletrônicos da Anvisa).
+  NRA: {
+    file: 'notificacao-receita-a-eletronica.pdf',
+    sha256: 'e72ddb49831615c4b4c652ee9ca0d4f01f131a3896e43512494b16dca6b9f001',
+    layout: notificationLayout(36.6, { x: 502, top: 722, boxX: 499, boxTop: 709 }),
+  },
+  NRB: {
+    file: 'notificacao-receita-b-eletronica.pdf',
+    sha256: '8c7db7622ef8eda963684409da4e0c70ebd7090d5834b7ed7b6f2c05d1f5c7c4',
+    layout: notificationLayout(38.6, { x: 506, top: 711, boxX: 503, boxTop: 698 }),
+  },
 };
 async function officialTemplate(category: NumberedCategory) {
   const t = numberedTemplates[category];
@@ -114,7 +150,9 @@ export async function rcePdf(
     }
     return out;
   }
-  const dosage = lines(s.medicine.dosage, 527, 9, font);
+  const L = numberedTemplates[category].layout;
+  const P = L.prescription;
+  const dosage = lines(s.medicine.dosage, P.width, 9, font);
   const chunks = Array.from({ length: Math.ceil(dosage.length / 12) }, (_, i) =>
     dosage.slice(i * 12, (i + 1) * 12),
   );
@@ -162,40 +200,50 @@ export async function rcePdf(
         }),
       );
     };
-    // All coordinates refer to the unmodified official A4 template.
+    // RCE coordinates on the unmodified official A4 template, moved by each block's offset.
+    const E = L.emitter,
+      Pt = L.patient,
+      F = L.footer;
+    // A narrower prescription box shortens every line of it by the same amount.
+    const narrow = (width: number) => width - (527 - P.width);
     field(number ?? RCE_TRANSITION_NUMBER_TEXT, 398, 34, 180, number ? 1 : 2, number ? 12 : 8, true);
-    field(s.prescriber.name, 31, 166, 246, 2);
-    field(`CRM ${s.prescriber.crm}/${s.prescriber.uf}`, 31, 208, 246, 1);
-    field(s.prescriber.address, 31, 248, 246, 2, 8);
-    field(s.prescriber.phone, 31, 286, 246, 1);
-    field(s.patient.name, 307, 166, 246, 2);
-    field(s.patient.identifier, 307, 208, 246, 1);
-    field(s.patient.address, 307, 249, 246, 4, 8);
+    field(s.prescriber.name, 31 + E.dx, 166 + E.dy, 246, 2);
+    field(`CRM ${s.prescriber.crm}/${s.prescriber.uf}`, 31 + E.dx, 208 + E.dy, 246, 1);
+    field(s.prescriber.address, 31 + E.dx, 248 + E.dy, 246, 2, 8);
+    field(s.prescriber.phone, 31 + E.dx, 286 + E.dy, 246, 1);
+    field(s.patient.name, 307 + Pt.dx, 166 + Pt.dy, 246, 2);
+    field(s.patient.identifier, 307 + Pt.dx, 208 + Pt.dy, 246, 1);
+    field(s.patient.address, 307 + Pt.dx, 249 + Pt.dy, 246, 4, 8);
     // Values sit on the label's baseline; a long name goes below its label.
-    if (font.widthOfTextAtSize(s.medicine.name, 10) <= 270)
-      field(s.medicine.name, 285, 379, 270, 1, 10);
-    else field(s.medicine.name, 36, 394, 527, 1, 8);
-    field(s.medicine.concentration, 145, 410, 410, 1, 10);
-    field(s.medicine.pharmaceuticalForm, 181, 440, 375, 1, 10);
-    field(s.medicine.quantity, 125, 470, 430, 1, 10);
+    if (font.widthOfTextAtSize(s.medicine.name, 10) <= narrow(270))
+      field(s.medicine.name, 285 + P.dx, 379 + P.dy, narrow(270), 1, 10);
+    else field(s.medicine.name, 36 + P.dx, 394 + P.dy, P.width, 1, 8);
+    field(s.medicine.concentration, 145 + P.dx, 410 + P.dy, narrow(410), 1, 10);
+    field(s.medicine.pharmaceuticalForm, 181 + P.dx, 440 + P.dy, narrow(375), 1, 10);
+    field(s.medicine.quantity, 125 + P.dx, 470 + P.dy, narrow(430), 1, 10);
     part.forEach((line, i) =>
-      page.drawText(line, { x: 36, y: height - 530 - i * 11, size: 9, font }),
+      page.drawText(line, {
+        x: 36 + P.dx,
+        y: height - 530 - P.dy - i * 11,
+        size: 9,
+        font,
+      }),
     );
     // Replace the QR placeholder, preserving the official footer's text.
     page.drawRectangle({
-      x: 489,
-      y: height - 787,
+      x: L.qr.boxX,
+      y: height - L.qr.boxTop - 90,
       width: 76,
       height: 90,
       color: rgb(1, 1, 1),
     });
-    page.drawImage(qr, { x: 492, y: height - 780, width: 70, height: 70 });
-    field(s.platform, 26, 716, 450, 1, 7);
+    page.drawImage(qr, { x: L.qr.x, y: height - L.qr.top - 70, width: 70, height: 70 });
+    field(s.platform, 26 + F.dx, 716 + F.dy, F.width, 1, 7);
     field(
       `${s.prescriber.name} - ${issuedAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`,
-      26,
-      738,
-      450,
+      26 + F.dx,
+      738 + F.dy,
+      F.width,
       1,
       7,
     );
@@ -205,9 +253,9 @@ export async function rcePdf(
         : environment === 'prd'
           ? 'Verifique a numeração em sncr.anvisa.gov.br e a assinatura em validar.iti.gov.br'
           : 'Verifique a assinatura digital em validar.iti.gov.br',
-      26,
-      780,
-      450,
+      26 + F.dx,
+      780 + F.dy,
+      F.width,
       1,
       7,
     );
@@ -225,7 +273,7 @@ export async function rcePdf(
         },
       );
     else if (chunks.length > 1)
-      field(`Página ${index + 1}/${chunks.length}`, 489, 690, 76, 1, 7);
+      field(`Página ${index + 1}/${chunks.length}`, L.qr.boxX, L.qr.boxTop - 7, 76, 1, 7);
   }
   result.setTitle(
     training ? `${label} de teste - sem validade para dispensação` : label,
