@@ -14,8 +14,10 @@ Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abe
 - `npm run lint` / `npm run format` — oxlint / oxfmt. Não rode o formatador em arquivos que
   você não alterou: ele reescreve linhas não relacionadas e polui o diff.
 - `npm run dev` — servidor local em 127.0.0.1:3000; precisa de `.env.local` (ver `.env.example`).
-- Testes: `node tests/<arquivo>`. Os `*.test.mjs` sem banco rodam direto; os demais
+- Testes: `npm test` roda todos os que não precisam de banco (é o que o CI roda; teste novo sem
+  banco entra na lista do `package.json`). Um só: `node tests/<arquivo>`. Os demais
   (`*-db.mjs`, `document-ai.mjs`, `supabase-flow.mjs`…) exigem Supabase local (`npx supabase start`).
+- Refatoração em andamento: etapas, regras e estado em `docs/REFATORACAO.md`.
 - Migrações: `npx supabase migration list` e `npx supabase db push` aplicam no projeto remoto
   vinculado (produção). Rode `--dry-run` primeiro e só aplique com o aval do titular.
 
