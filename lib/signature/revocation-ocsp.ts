@@ -87,12 +87,12 @@ function hasOcspNoCheckExtension(node: ParsedX509Node): boolean {
 
 /**
  * Validates a single OCSP response (RFC 6960) against a target certificate (`targetNode`)
+ * and its verified issuer CA (`issuerNode`) at `referenceTime` / `verificationTime`.
  *
  * Os passos, na ordem: ler a resposta; conferir o envelope (data, extensões, algoritmo); achar
  * a entrada que fala deste certificado; descobrir quem assinou e conferir a assinatura; conferir
  * que esse respondente podia responder pela AC; conferir as datas da entrada; e só então ler o
  * estado do certificado. O primeiro passo que falha encerra a avaliação.
- * and its verified issuer CA (`issuerNode`) at `referenceTime` / `verificationTime`.
  */
 export async function evaluateOcspForCertificate(params: {
   rawOcsp: Buffer | Uint8Array | string;
