@@ -20,7 +20,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | --- | --- | --- | --- |
 | A. Rede de proteção | 0 | Tirar `.wrangler/` do repositório | feito (11/11/2026) |
 | A. Rede de proteção | 1 | Testes sem banco rodando no `npm test` e no CI | feito (11/11/2026) |
-| B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | em andamento (pedaço 1 de 5 feito) |
+| B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | em andamento (pedaços 1 e 2 de 5 feitos) |
 | C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | a fazer |
 | D. Servidor | 4 | Checagem de papel clínico num auxiliar único | a fazer |
 | E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
@@ -59,7 +59,9 @@ decide se uma assinatura é bloqueada, então vai em pedaços:
 1. **Feito (11/11/2026).** Partes que só leem dados em arquivos próprios: `revocation-oids.ts`
    (constantes), `revocation-asn1.ts` (leitura de extensões e estruturas) e
    `revocation-freshness.ts` (política de frescor). O validador caiu de 3.107 para 2.434 linhas.
-2. Extrair CRL (`parseCrlDer`, `evaluateCrlForCertificate`).
+2. **Feito (11/11/2026).** Validação de LCR em `revocation-crl.ts` (`parseCrlDer`,
+   `evaluateCrlForCertificate`) e o formato comum de resultado em `revocation-evaluation.ts`.
+   O validador caiu para 1.929 linhas.
 3. Extrair OCSP (`evaluateOcspForCertificate` e auxiliares).
 4. Extrair cadeia da TSA; `revocation-validator.ts` fica só orquestrando e reexportando.
 5. Quebrar as três funções longas em passos nomeados.
@@ -109,3 +111,4 @@ cobrem daquela tela e completar se faltar.
 
 - 11/11/2026 — Levantamento e plano. Etapas 0 e 1 num PR só.
 - 11/11/2026 — Etapa 2, pedaço 1: constantes, leitura ASN.1 e frescor saem do validador de revogação (código movido sem alteração).
+- 11/11/2026 — Etapa 2, pedaço 2: validação de LCR e o tipo de resultado saem do validador (código movido sem alteração).
