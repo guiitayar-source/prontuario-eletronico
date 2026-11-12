@@ -21,7 +21,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | A. Rede de proteção | 0 | Tirar `.wrangler/` do repositório | feito (11/11/2026) |
 | A. Rede de proteção | 1 | Testes sem banco rodando no `npm test` e no CI | feito (11/11/2026) |
 | B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | feito (12/11/2026) |
-| C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | em andamento (celular, agenda e importações feitas; faltam diagnósticos e entrada) |
+| C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | em andamento (celular, agenda, importações e diagnósticos feitos; falta a entrada) |
 | D. Servidor | 4 | Checagem de papel clínico num auxiliar único | a fazer |
 | E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
 
@@ -110,7 +110,7 @@ Padrão do `CLAUDE.md`: pasta com `index.tsx` e a lógica num hook `use-*.ts`.
 | `app/celular/page.tsx` | 947 | feito (12/11/2026) |
 | `components/agenda.tsx` | 670 | feito (12/11/2026) |
 | `components/imports.tsx` | 648 | feito (12/11/2026) |
-| `components/diagnoses.tsx` | 603 | a fazer |
+| `components/diagnoses.tsx` | 603 | feito (12/11/2026) |
 | `components/auth.tsx` | 501 | a fazer |
 
 Uma tela por PR. Antes de mexer, conferir o que os testes de navegador (`npm run test:browser`)
@@ -152,6 +152,23 @@ sobre o código antigo; depois a divisão.
   e 5 só mudaram de recuo), 5 foram reescritas e 4 saíram. Dois manipuladores que estavam no JSX
   viraram funções do hook: `chooseFiles` e `chooseDestination`.
   Conferência extra: o HTML das telas em oito estados saiu idêntico antes e depois.
+- **Diagnósticos (feito).** Sem teste antes; entrou `tests/browser/diagnoses.spec.ts` (6 testes:
+  busca no CID-10 pelo teclado, sugestões da CID-11, texto livre, diagnósticos anteriores do
+  paciente, erro ao salvar e consulta finalizada). Os códigos e títulos dos testes saem dos
+  catálogos oficiais em `lib/cid/data/`, nenhum escrito à mão. Dos 14 defeitos plantados no código
+  antigo (teclado da lista, Escape e clique fora, ordem dos grupos da CID-11, versão da CID-11
+  enviada, desfazer a CID-11, descrição vazia, diagnóstico resolvido sugerido, bloco da evolução
+  reescrito, cópia mostrada na consulta finalizada, entre outros), os 14 foram pegos.
+  `components/diagnoses.tsx` virou a pasta `components/diagnoses/`: `index.ts` (reexporta, então
+  quem importa `../diagnoses` não muda), `cid-autocomplete.tsx` (busca no catálogo),
+  `icd11-suggestions.tsx` (sugestões e etiqueta da CID-11), `consultation-diagnoses.tsx` (tela) e
+  `use-consultation-diagnoses.ts` (lógica) dos diagnósticos do atendimento, e `types.ts`. Das 603
+  linhas, 567 foram movidas como estavam (3 só ganharam `export` e 18 só mudaram de recuo), 13
+  foram reescritas e 23 saíram (fechamentos de manipulador, imports refeitos, linhas em branco e
+  duas chamadas que passaram a caber numa linha). Seis manipuladores que estavam no JSX viraram
+  funções do hook: `changeStatus`, `unlink`, `chooseIcd11`, `include`, `startDraft` e
+  `startFreeDraft`. Conferência extra: o HTML em dez estados (inclusive a janela de contexto
+  clínico, que usa a mesma busca) saiu idêntico antes e depois.
 
 Anotado para depois, fora desta etapa (mudaria comportamento):
 
@@ -195,3 +212,4 @@ Anotado para depois, fora desta etapa (mudaria comportamento):
 - 12/11/2026 — Etapa 3, tela do celular: 12 testes de navegador novos; `app/celular/page.tsx` dividido em hook, tela e editor de tarja dentro de `components/capture/`.
 - 12/11/2026 — Etapa 3, agenda: 15 testes de navegador novos; `components/agenda.tsx` dividido na pasta `components/agenda/` (tela, lógica do dia, formulário de horário e contas de data).
 - 12/11/2026 — Etapa 3, importações: 12 testes de navegador novos; `components/imports.tsx` dividido na pasta `components/imports/` (painel, lógica do painel, histórico importado e item importado).
+- 12/11/2026 — Etapa 3, diagnósticos: 6 testes de navegador novos; `components/diagnoses.tsx` dividido na pasta `components/diagnoses/` (busca no catálogo CID, sugestões da CID-11, tela e lógica dos diagnósticos do atendimento).

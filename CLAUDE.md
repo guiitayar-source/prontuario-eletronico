@@ -48,6 +48,10 @@ Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abe
     duração).
   - `imports/` — importação de outro sistema: `import-panel.tsx` (tela) e `use-import-panel.ts`
     (lógica), `imported-history.tsx` (aba do prontuário), `entry.tsx` (item importado).
+  - `diagnoses/` — diagnósticos: `cid-autocomplete.tsx` (busca no catálogo CID, também usada no
+    contexto clínico), `icd11-suggestions.tsx` (correspondências da CID-11),
+    `consultation-diagnoses.tsx` (tela) e `use-consultation-diagnoses.ts` (lógica) dos
+    diagnósticos do atendimento, que escrevem o bloco no fim da evolução.
   - `dialog-frame.tsx` — moldura padrão de diálogo (fundo, foco preso, fechar); `modal.tsx` usa
     `<dialog>` nativo. `topbar.tsx` tem a busca global (desenhada por portal na barra da conta,
     em `mfa.tsx`).
