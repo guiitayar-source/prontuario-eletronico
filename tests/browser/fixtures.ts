@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 const clinic = 'aaaaaaaa-0000-4000-8000-000000000001';
 const uid = 'bbbbbbbb-0000-4000-8000-000000000001';
-const patient = {
+export const patient = {
   id: 'cccccccc-0000-4000-8000-000000000001',
   name: 'Paciente Sintético',
   social_name: '',
@@ -61,7 +61,9 @@ export async function signIn(page: Page, role = 'owner') {
     await route.fulfill({ json: data });
   });
 }
-export async function setup(page: Page, role = 'owner') {
+// Sessão e API sintéticas do consultório, sem abrir nenhuma tela. Devolve o estado que os testes
+// consultam e alteram.
+export async function mockApi(page: Page, role = 'owner') {
   await signIn(page, role);
   const state = {
     clinicalRequests: [] as string[],
@@ -186,6 +188,11 @@ export async function setup(page: Page, role = 'owner') {
     }
     await route.fulfill({ json: data });
   });
+  return state;
+}
+/** Abre o prontuário do paciente sintético, como a maioria dos testes precisa. */
+export async function setup(page: Page, role = 'owner') {
+  const state = await mockApi(page, role);
   await page.goto('/');
   await page.getByRole('button', { name: /Paciente Sintético/ }).click();
   if (role !== 'secretary')
