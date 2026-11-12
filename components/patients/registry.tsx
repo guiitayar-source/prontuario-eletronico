@@ -1,5 +1,6 @@
 'use client';
 import { useAccess } from '../auth';
+import { isClinicalRole } from '@/lib/roles';
 import { apiFetch as fetch } from '@/lib/supabase/http';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -334,7 +335,7 @@ export default function Registry({
     [tab, setTab] = useState<'list' | 'archived' | 'transfer'>('list'),
     [transferBusy, setTransferBusy] = useState(false);
   const role = useAccess().role;
-  const medical = ['owner', 'doctor'].includes(role);
+  const medical = isClinicalRole(role);
   return (
     <div className="app-shell">
       <NavigationRail

@@ -12,6 +12,7 @@ import {
 import { useTheme, THEMES, MODES, type ThemeName, type ThemeMode } from '@/lib/theme';
 import { NavigationRail } from './navigation-rail';
 import { useAccess } from './auth';
+import { isClinicalRole } from '@/lib/roles';
 import { ProfessionalProfileCard } from './professional-profile';
 import { PlatformPanel } from './platform';
 import { BackupStatusPanel } from './backup-status';
@@ -29,7 +30,7 @@ export default function Settings({
 }) {
   const { theme, setTheme, gradient, setGradient, mode, setMode, resolvedMode } = useTheme();
   const { role } = useAccess();
-  const medical = ['owner', 'doctor'].includes(role);
+  const medical = isClinicalRole(role);
 
   return (
     <div className="app-shell">
