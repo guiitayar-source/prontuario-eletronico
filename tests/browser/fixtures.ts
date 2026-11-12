@@ -15,16 +15,15 @@ export const patient = {
   updated_at: 0,
   draft_key: 'synthetic',
 };
-// Sessão sintética: o app se comporta como se a pessoa já tivesse entrado. Tudo o que iria para
-// o Supabase (auth, vínculo com a clínica, Storage) é respondido aqui, sem rede de verdade.
-export async function signIn(page: Page, role = 'owner') {
+/** Sessão sintética do Supabase, no formato que o navegador guarda depois de entrar. */
+export function syntheticSession(user_metadata: Record<string, unknown> = {}) {
   const user = {
     id: uid,
     aud: 'authenticated',
     role: 'authenticated',
     email: 'synthetic@example.invalid',
     app_metadata: { provider: 'email' },
-    user_metadata: {},
+    user_metadata,
     factors: [],
   };
   const claims = Buffer.from(
@@ -35,7 +34,7 @@ export async function signIn(page: Page, role = 'owner') {
       exp: Math.floor(Date.now() / 1000) + 3600,
     }),
   ).toString('base64url');
-  const session = {
+  return {
     access_token: `e30.${claims}.c3ludGhldGlj`,
     refresh_token: 'synthetic',
     token_type: 'bearer',
@@ -43,14 +42,23 @@ export async function signIn(page: Page, role = 'owner') {
     expires_at: Math.floor(Date.now() / 1000) + 3600,
     user,
   };
-  await page.addInitScript(
-    (value) => localStorage.setItem('sb-127-auth-token', JSON.stringify(value)),
-    session,
-  );
+}
+// Sessão sintética: o app se comporta como se a pessoa já tivesse entrado. Tudo o que iria para
+// o Supabase (auth, vínculo com a clínica, Storage) é respondido aqui, sem rede de verdade.
+// Com `signedIn` falso, o Supabase sintético responde do mesmo jeito, mas o navegador começa sem
+// sessão (tela de entrada).
+export async function signIn(page: Page, role = 'owner', signedIn = true) {
+  const session = syntheticSession();
+  if (signedIn)
+    await page.addInitScript(
+      (value) =>
+        localStorage.setItem('sb-127-auth-token', JSON.stringify(value)),
+      session,
+    );
   await page.route('http://127.0.0.1:54329/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const data = path.includes('/auth/v1/user')
-      ? user
+      ? session.user
       : path.endsWith('/clinic_members')
         ? [{ clinic_id: clinic, role, clinics: { name: 'Clínica Sintética' } }]
         : path.endsWith('/clinics')
@@ -63,8 +71,8 @@ export async function signIn(page: Page, role = 'owner') {
 }
 // Sessão e API sintéticas do consultório, sem abrir nenhuma tela. Devolve o estado que os testes
 // consultam e alteram.
-export async function mockApi(page: Page, role = 'owner') {
-  await signIn(page, role);
+export async function mockApi(page: Page, role = 'owner', signedIn = true) {
+  await signIn(page, role, signedIn);
   const state = {
     clinicalRequests: [] as string[],
     medicationState: {
