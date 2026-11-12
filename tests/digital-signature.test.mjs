@@ -412,16 +412,18 @@ describe('ICP-Brasil Digital Signature Suite', () => {
       });
 
       assert.ok(signResult.cmsSignatureBase64, 'Must produce CMS detached signature');
-      assert.ok(
-        !signResult.cmsSignatureBase64.includes('PDF'),
-        'Signature must be native CMS and never touch PDF'
-      );
 
       // Clean base64 and verify DER length
       const cleanB64 = signResult.cmsSignatureBase64
         .replace(/-----[^-]+-----/g, '')
         .replace(/\s+/g, '');
       const der = Buffer.from(cleanB64, 'base64');
+      // Conferido nos bytes, não no texto base64: o base64 de uma assinatura válida contém as
+      // letras "PDF" por acaso em algumas execuções, o que derrubava este teste sem motivo.
+      assert.ok(
+        !der.includes('%PDF-'),
+        'Signature must be native CMS and never touch PDF'
+      );
       assert.ok(der.length > 500, 'CMS SignedData must contain certificate chain and signature');
     });
   });
