@@ -20,7 +20,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | --- | --- | --- | --- |
 | A. Rede de proteção | 0 | Tirar `.wrangler/` do repositório | feito (11/11/2026) |
 | A. Rede de proteção | 1 | Testes sem banco rodando no `npm test` e no CI | feito (11/11/2026) |
-| B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | em andamento (pedaços 1 a 4 feitos; pedaço 5: LCR feita, faltam OCSP e certificado) |
+| B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | em andamento (pedaços 1 a 4 feitos; pedaço 5: LCR e OCSP feitas, falta certificado) |
 | C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | a fazer |
 | D. Servidor | 4 | Checagem de papel clínico num auxiliar único | a fazer |
 | E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
@@ -75,7 +75,10 @@ decide se uma assinatura é bloqueada, então vai em pedaços:
    - **Feito (11/11/2026):** `evaluateCrlForCertificate` (420 linhas) virou um roteiro de 65 linhas
      e quatro passos: `checkCrlIssuerAndSignature`, `checkCrlScope`, `checkCrlDates` e
      `crlStatusForCertificate`.
-   - A fazer: `evaluateOcspForCertificate` (`revocation-ocsp.ts`).
+   - **Feito (12/11/2026):** `evaluateOcspForCertificate` (700 linhas) virou um roteiro de 85 linhas
+     e sete passos: `parseBasicOcspResponse`, `checkOcspEnvelope`, `findOcspSingleResponse`,
+     `findVerifiedOcspResponder`, `checkOcspResponderAuthorization`,
+     `checkOcspSingleResponseDates` e `ocspStatusForCertificate`.
    - A fazer: `evaluateSingleCertificateRevocation` (`revocation-certificate.ts`).
 
 Quem importa de `revocation-validator.ts` não muda: ele reexporta os nomes públicos que saíram.
@@ -127,3 +130,4 @@ cobrem daquela tela e completar se faltar.
 - 11/11/2026 — Etapa 2, pedaço 3: validação de OCSP sai do validador (código movido sem alteração).
 - 11/11/2026 — Etapa 2, pedaço 4: decisão sobre um certificado sai do validador, que passa a ter um mapa dos arquivos no topo.
 - 11/11/2026 — Etapa 2, pedaço 5 (LCR): `evaluateCrlForCertificate` dividida em quatro passos nomeados, sem alterar linhas de lógica.
+- 12/11/2026 — Etapa 2, pedaço 5 (OCSP): `evaluateOcspForCertificate` dividida em sete passos nomeados, sem alterar linhas de lógica.

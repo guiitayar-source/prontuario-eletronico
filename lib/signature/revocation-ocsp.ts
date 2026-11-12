@@ -87,6 +87,11 @@ function hasOcspNoCheckExtension(node: ParsedX509Node): boolean {
 
 /**
  * Validates a single OCSP response (RFC 6960) against a target certificate (`targetNode`)
+ *
+ * Os passos, na ordem: ler a resposta; conferir o envelope (data, extensões, algoritmo); achar
+ * a entrada que fala deste certificado; descobrir quem assinou e conferir a assinatura; conferir
+ * que esse respondente podia responder pela AC; conferir as datas da entrada; e só então ler o
+ * estado do certificado. O primeiro passo que falha encerra a avaliação.
  * and its verified issuer CA (`issuerNode`) at `referenceTime` / `verificationTime`.
  */
 export async function evaluateOcspForCertificate(params: {
@@ -125,6 +130,62 @@ export async function evaluateOcspForCertificate(params: {
     };
   }
 
+  const parsedOcsp = parseBasicOcspResponse(der);
+  if ('source' in parsedOcsp) return parsedOcsp;
+  const { basicOcsp } = parsedOcsp;
+
+  const envelope = checkOcspEnvelope(basicOcsp);
+  if ('source' in envelope) return envelope;
+  const { producedAt, allowedSigAlg } = envelope;
+
+  const single = findOcspSingleResponse(basicOcsp, targetNode, issuerNode);
+  if ('source' in single) return single;
+  const { matchedSingleResponse } = single;
+
+  const responder = await findVerifiedOcspResponder({
+    basicOcsp,
+    issuerNode,
+    extraResponderCerts,
+    allowedSigAlg,
+  });
+  if ('source' in responder) return responder;
+
+  const responderProblem = await checkOcspResponderAuthorization({
+    verifiedResponder: responder.verifiedResponder,
+    issuerNode,
+    producedAt,
+    rawCrls,
+    verificationTime,
+    freshness,
+  });
+  if (responderProblem) return responderProblem;
+
+  const dates = checkOcspSingleResponseDates(
+    matchedSingleResponse,
+    producedAt,
+    verificationTime,
+  );
+  if ('source' in dates) return dates;
+
+  return ocspStatusForCertificate({
+    matchedSingleResponse,
+    targetNode,
+    producedAt,
+    thisUpdate: dates.thisUpdate,
+    nextUpdate: dates.nextUpdate,
+    referenceTime,
+    verificationTime,
+    freshness,
+  });
+}
+
+/**
+ * Lê a estrutura da resposta OCSP e devolve a parte assinada (BasicOCSPResponse). Resposta de
+ * erro do servidor (tryLater e outras) não é evidência e sai daqui com o motivo.
+ */
+function parseBasicOcspResponse(
+  der: Buffer,
+): SingleEvidenceEvaluation | { basicOcsp: pkijs.BasicOCSPResponse } {
   const asn1 = asn1js.fromBER(
     der.buffer.slice(
       der.byteOffset,
@@ -196,6 +257,16 @@ export async function evaluateOcspForCertificate(params: {
     };
   }
 
+  return { basicOcsp };
+}
+
+/**
+ * O envelope da resposta é aceitável? producedAt válido, nenhuma extensão crítica desconhecida,
+ * algoritmo de assinatura permitido e ao menos uma entrada. Devolve producedAt e o algoritmo.
+ */
+function checkOcspEnvelope(basicOcsp: pkijs.BasicOCSPResponse):
+  | SingleEvidenceEvaluation
+  | { producedAt: Date; allowedSigAlg: (typeof ALLOWED_SIGNATURE_OIDS)[string] } {
   const tbsData = basicOcsp.tbsResponseData;
   const producedAt = tbsData.producedAt;
   if (!(producedAt instanceof Date) || Number.isNaN(producedAt.getTime())) {
@@ -242,6 +313,20 @@ export async function evaluateOcspForCertificate(params: {
       error: 'BasicOCSPResponse não contém nenhuma entrada SingleResponse.',
     };
   }
+
+  return { producedAt, allowedSigAlg };
+}
+
+/**
+ * Qual entrada da resposta fala deste certificado? Compara o CertID (hash do nome e da chave da
+ * AC, mais o número de série) com o certificado consultado e a AC que o emitiu.
+ */
+function findOcspSingleResponse(
+  basicOcsp: pkijs.BasicOCSPResponse,
+  targetNode: ParsedX509Node,
+  issuerNode: ParsedX509Node,
+): SingleEvidenceEvaluation | { matchedSingleResponse: pkijs.SingleResponse } {
+  const tbsData = basicOcsp.tbsResponseData;
 
   // Step 1: Match CertID against (targetNode, issuerNode)
   const issuerNameDer = Buffer.from(
@@ -330,6 +415,22 @@ export async function evaluateOcspForCertificate(params: {
       error: `Resposta OCSP não contém CertID correspondente ao certificado "${targetNode.commonName}".`,
     };
   }
+
+  return { matchedSingleResponse };
+}
+
+/**
+ * Quem assinou a resposta? Junta os certificados candidatos (a própria AC e os que vieram com a
+ * resposta), filtra pelo ResponderID e devolve o primeiro cuja chave confere a assinatura.
+ */
+async function findVerifiedOcspResponder(params: {
+  basicOcsp: pkijs.BasicOCSPResponse;
+  issuerNode: ParsedX509Node;
+  extraResponderCerts: unknown[];
+  allowedSigAlg: (typeof ALLOWED_SIGNATURE_OIDS)[string];
+}): Promise<SingleEvidenceEvaluation | { verifiedResponder: ParsedX509Node }> {
+  const { basicOcsp, issuerNode, extraResponderCerts, allowedSigAlg } = params;
+  const tbsData = basicOcsp.tbsResponseData;
 
   // Step 2: Identify the effective OCSP Responder certificate matching responderID
   const candidatePool: ParsedX509Node[] = [issuerNode];
@@ -436,6 +537,35 @@ export async function evaluateOcspForCertificate(params: {
         'Assinatura criptográfica de BasicOCSPResponse inválida perante o certificado do respondente.',
     };
   }
+
+  return { verifiedResponder };
+}
+
+/**
+ * Esse respondente podia responder pela AC (RFC 6960 §4.2.2.2)? Vale a própria AC, ou um
+ * respondente delegado emitido por ela, com permissão de assinar OCSP, vigente e não revogado.
+ * Devolve o motivo da recusa, ou `null` se passou.
+ */
+async function checkOcspResponderAuthorization(params: {
+  verifiedResponder: ParsedX509Node;
+  issuerNode: ParsedX509Node;
+  producedAt: Date;
+  rawCrls: Array<Buffer | Uint8Array | string>;
+  verificationTime: Date;
+  freshness: RevocationFreshnessContext;
+}): Promise<SingleEvidenceEvaluation | null> {
+  const {
+    verifiedResponder,
+    issuerNode,
+    producedAt,
+    rawCrls,
+    verificationTime,
+    freshness,
+  } = params;
+  const issuerKeyBytes = Buffer.from(
+    issuerNode.pkiCert.subjectPublicKeyInfo.subjectPublicKey.valueBlock
+      .valueHexView,
+  );
 
   // Step 4: Verify Responder Authorization, Chain & Trust per RFC 6960 §4.2.2.2
   const isDirectIssuer =
@@ -591,6 +721,18 @@ export async function evaluateOcspForCertificate(params: {
     }
   }
 
+  return null;
+}
+
+/**
+ * As datas da entrada fazem sentido? thisUpdate válido, período coerente com producedAt e nada
+ * emitido no futuro. Devolve thisUpdate e nextUpdate (opcional), ou o motivo da recusa.
+ */
+function checkOcspSingleResponseDates(
+  matchedSingleResponse: pkijs.SingleResponse,
+  producedAt: Date,
+  verificationTime: Date,
+): SingleEvidenceEvaluation | { thisUpdate: Date; nextUpdate: Date | undefined } {
   // Step 5: Validate SingleResponse temporal fields (producedAt, thisUpdate, nextUpdate)
   const thisUpdate = matchedSingleResponse.thisUpdate;
   const defaultZeroDateMs = new Date(0, 0, 0).getTime();
@@ -633,6 +775,34 @@ export async function evaluateOcspForCertificate(params: {
       error: `Resposta OCSP emitida no futuro em relação ao instante de verificação (${verificationTime.toISOString()}).`,
     };
   }
+
+  return { thisUpdate, nextUpdate };
+}
+
+/**
+ * Com a resposta já aceita: o que ela diz do certificado? "good" só prova não revogação quando
+ * tem frescor suficiente; "revoked" traz quando e por quê; "unknown" não prova nada.
+ */
+function ocspStatusForCertificate(params: {
+  matchedSingleResponse: pkijs.SingleResponse;
+  targetNode: ParsedX509Node;
+  producedAt: Date;
+  thisUpdate: Date;
+  nextUpdate: Date | undefined;
+  referenceTime: Date;
+  verificationTime: Date;
+  freshness: RevocationFreshnessContext;
+}): SingleEvidenceEvaluation {
+  const {
+    matchedSingleResponse,
+    targetNode,
+    producedAt,
+    thisUpdate,
+    nextUpdate,
+    referenceTime,
+    verificationTime,
+    freshness,
+  } = params;
 
   // Check SingleResponse extensions
   const singleExts = matchedSingleResponse.singleExtensions || [];
