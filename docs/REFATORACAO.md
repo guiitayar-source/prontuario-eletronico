@@ -20,7 +20,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | --- | --- | --- | --- |
 | A. Rede de proteção | 0 | Tirar `.wrangler/` do repositório | feito (11/11/2026) |
 | A. Rede de proteção | 1 | Testes sem banco rodando no `npm test` e no CI | feito (11/11/2026) |
-| B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | a fazer |
+| B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | em andamento (pedaço 1 de 5 feito) |
 | C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | a fazer |
 | D. Servidor | 4 | Checagem de papel clínico num auxiliar único | a fazer |
 | E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
@@ -56,11 +56,15 @@ Continuam manuais, porque exigem Supabase local (`npx supabase start`) ou build:
 (`evaluateSingleCertificateRevocation`) e 423 linhas (`evaluateCrlForCertificate`). É o trecho que
 decide se uma assinatura é bloqueada, então vai em pedaços:
 
-1. Extrair leitura de extensões e utilitários (funções puras) para arquivos próprios.
-2. Extrair CRL.
-3. Extrair OCSP.
+1. **Feito (11/11/2026).** Partes que só leem dados em arquivos próprios: `revocation-oids.ts`
+   (constantes), `revocation-asn1.ts` (leitura de extensões e estruturas) e
+   `revocation-freshness.ts` (política de frescor). O validador caiu de 3.107 para 2.434 linhas.
+2. Extrair CRL (`parseCrlDer`, `evaluateCrlForCertificate`).
+3. Extrair OCSP (`evaluateOcspForCertificate` e auxiliares).
 4. Extrair cadeia da TSA; `revocation-validator.ts` fica só orquestrando e reexportando.
 5. Quebrar as três funções longas em passos nomeados.
+
+Quem importa de `revocation-validator.ts` não muda: ele reexporta os nomes públicos que saíram.
 
 Cada pedaço é um PR que só move código; os testes `pades-*` e `revocation-*` precisam continuar verdes.
 Outros arquivos grandes de assinatura (`rfc3161-timestamp`, `pdf-structure-validator`, `icp-chain`,
@@ -104,3 +108,4 @@ cobrem daquela tela e completar se faltar.
 ## Diário
 
 - 11/11/2026 — Levantamento e plano. Etapas 0 e 1 num PR só.
+- 11/11/2026 — Etapa 2, pedaço 1: constantes, leitura ASN.1 e frescor saem do validador de revogação (código movido sem alteração).
