@@ -21,7 +21,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | A. Rede de proteção | 0 | Tirar `.wrangler/` do repositório | feito (11/11/2026) |
 | A. Rede de proteção | 1 | Testes sem banco rodando no `npm test` e no CI | feito (11/11/2026) |
 | B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | feito (12/11/2026) |
-| C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | em andamento (tela do celular feita; faltam agenda, importações, diagnósticos e entrada) |
+| C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | em andamento (celular e agenda feitas; faltam importações, diagnósticos e entrada) |
 | D. Servidor | 4 | Checagem de papel clínico num auxiliar único | a fazer |
 | E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
 
@@ -108,7 +108,7 @@ Padrão do `CLAUDE.md`: pasta com `index.tsx` e a lógica num hook `use-*.ts`.
 | Arquivo | Linhas | Estado |
 | --- | --- | --- |
 | `app/celular/page.tsx` | 947 | feito (12/11/2026) |
-| `components/agenda.tsx` | 670 | a fazer |
+| `components/agenda.tsx` | 670 | feito (12/11/2026) |
 | `components/imports.tsx` | 648 | a fazer |
 | `components/diagnoses.tsx` | 603 | a fazer |
 | `components/auth.tsx` | 501 | a fazer |
@@ -126,6 +126,26 @@ sobre o código antigo; depois a divisão.
   ficaram na tela) e quatro manipuladores que estavam dentro do JSX e viraram três funções do
   hook: `reconnect`, `renamePage` e `applyRedaction`.
   Conferência extra: o HTML da tela em três estados saiu idêntico antes e depois.
+- **Agenda (feito).** Também não tinha teste; entrou `tests/browser/agenda.spec.ts` (15 testes,
+  API de horários sintética e relógio do navegador parado num instante fixo). Para conferir que os
+  testes pegam defeito de verdade, oito defeitos foram plantados um a um no código antigo (situação
+  de dia passado, duração ao remarcar, Enter na busca, identificador do reenvio, contagem de faltas,
+  confirmação de falta, falta antes do horário, término pela duração): os oito foram pegos.
+  `components/agenda.tsx` virou a pasta `components/agenda/`: `index.tsx` (tela), `use-agenda.ts`
+  (lógica do dia), `appointment-form.tsx` e `use-appointment-form.ts` (formulário de horário) e
+  `appointment.ts` (o tipo do horário e as contas de data, hora e duração). Quem importa
+  `@/components/agenda` não muda. Das 670 linhas, 652 foram movidas como estavam (14 delas só
+  ganharam `export` e 10 só mudaram de recuo), 8 foram reescritas e 10 saíram (linhas em branco,
+  fechamentos de manipulador, imports refeitos). O que mudou: os imports, o tipo dos props do
+  formulário (agora `AppointmentFormProps`) e quatro manipuladores que estavam dentro do JSX e
+  viraram funções: `typePatient`, `pickOnlyMatch` e `pickPatient` no formulário e `reload` na agenda.
+  Conferência extra: o HTML da agenda em sete estados saiu idêntico antes e depois.
+
+Anotado para depois, fora desta etapa (mudaria comportamento):
+
+- Agenda: se carregar um dia falha, a tela mostra o aviso de erro, mas continua listando os
+  horários do dia que estava aberto antes, sob o título do dia novo. Limpar a lista quando o
+  carregamento falha evitaria confundir os dias.
 
 ### Etapa 4 — Servidor
 
@@ -159,3 +179,4 @@ sobre o código antigo; depois a divisão.
 - 12/11/2026 — Teste de assinatura que falhava por acaso (exigia que o base64 da assinatura não tivesse as letras "PDF") passa a conferir os bytes.
 - 12/11/2026 — Etapa 2, pedaço 5 (certificado): teste novo para suspensão e evidências contraditórias; `evaluateSingleCertificateRevocation` dividida em passos nomeados, sem alterar linhas de lógica. Etapa 2 concluída.
 - 12/11/2026 — Etapa 3, tela do celular: 12 testes de navegador novos; `app/celular/page.tsx` dividido em hook, tela e editor de tarja dentro de `components/capture/`.
+- 12/11/2026 — Etapa 3, agenda: 15 testes de navegador novos; `components/agenda.tsx` dividido na pasta `components/agenda/` (tela, lógica do dia, formulário de horário e contas de data).
