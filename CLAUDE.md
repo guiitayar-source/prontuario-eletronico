@@ -52,6 +52,9 @@ Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abe
     contexto clínico), `icd11-suggestions.tsx` (correspondências da CID-11),
     `consultation-diagnoses.tsx` (tela) e `use-consultation-diagnoses.ts` (lógica) dos
     diagnósticos do atendimento, que escrevem o bloco no fim da evolução.
+  - `auth/` — tela de entrada: `index.tsx` (escolhe entre entrar, definir senha, sem clínica e o
+    app), `use-auth.ts` (sessão, links do e-mail, vínculo com a clínica), `sign-in-form.tsx`,
+    `password-form.tsx` e `access.ts` (`useAccess()`: papel e clínica de quem entrou).
   - `dialog-frame.tsx` — moldura padrão de diálogo (fundo, foco preso, fechar); `modal.tsx` usa
     `<dialog>` nativo. `topbar.tsx` tem a busca global (desenhada por portal na barra da conta,
     em `mfa.tsx`).

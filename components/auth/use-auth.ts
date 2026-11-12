@@ -1,16 +1,13 @@
-'use client';
-import { createContext, useContext, useEffect, useState } from 'react';
+// Lógica da entrada: lê a sessão do Supabase; trata o que chega no endereço (pareamento do
+// celular, erro, convite, recuperação, ativação, código de acesso); carrega o vínculo com a
+// clínica; entra, define a senha, pede o link de senha e sai. A tela está em index.tsx.
+import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { setClinicId } from '@/lib/supabase/http';
-import { MFAGate } from './mfa';
-import { PlanGate } from './plan';
-import { Check, AlertCircle, Mail } from 'lucide-react';
 
-const Access = createContext({ role: '', clinic: '' });
-export const useAccess = () => useContext(Access);
-
-export default function AuthGate({ children }: { children: React.ReactNode }) {
+/** Estado e ações da tela de entrada. */
+export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -295,207 +292,25 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     setMessage('');
   }
 
-  if (!ready)
-    return (
-      <main className="auth-shell">
-        <p>Carregando sessão…</p>
-      </main>
-    );
-
-  // Form: Primeiro acesso OU Recuperação de senha
-  if (isSettingPassword) {
-    const accountEmail = session?.user?.email || email;
-    const hasMinLength = password.length >= 12;
-    const hasMatch = confirmPassword.length > 0 && password === confirmPassword;
-    const hasMismatch = confirmPassword.length > 0 && password !== confirmPassword;
-
-    return (
-      <main className="auth-shell">
-        <form className="auth-card" onSubmit={handlePasswordSave}>
-          <div className="eyebrow">
-            {firstAccess ? 'PRIMEIRO ACESSO · EQUIPE' : 'RECUPERAÇÃO DE ACESSO'}
-          </div>
-          <h1>
-            {firstAccess ? 'Defina sua senha de acesso' : 'Definir nova senha'}
-          </h1>
-          <p>
-            {firstAccess
-              ? 'Seja bem-vindo(a) à clínica! Cadastre sua senha individual para acessar o prontuário.'
-              : 'Cadastre sua nova senha de acesso individual.'}
-          </p>
-
-          {accountEmail && (
-            <div className="auth-account-badge">
-              <Mail size={16} />
-              <span>
-                Conta: <strong>{accountEmail}</strong>
-              </span>
-            </div>
-          )}
-
-          <label>
-            Nova senha
-            <input
-              type="password"
-              required
-              minLength={12}
-              autoComplete="new-password"
-              placeholder="Mínimo de 12 caracteres"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
-
-          <label>
-            Repetir nova senha
-            <input
-              type="password"
-              required
-              minLength={12}
-              autoComplete="new-password"
-              placeholder="Digite a mesma senha novamente"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-          </label>
-
-          <div className="auth-checklist">
-            <div className={`auth-checklist-item ${hasMinLength ? 'valid' : ''}`}>
-              <Check size={14} />
-              <span>Mínimo de 12 caracteres ({password.length}/12)</span>
-            </div>
-            <div
-              className={`auth-checklist-item ${hasMatch ? 'valid' : hasMismatch ? 'invalid' : ''}`}
-            >
-              {hasMismatch ? <AlertCircle size={14} /> : <Check size={14} />}
-              <span>
-                {hasMismatch ? 'As senhas não coincidem' : 'Senhas coincidem'}
-              </span>
-            </div>
-          </div>
-
-          {error && (
-            <p role="alert" className="capture-error">
-              {error}
-            </p>
-          )}
-          {message && (
-            <p role="status" className="capture-message">
-              {message}
-            </p>
-          )}
-
-          <button
-            className="primary"
-            disabled={busy || !hasMinLength || !hasMatch}
-          >
-            {busy ? 'Salvando senha…' : 'Salvar senha e entrar'}
-          </button>
-
-          <button
-            className="secondary"
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              void signOut();
-            }}
-          >
-            Sair ou entrar com outra conta
-          </button>
-        </form>
-      </main>
-    );
-  }
-
-  // Form: Login padrão
-  if (!session) {
-    return (
-      <main className="auth-shell">
-        <form className="auth-card" onSubmit={signIn}>
-          <div className="eyebrow">PSYWRITE</div>
-          <h1>Entrar no prontuário</h1>
-          <p>Use sua conta individual do prontuário.</p>
-          <label>
-            E-mail
-            <input
-              type="email"
-              required
-              autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </label>
-          <label>
-            Senha
-            <input
-              type="password"
-              required
-              minLength={1}
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
-          {error && (
-            <p role="alert" className="capture-error">
-              {error}
-            </p>
-          )}
-          {message && (
-            <p role="status" className="capture-message">
-              {message}
-            </p>
-          )}
-          <button className="primary" disabled={busy}>
-            {busy ? 'Aguarde…' : 'Entrar'}
-          </button>
-          <button
-            className="secondary"
-            type="button"
-            disabled={busy}
-            onClick={reset}
-          >
-            Esqueci minha senha
-          </button>
-        </form>
-      </main>
-    );
-  }
-
-  if (!access) {
-    return (
-      <main className="auth-shell">
-        <div className="auth-card">
-          <h1>Acesso à clínica</h1>
-          <p>Sua conta precisa ser vinculada à clínica pelo administrador.</p>
-          {error && <p role="alert">{error}</p>}
-          <button className="secondary" onClick={() => location.reload()}>
-            Verificar acesso
-          </button>
-          <button className="secondary" onClick={signOut}>
-            Sair
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  const clinicName =
-    members.find((m) => m.clinic_id === access.clinic)?.clinics?.name || '';
-  return (
-    <Access.Provider value={access}>
-      {error && <p className="capture-error" role="alert">{error}</p>}
-      <MFAGate
-        key={`${session.user.id}:${access.clinic}`}
-        session={session}
-        clinic={access.clinic}
-        role={access.role}
-        clinicName={clinicName}
-        userEmail={session.user.email}
-        onSignOut={signOut}
-      >
-        <PlanGate clinic={access.clinic}>{children}</PlanGate>
-      </MFAGate>
-    </Access.Provider>
-  );
+  return {
+    ready,
+    session,
+    busy,
+    access,
+    members,
+    email,
+    setEmail,
+    password,
+    setPassword,
+    confirmPassword,
+    setConfirmPassword,
+    error,
+    message,
+    firstAccess,
+    isSettingPassword,
+    handlePasswordSave,
+    signIn,
+    reset,
+    signOut,
+  };
 }

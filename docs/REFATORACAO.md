@@ -21,7 +21,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | A. Rede de proteção | 0 | Tirar `.wrangler/` do repositório | feito (11/11/2026) |
 | A. Rede de proteção | 1 | Testes sem banco rodando no `npm test` e no CI | feito (11/11/2026) |
 | B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | feito (12/11/2026) |
-| C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | em andamento (celular, agenda, importações e diagnósticos feitos; falta a entrada) |
+| C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | feito (12/11/2026) |
 | D. Servidor | 4 | Checagem de papel clínico num auxiliar único | a fazer |
 | E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
 
@@ -111,7 +111,7 @@ Padrão do `CLAUDE.md`: pasta com `index.tsx` e a lógica num hook `use-*.ts`.
 | `components/agenda.tsx` | 670 | feito (12/11/2026) |
 | `components/imports.tsx` | 648 | feito (12/11/2026) |
 | `components/diagnoses.tsx` | 603 | feito (12/11/2026) |
-| `components/auth.tsx` | 501 | a fazer |
+| `components/auth.tsx` | 501 | feito (12/11/2026) |
 
 Uma tela por PR. Antes de mexer, conferir o que os testes de navegador (`npm run test:browser`)
 cobrem daquela tela e completar se faltar. O PR tem dois commits: primeiro os testes, que passam
@@ -169,6 +169,22 @@ sobre o código antigo; depois a divisão.
   funções do hook: `changeStatus`, `unlink`, `chooseIcd11`, `include`, `startDraft` e
   `startFreeDraft`. Conferência extra: o HTML em dez estados (inclusive a janela de contexto
   clínico, que usa a mesma busca) saiu idêntico antes e depois.
+- **Tela de entrada (feito).** Sem teste antes; entrou `tests/browser/auth.spec.ts` (18 testes,
+  com o Auth e o vínculo com a clínica do Supabase sintéticos): entrar, esqueci minha senha,
+  primeiro acesso e recuperação (pelo endereço, pelo fragmento e por conta marcada), conferência
+  da senha enquanto digita, links com erro, de ativação e de código, pareamento do celular no
+  endereço, conta sem clínica, primeiro vínculo define clínica e papel, sair. Os 22 defeitos
+  plantados no código antigo foram pegos. `tests/browser/fixtures.ts` ganhou `syntheticSession()`
+  e a opção de começar sem sessão. `components/auth.tsx` virou a pasta `components/auth/`:
+  `index.tsx` (escolhe a tela e reexporta `useAccess`, então quem importa `./auth`, `../auth` ou
+  `@/components/auth` não muda), `use-auth.ts` (sessão, links do e-mail, vínculo e ações),
+  `password-form.tsx` (definir senha), `sign-in-form.tsx` (entrar) e `access.ts` (contexto de papel
+  e clínica). Das 501 linhas, 491 foram movidas como estavam (1 só ganhou `export` e 139 só
+  mudaram de recuo), 6 foram reescritas (imports e os nomes das ações nos dois formulários) e 4
+  saíram. Conferência extra: o HTML em onze estados saiu idêntico antes e depois.
+  Limite: os testes rodam com `next dev`, que executa duas vezes o efeito de abertura; nesse modo a
+  resposta de erro do link de ativação e do código de acesso é ignorada, então só o caminho de
+  sucesso desses dois links é testado (em produção o aviso de erro aparece).
 
 Anotado para depois, fora desta etapa (mudaria comportamento):
 
@@ -177,6 +193,12 @@ Anotado para depois, fora desta etapa (mudaria comportamento):
   carregamento falha evitaria confundir os dias.
 - Histórico importado: o mesmo acontece ao trocar de página. Se a página nova falha, a tela mostra
   o aviso e "Página 2 de 2", mas continua listando os registros da página anterior.
+- Entrada: se o servidor falha ao sair, a biblioteca do Supabase encerra a sessão no navegador
+  mesmo assim e a tela volta para "Entrar" com o aviso, mas o pareamento de captura guardado na aba
+  (`capture-desktop`, `capture-mobile`) não é apagado, porque a função para antes. Apagar antes
+  de conferir o erro resolveria.
+- Entrada: em "Esqueci minha senha", um envio que falha depois de outro que deu certo mostra as
+  duas mensagens juntas (a de sucesso não é apagada).
 
 ### Etapa 4 — Servidor
 
@@ -213,3 +235,4 @@ Anotado para depois, fora desta etapa (mudaria comportamento):
 - 12/11/2026 — Etapa 3, agenda: 15 testes de navegador novos; `components/agenda.tsx` dividido na pasta `components/agenda/` (tela, lógica do dia, formulário de horário e contas de data).
 - 12/11/2026 — Etapa 3, importações: 12 testes de navegador novos; `components/imports.tsx` dividido na pasta `components/imports/` (painel, lógica do painel, histórico importado e item importado).
 - 12/11/2026 — Etapa 3, diagnósticos: 6 testes de navegador novos; `components/diagnoses.tsx` dividido na pasta `components/diagnoses/` (busca no catálogo CID, sugestões da CID-11, tela e lógica dos diagnósticos do atendimento).
+- 12/11/2026 — Etapa 3, tela de entrada: 18 testes de navegador novos; `components/auth.tsx` dividido na pasta `components/auth/` (tela, lógica, formulários de entrar e de definir senha, contexto de acesso). Etapa 3 concluída.
