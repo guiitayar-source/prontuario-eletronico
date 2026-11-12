@@ -47,7 +47,7 @@ try {
  */
 export const CRL_MAX_ASN1_NODES = 500_000;
 
-export const crlParseCache = new WeakMap<
+const crlParseCache = new WeakMap<
   object,
   { crl: pkijs.CertificateRevocationList } | { error: string }
 >();
