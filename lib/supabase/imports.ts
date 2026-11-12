@@ -1,4 +1,5 @@
 import {
+  assertClinicalRole,
   boundedBody,
   check,
   handle,
@@ -9,11 +10,10 @@ import {
 import { normalizeImport } from '../imports/normalize.ts';
 import { MAX_IMPORT_BYTES } from '../imports/types.ts';
 export const imports = handle(async (request, { db, clinic, role }) => {
-  if (!['owner', 'doctor'].includes(role))
-    throw new HttpError(
-      403,
-      'A importação e o histórico clínico são exclusivos da equipe médica.',
-    );
+  assertClinicalRole(
+    role,
+    'A importação e o histórico clínico são exclusivos da equipe médica.',
+  );
   const url = new URL(request.url);
   if (request.method === 'GET') {
     const patientId = url.searchParams.get('patientId');

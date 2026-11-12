@@ -2,6 +2,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { adminClient } from '../supabase/admin.ts';
 import {
+  assertClinicalRole,
   handle,
   HttpError,
   json,
@@ -65,8 +66,7 @@ export function sncrPreparationConfig(
   return { returnUrl, loginUrl, origin, environment: env };
 }
 export const sncr = handle(async (request, ctx) => {
-  if (!['owner', 'doctor'].includes(ctx.role))
-    throw new HttpError(403, 'Apenas prescritores podem utilizar o SNCR.');
+  assertClinicalRole(ctx.role, 'Apenas prescritores podem utilizar o SNCR.');
   if (request.method === 'GET' && !new URL(request.url).searchParams.has('id')) {
     const configured = configuredSncrEnvironment();
     const environment = configured ?? 'disabled';

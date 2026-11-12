@@ -16,7 +16,15 @@ import {
 import { assertAiQuota, auditAiFileRequest } from './ai-limit.ts';
 import { assertFeature } from './features.ts';
 import { neutralFileName } from '../ai/pseudonymize.ts';
-import { body, check, handle, HttpError, json, writeGuard } from './server.ts';
+import {
+  assertClinicalRole,
+  body,
+  check,
+  handle,
+  HttpError,
+  json,
+  writeGuard,
+} from './server.ts';
 
 type SharpInstance = {
   metadata(): Promise<{ width?: number; height?: number }>;
@@ -307,11 +315,10 @@ function generateDemoExtraction(definitions: ExamDefinition[]) {
 }
 
 export const aiFiles = handle(async (request, { db, clinic, role, user }) => {
-  if (!['owner', 'doctor'].includes(role))
-    throw new HttpError(
-      403,
-      'Leitura por IA disponível somente à equipe médica.',
-    );
+  assertClinicalRole(
+    role,
+    'Leitura por IA disponível somente à equipe médica.',
+  );
   await assertFeature({ db, clinic }, 'ia');
   if (request.method === 'GET') return json({ models: availableExamModels() });
   writeGuard(request, 'X-AI-Action');

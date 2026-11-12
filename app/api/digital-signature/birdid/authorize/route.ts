@@ -1,4 +1,5 @@
 import { handle, HttpError, json } from '@/lib/supabase/server';
+import { isClinicalRole } from '@/lib/roles';
 import { documentSigningService } from '@/lib/signature/document-signing-service';
 import { configuredSignatureProviders } from '@/lib/signature/provider-factory';
 import { isSignatureProviderId } from '@/lib/signature/providers';
@@ -12,7 +13,7 @@ import {
 } from '@/lib/signature/oauth-context';
 export const dynamic = 'force-dynamic';
 export const POST = handle(async (request, ctx) => {
-  if (!['owner', 'doctor'].includes(ctx.role) || !ctx.authSessionId)
+  if (!isClinicalRole(ctx.role) || !ctx.authSessionId)
     throw new HttpError(
       403,
       'Apenas médicos com sessão válida podem autorizar assinaturas.',

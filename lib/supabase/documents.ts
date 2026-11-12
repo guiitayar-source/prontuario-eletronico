@@ -1,4 +1,5 @@
 import {
+  assertClinicalRole,
   handle,
   check,
   json,
@@ -29,11 +30,10 @@ async function jsonBody(request: Request, max: number) {
 const text = (v: unknown, max: number) =>
   typeof v === 'string' && v.length <= max ? v : null;
 export const documents = handle(async (request, { db, clinic, role, user }) => {
-  if (!['owner', 'doctor'].includes(role))
-    throw new HttpError(
-      403,
-      'Documentos clínicos são exclusivos da equipe médica.',
-    );
+  assertClinicalRole(
+    role,
+    'Documentos clínicos são exclusivos da equipe médica.',
+  );
   const u = new URL(request.url),
     pid = u.searchParams.get('patientId');
   const action = u.searchParams.get('action');

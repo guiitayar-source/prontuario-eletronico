@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import * as asn1js from 'asn1js';
 import * as pkijs from 'pkijs';
 import {
+  assertClinicalRole,
   handle,
   HttpError,
   json,
@@ -159,8 +160,10 @@ const pdfResponse = (bytes: Uint8Array, filename: string) =>
   });
 
 export const rce = handle(async (request, ctx) => {
-  if (!['owner', 'doctor'].includes(ctx.role))
-    throw new HttpError(403, 'A receita eletrônica numerada é exclusiva do prescritor.');
+  assertClinicalRole(
+    ctx.role,
+    'A receita eletrônica numerada é exclusiva do prescritor.',
+  );
   const environment = configuredSncrEnvironment();
   const u = new URL(request.url),
     action = u.searchParams.get('action');

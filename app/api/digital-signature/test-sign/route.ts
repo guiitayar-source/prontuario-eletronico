@@ -1,15 +1,18 @@
-import { handle, HttpError, json } from '@/lib/supabase/server';
+import {
+  assertClinicalRole,
+  handle,
+  HttpError,
+  json,
+} from '@/lib/supabase/server';
 import { documentSigningService } from '@/lib/signature/document-signing-service';
 
 export const dynamic = 'force-dynamic';
 
 export const POST = handle(async (request, ctx) => {
-  if (!['owner', 'doctor'].includes(ctx.role)) {
-    throw new HttpError(
-      403,
-      'Apenas médicos têm permissão para assinar documentos.'
-    );
-  }
+  assertClinicalRole(
+    ctx.role,
+    'Apenas médicos têm permissão para assinar documentos.',
+  );
 
   const result = await documentSigningService.signTestDocument({
     clinicId: ctx.clinic,
@@ -20,12 +23,10 @@ export const POST = handle(async (request, ctx) => {
 });
 
 export const GET = handle(async (request, ctx) => {
-  if (!['owner', 'doctor'].includes(ctx.role)) {
-    throw new HttpError(
-      403,
-      'Apenas médicos têm acesso aos testes de assinatura.'
-    );
-  }
+  assertClinicalRole(
+    ctx.role,
+    'Apenas médicos têm acesso aos testes de assinatura.',
+  );
 
   const url = new URL(request.url);
   const path = url.searchParams.get('path');

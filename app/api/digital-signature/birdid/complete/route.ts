@@ -1,4 +1,5 @@
 import { context, HttpError, json, body } from '@/lib/supabase/server';
+import { isClinicalRole } from '@/lib/roles';
 import { documentSigningService } from '@/lib/signature/document-signing-service';
 import {
   oauthGuard,
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
     );
     oauthGuard(request, envelope.redirectUri);
     const ctx = await context(request);
-    if (!['owner', 'doctor'].includes(ctx.role) || !ctx.authSessionId)
+    if (!isClinicalRole(ctx.role) || !ctx.authSessionId)
       throw new HttpError(403, 'Sessão médica válida obrigatória.');
     await documentSigningService.handleOAuthCallback({
       db: ctx.db,

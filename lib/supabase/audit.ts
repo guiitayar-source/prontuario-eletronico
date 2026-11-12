@@ -1,4 +1,10 @@
-import { check, handle, HttpError, json } from './server.ts';
+import {
+  assertClinicalRole,
+  check,
+  handle,
+  HttpError,
+  json,
+} from './server.ts';
 
 export function auditFilters(params: URLSearchParams) {
   const read = (key: string, max: number) => {
@@ -54,8 +60,7 @@ export function auditFilters(params: URLSearchParams) {
 }
 
 export const audit = handle(async (request, ctx) => {
-  if (!['owner', 'doctor'].includes(ctx.role))
-    throw new HttpError(403, 'Auditoria restrita a médicos.');
+  assertClinicalRole(ctx.role, 'Auditoria restrita a médicos.');
   const result = await ctx.db.rpc('audit_search', {
     c: ctx.clinic,
     ...auditFilters(new URL(request.url).searchParams),
