@@ -20,7 +20,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | --- | --- | --- | --- |
 | A. Rede de proteção | 0 | Tirar `.wrangler/` do repositório | feito (11/11/2026) |
 | A. Rede de proteção | 1 | Testes sem banco rodando no `npm test` e no CI | feito (11/11/2026) |
-| B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | em andamento (pedaços 1 a 4 feitos; pedaço 5: LCR e OCSP feitas, falta certificado) |
+| B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | feito (12/11/2026) |
 | C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | a fazer |
 | D. Servidor | 4 | Checagem de papel clínico num auxiliar único | a fazer |
 | E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
@@ -50,7 +50,7 @@ Continuam manuais, porque exigem Supabase local (`npx supabase start`) ou build:
 `invite-flow.mjs`, `document-ai.mjs`, `readiness.mjs`, `anamnesator-native-db.mjs`,
 `sncr-rce-build.test.mjs` (`npm run test:sncr:build`).
 
-### Etapa 2 — Dividir `lib/signature/revocation-validator.ts`
+### Etapa 2 — Dividir `lib/signature/revocation-validator.ts` (feito)
 
 3.107 linhas; funções de 705 (`evaluateOcspForCertificate`), 495
 (`evaluateSingleCertificateRevocation`) e 423 linhas (`evaluateCrlForCertificate`). É o trecho que
@@ -79,7 +79,21 @@ decide se uma assinatura é bloqueada, então vai em pedaços:
      e sete passos: `parseBasicOcspResponse`, `checkOcspEnvelope`, `findOcspSingleResponse`,
      `findVerifiedOcspResponder`, `checkOcspResponderAuthorization`,
      `checkOcspSingleResponseDates` e `ocspStatusForCertificate`.
-   - A fazer: `evaluateSingleCertificateRevocation` (`revocation-certificate.ts`).
+   - **Feito (12/11/2026):** `evaluateSingleCertificateRevocation` (490 linhas) virou um roteiro de
+     110 linhas e oito passos: `collectEvidenceEvaluations`, `sortAndGroupEvaluations`,
+     `summaryWithoutValidEvidence`, `splitByDeclaredStatus`, `makePoeProvesBefore`,
+     `summaryForRevokedCertificate`, `summaryForCertificateOnHold` e `summaryForGoodOrUnknown`.
+     Antes da divisão entrou `tests/pades-revocation-hold.test.mjs`: a decisão para certificado
+     suspenso (certificateHold) e para LCRs que discordam entre si não tinha teste nenhum
+     (`npm test` foi de 340 para 344 testes).
+
+Anotado para depois, fora desta etapa:
+
+- `ocspResponderStatusFromCrls` (confere por LCR se o certificado de um respondedor OCSP delegado
+  foi revogado) segue sem teste.
+- No CI o teste "posições dos campos de A e B batem com os rótulos dos modelos oficiais" é sempre
+  pulado, porque a máquina do GitHub não tem `pdftotext`. Instalar `poppler-utils` no fluxo
+  `verificacao.yml` faria esse teste rodar lá também.
 
 Quem importa de `revocation-validator.ts` não muda: ele reexporta os nomes públicos que saíram.
 
@@ -131,3 +145,5 @@ cobrem daquela tela e completar se faltar.
 - 11/11/2026 — Etapa 2, pedaço 4: decisão sobre um certificado sai do validador, que passa a ter um mapa dos arquivos no topo.
 - 11/11/2026 — Etapa 2, pedaço 5 (LCR): `evaluateCrlForCertificate` dividida em quatro passos nomeados, sem alterar linhas de lógica.
 - 12/11/2026 — Etapa 2, pedaço 5 (OCSP): `evaluateOcspForCertificate` dividida em sete passos nomeados, sem alterar linhas de lógica.
+- 12/11/2026 — Teste de assinatura que falhava por acaso (exigia que o base64 da assinatura não tivesse as letras "PDF") passa a conferir os bytes.
+- 12/11/2026 — Etapa 2, pedaço 5 (certificado): teste novo para suspensão e evidências contraditórias; `evaluateSingleCertificateRevocation` dividida em passos nomeados, sem alterar linhas de lógica. Etapa 2 concluída.

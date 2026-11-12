@@ -15,9 +15,47 @@ import {
   requiresConservativeRevocationTime,
 } from './revocation-evaluation.ts';
 
+type CertificateRevocationResult = {
+  summary: CertificateRevocationCheckSummary;
+  rejectedCount: number;
+};
+
+/** Identificação do certificado avaliado, repetida em todo resultado. */
+type SummaryBase = Pick<
+  CertificateRevocationCheckSummary,
+  'subject' | 'issuer' | 'serialNumber' | 'role'
+>;
+
+/** As avaliações já ordenadas e separadas pelo que cada uma conseguiu provar. */
+type EvidenceGroups = {
+  validEvaluations: SingleEvidenceEvaluation[];
+  notFreshEvaluations: SingleEvidenceEvaluation[];
+  invalidEvaluations: SingleEvidenceEvaluation[];
+  scopeIncompatibleEvaluations: SingleEvidenceEvaluation[];
+  unavailableEvaluations: SingleEvidenceEvaluation[];
+  certIdMismatch: SingleEvidenceEvaluation | undefined;
+  unavailableSubIndication:
+    | 'TSA_REVOCATION_UNAVAILABLE'
+    | 'REVOCATION_UNAVAILABLE';
+  source: CertificateRevocationCheckSummary['source'];
+};
+
+/** As evidências válidas separadas pelo estado que declaram, e se elas se contradizem. */
+type EvidenceByStatus = {
+  goodEvals: SingleEvidenceEvaluation[];
+  revokedEvals: SingleEvidenceEvaluation[];
+  holdEvals: SingleEvidenceEvaluation[];
+  unknownEvals: SingleEvidenceEvaluation[];
+  hasContradictoryEvidence: boolean;
+};
+
 /**
  * Evaluates revocation status for a single certificate (`targetNode`, issued by `issuerNode`)
  * across all provided CRLs and OCSP responses, applying ETSI EN 319 102-1 temporal POE semantics.
+ *
+ * Os passos, na ordem: avaliar cada LCR e cada resposta OCSP; ordenar e separar as avaliações
+ * pelo que cada uma provou; se nenhuma evidência serve, dizer por quê; senão, separar pelo
+ * estado declarado e decidir nesta prioridade: revogado, suspenso, desconhecido, bom.
  */
 export async function evaluateSingleCertificateRevocation(params: {
   targetNode: ParsedX509Node;
@@ -68,6 +106,89 @@ export async function evaluateSingleCertificateRevocation(params: {
     role,
   };
 
+  const evaluations = await collectEvidenceEvaluations({
+    targetNode,
+    issuerNode,
+    rawCrls,
+    rawOcspResponses,
+    extraResponderCerts,
+    referenceTime,
+    verificationTime,
+    freshness,
+  });
+  const groups = sortAndGroupEvaluations(evaluations, isTsaRole);
+
+  const withoutEvidence = summaryWithoutValidEvidence({
+    base,
+    targetNode,
+    groups,
+  });
+  if (withoutEvidence) return withoutEvidence;
+
+  const byStatus = splitByDeclaredStatus({ groups, targetNode });
+  const poeProvesBefore = makePoeProvesBefore({
+    freshness,
+    hasTrustedCompletePoe,
+    poeTime,
+  });
+
+  const revoked = summaryForRevokedCertificate({
+    base,
+    targetNode,
+    role,
+    isCaRole,
+    isTsaRole,
+    groups,
+    byStatus,
+    poeProvesBefore,
+    poeTime,
+    validationContext,
+    referenceTime,
+    verificationTime,
+  });
+  if (revoked) return revoked;
+
+  const onHold = summaryForCertificateOnHold({
+    base,
+    targetNode,
+    isTsaRole,
+    groups,
+    byStatus,
+    poeProvesBefore,
+  });
+  if (onHold) return onHold;
+
+  return summaryForGoodOrUnknown({
+    base,
+    targetNode,
+    groups,
+    byStatus,
+    freshness,
+  });
+}
+
+/** Avalia cada LCR e cada resposta OCSP fornecida contra o certificado, uma por uma. */
+async function collectEvidenceEvaluations(params: {
+  targetNode: ParsedX509Node;
+  issuerNode: ParsedX509Node;
+  rawCrls: Array<Buffer | Uint8Array | string>;
+  rawOcspResponses: Array<Buffer | Uint8Array | string>;
+  extraResponderCerts: unknown[];
+  referenceTime: Date;
+  verificationTime: Date;
+  freshness: RevocationFreshnessContext;
+}): Promise<SingleEvidenceEvaluation[]> {
+  const {
+    targetNode,
+    issuerNode,
+    rawCrls,
+    rawOcspResponses,
+    extraResponderCerts,
+    referenceTime,
+    verificationTime,
+    freshness,
+  } = params;
+
   const evaluations: SingleEvidenceEvaluation[] = [];
   for (const rawCrl of rawCrls) {
     evaluations.push(
@@ -95,7 +216,17 @@ export async function evaluateSingleCertificateRevocation(params: {
       }),
     );
   }
+  return evaluations;
+}
 
+/**
+ * Ordena as avaliações e as separa pelo que cada uma conseguiu provar. Também diz de onde
+ * veio a evidência válida (LCR, OCSP ou as duas).
+ */
+function sortAndGroupEvaluations(
+  evaluations: SingleEvidenceEvaluation[],
+  isTsaRole: boolean,
+): EvidenceGroups {
   // 6F.2C-R: a ordem de apresentação das evidências nunca influencia o resultado nem a mensagem.
   evaluations.sort(compareEvaluations);
   const byKind = (kind: SingleEvidenceEvaluation['matchKind']) =>
@@ -124,6 +255,40 @@ export async function evaluateSingleCertificateRevocation(params: {
         : usedOcsp
           ? 'OCSP'
           : 'NONE';
+
+  return {
+    validEvaluations,
+    notFreshEvaluations,
+    invalidEvaluations,
+    scopeIncompatibleEvaluations,
+    unavailableEvaluations,
+    certIdMismatch,
+    unavailableSubIndication,
+    source,
+  };
+}
+
+/**
+ * Sem nenhuma evidência autêntica, aplicável e suficiente, explica o motivo nesta prioridade:
+ * evidência inválida, evidência velha demais, LCR de escopo incompatível, evidência
+ * indisponível, OCSP sobre outro certificado ou simplesmente ausente. Devolve `null` quando há
+ * evidência válida e a decisão segue para os próximos passos.
+ */
+function summaryWithoutValidEvidence(params: {
+  base: SummaryBase;
+  targetNode: ParsedX509Node;
+  groups: EvidenceGroups;
+}): CertificateRevocationResult | null {
+  const { base, targetNode } = params;
+  const {
+    validEvaluations,
+    invalidEvaluations,
+    notFreshEvaluations,
+    scopeIncompatibleEvaluations,
+    unavailableEvaluations,
+    certIdMismatch,
+    unavailableSubIndication,
+  } = params.groups;
 
   // No authentic, applicable and sufficient evidence for this certificate:
   if (validEvaluations.length === 0) {
@@ -223,6 +388,19 @@ export async function evaluateSingleCertificateRevocation(params: {
       rejectedCount: 0,
     };
   }
+  return null;
+}
+
+/**
+ * Separa as evidências válidas pelo estado que declaram (bom, revogado, suspenso, desconhecido)
+ * e verifica se elas se contradizem.
+ */
+function splitByDeclaredStatus(params: {
+  groups: EvidenceGroups;
+  targetNode: ParsedX509Node;
+}): EvidenceByStatus {
+  const { targetNode } = params;
+  const { validEvaluations, notFreshEvaluations } = params.groups;
 
   const goodEvals = validEvaluations.filter((e) => e.certStatus === 'GOOD');
   const revokedEvals = validEvaluations.filter(
@@ -265,11 +443,66 @@ export async function evaluateSingleCertificateRevocation(params: {
     }
   }
 
+  return {
+    goodEvals,
+    revokedEvals,
+    holdEvals,
+    unknownEvals,
+    hasContradictoryEvidence,
+  };
+}
+
+/**
+ * Monta a pergunta "a prova de existência (POE) confiável mostra que a assinatura já existia
+ * antes do instante `t`?", com a margem de tolerância da política de frescor.
+ */
+function makePoeProvesBefore(params: {
+  freshness: RevocationFreshnessContext;
+  hasTrustedCompletePoe: boolean;
+  poeTime: Date | undefined;
+}): (t: Date) => boolean {
+  const { freshness, hasTrustedCompletePoe, poeTime } = params;
   const graceMs = freshness.gracePeriodMs;
   const poeProvesBefore = (t: Date): boolean =>
     hasTrustedCompletePoe &&
     poeTime !== undefined &&
     poeTime.getTime() + graceMs < t.getTime();
+  return poeProvesBefore;
+}
+
+/**
+ * Certificado revogado em definitivo: decide se a revogação atinge a assinatura, se a POE prova
+ * que a assinatura é anterior à revogação ou se a ordem dos fatos não fica provada. Devolve
+ * `null` quando não há evidência de revogação.
+ */
+function summaryForRevokedCertificate(params: {
+  base: SummaryBase;
+  targetNode: ParsedX509Node;
+  role: CertificateRevocationCheckSummary['role'];
+  isCaRole: boolean;
+  isTsaRole: boolean;
+  groups: EvidenceGroups;
+  byStatus: EvidenceByStatus;
+  poeProvesBefore: (t: Date) => boolean;
+  poeTime: Date | undefined;
+  validationContext: 'VERIFICATION' | 'LIVE_ISSUANCE';
+  referenceTime: Date;
+  verificationTime: Date;
+}): CertificateRevocationResult | null {
+  const {
+    base,
+    targetNode,
+    role,
+    isCaRole,
+    isTsaRole,
+    poeProvesBefore,
+    poeTime,
+    validationContext,
+    referenceTime,
+    verificationTime,
+  } = params;
+  const { source, invalidEvaluations } = params.groups;
+  const { revokedEvals, hasContradictoryEvidence } = params.byStatus;
 
   // Priority 1: Permanent revocation (`REVOKED`)
   if (revokedEvals.length > 0) {
@@ -413,6 +646,24 @@ export async function evaluateSingleCertificateRevocation(params: {
       rejectedCount: invalidEvaluations.length,
     };
   }
+  return null;
+}
+
+/**
+ * Certificado suspenso (certificateHold): sem POE anterior à suspensão, o resultado fica
+ * indeterminado. Devolve `null` quando não há evidência de suspensão.
+ */
+function summaryForCertificateOnHold(params: {
+  base: SummaryBase;
+  targetNode: ParsedX509Node;
+  isTsaRole: boolean;
+  groups: EvidenceGroups;
+  byStatus: EvidenceByStatus;
+  poeProvesBefore: (t: Date) => boolean;
+}): CertificateRevocationResult | null {
+  const { base, targetNode, isTsaRole, poeProvesBefore } = params;
+  const { source, invalidEvaluations } = params.groups;
+  const { holdEvals, hasContradictoryEvidence } = params.byStatus;
 
   // Priority 2: Certificate Suspension (`CERTIFICATE_HOLD`, reasonCode === 6)
   if (holdEvals.length > 0) {
@@ -472,6 +723,23 @@ export async function evaluateSingleCertificateRevocation(params: {
       rejectedCount: invalidEvaluations.length,
     };
   }
+  return null;
+}
+
+/**
+ * Sem revogação nem suspensão: se nenhuma evidência diz "bom", o estado é desconhecido; senão
+ * vale a evidência "bom" mais recente.
+ */
+function summaryForGoodOrUnknown(params: {
+  base: SummaryBase;
+  targetNode: ParsedX509Node;
+  groups: EvidenceGroups;
+  byStatus: EvidenceByStatus;
+  freshness: RevocationFreshnessContext;
+}): CertificateRevocationResult {
+  const { base, targetNode, freshness } = params;
+  const { source, invalidEvaluations } = params.groups;
+  const { goodEvals, unknownEvals } = params.byStatus;
 
   // Priority 3: Only UNKNOWN evaluations (and no GOOD evaluation)
   if (goodEvals.length === 0) {
