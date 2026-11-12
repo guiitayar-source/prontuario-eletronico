@@ -20,7 +20,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | --- | --- | --- | --- |
 | A. Rede de proteção | 0 | Tirar `.wrangler/` do repositório | feito (11/11/2026) |
 | A. Rede de proteção | 1 | Testes sem banco rodando no `npm test` e no CI | feito (11/11/2026) |
-| B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | em andamento (pedaços 1 a 3 de 5 feitos) |
+| B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | em andamento (pedaços 1 a 4 de 5 feitos) |
 | C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | a fazer |
 | D. Servidor | 4 | Checagem de papel clínico num auxiliar único | a fazer |
 | E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
@@ -66,7 +66,9 @@ decide se uma assinatura é bloqueada, então vai em pedaços:
    (`evaluateOcspForCertificate` e auxiliares). As duas regras sobre o instante da revogação
    foram para `revocation-evaluation.ts`, porque LCR, OCSP e o validador as usam. O validador
    caiu para 1.144 linhas.
-4. Extrair cadeia da TSA; `revocation-validator.ts` fica só orquestrando e reexportando.
+4. **Feito (11/11/2026).** Decisão sobre um certificado em `revocation-certificate.ts`
+   (`evaluateSingleCertificateRevocation`). `revocation-validator.ts` fica com 622 linhas: só as
+   avaliações de cadeia (carimbo de tempo e documento), os reexports e um mapa dos arquivos no topo.
 5. Quebrar as três funções longas em passos nomeados.
 
 Quem importa de `revocation-validator.ts` não muda: ele reexporta os nomes públicos que saíram.
@@ -116,3 +118,4 @@ cobrem daquela tela e completar se faltar.
 - 11/11/2026 — Etapa 2, pedaço 1: constantes, leitura ASN.1 e frescor saem do validador de revogação (código movido sem alteração).
 - 11/11/2026 — Etapa 2, pedaço 2: validação de LCR e o tipo de resultado saem do validador (código movido sem alteração).
 - 11/11/2026 — Etapa 2, pedaço 3: validação de OCSP sai do validador (código movido sem alteração).
+- 11/11/2026 — Etapa 2, pedaço 4: decisão sobre um certificado sai do validador, que passa a ter um mapa dos arquivos no topo.

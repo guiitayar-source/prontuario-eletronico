@@ -44,6 +44,8 @@ Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abe
     em `mfa.tsx`).
 - `lib/cid/` — catálogos CID-10/CID-11 e o bloco de diagnósticos da evolução.
 - `lib/signature/` — assinatura ICP-Brasil (Bird ID); ver `ARQUITETURA_ASSINATURAS.md`.
+  A validação de revogação (LCR/OCSP) é dividida por assunto em `revocation-*.ts`; o mapa está no
+  topo de `revocation-validator.ts`, que é o ponto de entrada.
 - `app/globals.css` só importa `app/styles/*.css`, **na ordem da cascata** (a ordem importa).
   `styles/tokens.css` tem os tokens do tema "Vidro Noturno" (`:root`, `[data-theme]`); os demais
   arquivos são por tela. Use as variáveis (`--text`, `--surface`, `--border`, `--accent`…), não
