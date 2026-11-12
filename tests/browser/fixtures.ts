@@ -15,7 +15,9 @@ const patient = {
   updated_at: 0,
   draft_key: 'synthetic',
 };
-export async function setup(page: Page, role = 'owner') {
+// Sessão sintética: o app se comporta como se a pessoa já tivesse entrado. Tudo o que iria para
+// o Supabase (auth, vínculo com a clínica, Storage) é respondido aqui, sem rede de verdade.
+export async function signIn(page: Page, role = 'owner') {
   const user = {
     id: uid,
     aud: 'authenticated',
@@ -58,6 +60,9 @@ export async function setup(page: Page, role = 'owner') {
             : [];
     await route.fulfill({ json: data });
   });
+}
+export async function setup(page: Page, role = 'owner') {
+  await signIn(page, role);
   const state = {
     clinicalRequests: [] as string[],
     medicationState: {
