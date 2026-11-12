@@ -36,10 +36,6 @@ try {
 }
 
 /**
- * Validates a single CRL (RFC 5280) against a target certificate (`targetNode`) and its verified
- * issuer CA (`issuerNode`) at `referenceTime` / `verificationTime`.
- */
-/**
  * Limite de elementos ASN.1 ao analisar uma LCR (6F.2D). O padrão do asn1js (10 000) recusa LCRs
  * reais: a da AC Soluti Múltipla v5 (919 KB, 34 mil revogados) tem cerca de 102 mil elementos e
  * ocupa ~146 MB de heap durante a análise. 500 mil cobre LCRs de até ~4 MB e limita a memória
@@ -91,6 +87,14 @@ export function parseCrlDer(
   return result;
 }
 
+/**
+ * Validates a single CRL (RFC 5280) against a target certificate (`targetNode`) and its verified
+ * issuer CA (`issuerNode`) at `referenceTime` / `verificationTime`.
+ *
+ * Os passos, na ordem: ler a LCR; conferir que ela veio da AC do certificado e está assinada
+ * por ela; conferir que é uma LCR completa que cobre o certificado; conferir as datas; e só
+ * então procurar o certificado na lista. O primeiro passo que falha encerra a avaliação.
+ */
 export async function evaluateCrlForCertificate(params: {
   rawCrl: Buffer | Uint8Array | string;
   targetNode: ParsedX509Node;
@@ -134,7 +138,35 @@ export async function evaluateCrlForCertificate(params: {
     };
   }
   const crl = parsed.crl;
+  const issuerProblem = await checkCrlIssuerAndSignature(crl, targetNode, issuerNode);
+  if (issuerProblem) return issuerProblem;
 
+  const scopeProblem = checkCrlScope(crl, targetNode);
+  if (scopeProblem) return scopeProblem;
+
+  const dates = checkCrlDates(crl, issuerNode, verificationTime);
+  if ('source' in dates) return dates;
+
+  return crlStatusForCertificate({
+    crl,
+    targetNode,
+    referenceTime,
+    verificationTime,
+    freshness,
+    thisUpdate: dates.thisUpdate,
+    nextUpdate: dates.nextUpdate,
+  });
+}
+
+/**
+ * A LCR veio mesmo da AC que emitiu o certificado? Confere emissor, algoritmo, autorização da AC
+ * para assinar LCRs e a assinatura criptográfica. Devolve o motivo da recusa, ou `null` se passou.
+ */
+async function checkCrlIssuerAndSignature(
+  crl: pkijs.CertificateRevocationList,
+  targetNode: ParsedX509Node,
+  issuerNode: ParsedX509Node,
+): Promise<SingleEvidenceEvaluation | null> {
   // Check if CRL issuer DN matches target certificate's issuer CA DN
   const issuerMatches =
     crl.issuer.isEqual(issuerNode.pkiCert.subject) &&
@@ -235,6 +267,20 @@ export async function evaluateCrlForCertificate(params: {
       error: `Assinatura criptográfica da CRL inválida perante a chave pública da AC "${issuerNode.commonName}".`,
     };
   }
+
+  return null;
+}
+
+/**
+ * A LCR serve como prova para este certificado? Só vale LCR completa e direta: recusa extensão
+ * crítica desconhecida, LCR delta, indireta ou particionada que não cubra o certificado.
+ * Devolve o motivo da recusa, ou `null` se passou.
+ */
+function checkCrlScope(
+  crl: pkijs.CertificateRevocationList,
+  targetNode: ParsedX509Node,
+): SingleEvidenceEvaluation | null {
+  const crlExtensions = crl.crlExtensions?.extensions || [];
 
   // Check CRL version & extensions (RFC 5280 §5.2)
   for (const ext of crlExtensions) {
@@ -361,6 +407,18 @@ export async function evaluateCrlForCertificate(params: {
     };
   }
 
+  return null;
+}
+
+/**
+ * As datas da LCR fazem sentido? thisUpdate/nextUpdate válidos, emissão dentro da vigência da AC
+ * e não posterior ao instante da verificação. Devolve as duas datas, ou o motivo da recusa.
+ */
+function checkCrlDates(
+  crl: pkijs.CertificateRevocationList,
+  issuerNode: ParsedX509Node,
+  verificationTime: Date,
+): SingleEvidenceEvaluation | { thisUpdate: Date; nextUpdate: Date } {
   // Validate thisUpdate and nextUpdate
   const thisUpdate = crl.thisUpdate?.value;
   const nextUpdate = crl.nextUpdate?.value;
@@ -399,6 +457,32 @@ export async function evaluateCrlForCertificate(params: {
       error: `O campo thisUpdate da CRL (${thisUpdate.toISOString()}) é posterior ao instante de verificação (${verificationTime.toISOString()}).`,
     };
   }
+
+  return { thisUpdate, nextUpdate };
+}
+
+/**
+ * Com a LCR já aceita: o certificado está na lista? Se não está, a LCR só prova "não revogado"
+ * quando tem frescor suficiente; se está, devolve quando e por que foi revogado (ou suspenso).
+ */
+function crlStatusForCertificate(params: {
+  crl: pkijs.CertificateRevocationList;
+  targetNode: ParsedX509Node;
+  referenceTime: Date;
+  verificationTime: Date;
+  freshness: RevocationFreshnessContext;
+  thisUpdate: Date;
+  nextUpdate: Date;
+}): SingleEvidenceEvaluation {
+  const {
+    crl,
+    targetNode,
+    referenceTime,
+    verificationTime,
+    freshness,
+    thisUpdate,
+    nextUpdate,
+  } = params;
 
   // Search for targetNode.serialNumber in crl.revokedCertificates
   const revokedEntries = crl.revokedCertificates || [];
