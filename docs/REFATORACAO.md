@@ -21,7 +21,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | A. Rede de proteção | 0 | Tirar `.wrangler/` do repositório | feito (11/11/2026) |
 | A. Rede de proteção | 1 | Testes sem banco rodando no `npm test` e no CI | feito (11/11/2026) |
 | B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | feito (12/11/2026) |
-| C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | em andamento (celular e agenda feitas; faltam importações, diagnósticos e entrada) |
+| C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | em andamento (celular, agenda e importações feitas; faltam diagnósticos e entrada) |
 | D. Servidor | 4 | Checagem de papel clínico num auxiliar único | a fazer |
 | E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
 
@@ -109,7 +109,7 @@ Padrão do `CLAUDE.md`: pasta com `index.tsx` e a lógica num hook `use-*.ts`.
 | --- | --- | --- |
 | `app/celular/page.tsx` | 947 | feito (12/11/2026) |
 | `components/agenda.tsx` | 670 | feito (12/11/2026) |
-| `components/imports.tsx` | 648 | a fazer |
+| `components/imports.tsx` | 648 | feito (12/11/2026) |
 | `components/diagnoses.tsx` | 603 | a fazer |
 | `components/auth.tsx` | 501 | a fazer |
 
@@ -140,12 +140,26 @@ sobre o código antigo; depois a divisão.
   formulário (agora `AppointmentFormProps`) e quatro manipuladores que estavam dentro do JSX e
   viraram funções: `typePatient`, `pickOnlyMatch` e `pickPatient` no formulário e `reload` na agenda.
   Conferência extra: o HTML da agenda em sete estados saiu idêntico antes e depois.
+- **Importações (feito).** Sem teste antes; entrou `tests/browser/imports.spec.ts` (12 testes: painel
+  de importação em Pacientes → Importar e exportar e o histórico importado no prontuário). Dos 14
+  defeitos plantados no código antigo (destino padrão, vínculo anterior, nome ou CPF repetido,
+  conflito, confirmação refeita ao mudar destino, mensagens dos lotes, limite de 2 MB, confirmação
+  ao desfazer, trava da navegação, páginas do histórico, entre outros), os 14 foram pegos.
+  `components/imports.tsx` virou a pasta `components/imports/`: `index.ts` (reexporta, então quem
+  importa `../imports` não muda), `import-panel.tsx` (tela) e `use-import-panel.ts` (lógica) do
+  painel, `imported-history.tsx` (aba do prontuário) e `entry.tsx` (item importado e formato de
+  data, usados pelos dois). Das 648 linhas, 639 foram movidas como estavam (2 só ganharam `export`
+  e 5 só mudaram de recuo), 5 foram reescritas e 4 saíram. Dois manipuladores que estavam no JSX
+  viraram funções do hook: `chooseFiles` e `chooseDestination`.
+  Conferência extra: o HTML das telas em oito estados saiu idêntico antes e depois.
 
 Anotado para depois, fora desta etapa (mudaria comportamento):
 
 - Agenda: se carregar um dia falha, a tela mostra o aviso de erro, mas continua listando os
   horários do dia que estava aberto antes, sob o título do dia novo. Limpar a lista quando o
   carregamento falha evitaria confundir os dias.
+- Histórico importado: o mesmo acontece ao trocar de página. Se a página nova falha, a tela mostra
+  o aviso e "Página 2 de 2", mas continua listando os registros da página anterior.
 
 ### Etapa 4 — Servidor
 
@@ -180,3 +194,4 @@ Anotado para depois, fora desta etapa (mudaria comportamento):
 - 12/11/2026 — Etapa 2, pedaço 5 (certificado): teste novo para suspensão e evidências contraditórias; `evaluateSingleCertificateRevocation` dividida em passos nomeados, sem alterar linhas de lógica. Etapa 2 concluída.
 - 12/11/2026 — Etapa 3, tela do celular: 12 testes de navegador novos; `app/celular/page.tsx` dividido em hook, tela e editor de tarja dentro de `components/capture/`.
 - 12/11/2026 — Etapa 3, agenda: 15 testes de navegador novos; `components/agenda.tsx` dividido na pasta `components/agenda/` (tela, lógica do dia, formulário de horário e contas de data).
+- 12/11/2026 — Etapa 3, importações: 12 testes de navegador novos; `components/imports.tsx` dividido na pasta `components/imports/` (painel, lógica do painel, histórico importado e item importado).

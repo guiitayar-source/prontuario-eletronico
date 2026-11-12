@@ -46,6 +46,8 @@ Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abe
   - `agenda/` — agenda do dia: `index.tsx` (tela), `use-agenda.ts` (lógica), `appointment-form.tsx`
     e `use-appointment-form.ts` (formulário de horário), `appointment.ts` (tipo e contas de data e
     duração).
+  - `imports/` — importação de outro sistema: `import-panel.tsx` (tela) e `use-import-panel.ts`
+    (lógica), `imported-history.tsx` (aba do prontuário), `entry.tsx` (item importado).
   - `dialog-frame.tsx` — moldura padrão de diálogo (fundo, foco preso, fechar); `modal.tsx` usa
     `<dialog>` nativo. `topbar.tsx` tem a busca global (desenhada por portal na barra da conta,
     em `mfa.tsx`).
