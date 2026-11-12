@@ -17,6 +17,8 @@ Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abe
 - Testes: `npm test` roda todos os que não precisam de banco (é o que o CI roda; teste novo sem
   banco entra na lista do `package.json`). Um só: `node tests/<arquivo>`. Os demais
   (`*-db.mjs`, `document-ai.mjs`, `supabase-flow.mjs`…) exigem Supabase local (`npx supabase start`).
+  `npm run test:browser` roda as telas num navegador com dados sintéticos (`tests/browser/`; o CI
+  também roda).
 - Refatoração em andamento: etapas, regras e estado em `docs/REFATORACAO.md`.
 - Migrações: `npx supabase migration list` e `npx supabase db push` aplicam no projeto remoto
   vinculado (produção). Rode `--dry-run` primeiro e só aplique com o aval do titular.
@@ -39,6 +41,8 @@ Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abe
   - `documents/` — `use-documents.ts`, `use-document-ai.ts`, `editor`, `ai-box`, `history`,
     `templates` (modelos do profissional por tipo de documento; receita e demais documentos).
   - `capture/` — anexos: `use-attachments.ts` (lógica), `desktop.tsx` (tela), `client.ts` (API).
+    Tela do celular (rota `/celular`): `use-mobile-capture.ts` (lógica), `mobile.tsx` (tela),
+    `redact-modal.tsx` (tarja sobre a foto).
   - `dialog-frame.tsx` — moldura padrão de diálogo (fundo, foco preso, fechar); `modal.tsx` usa
     `<dialog>` nativo. `topbar.tsx` tem a busca global (desenhada por portal na barra da conta,
     em `mfa.tsx`).

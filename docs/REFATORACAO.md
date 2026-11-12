@@ -21,7 +21,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | A. Rede de proteção | 0 | Tirar `.wrangler/` do repositório | feito (11/11/2026) |
 | A. Rede de proteção | 1 | Testes sem banco rodando no `npm test` e no CI | feito (11/11/2026) |
 | B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | feito (12/11/2026) |
-| C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | a fazer |
+| C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | em andamento (tela do celular feita; faltam agenda, importações, diagnósticos e entrada) |
 | D. Servidor | 4 | Checagem de papel clínico num auxiliar único | a fazer |
 | E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
 
@@ -105,16 +105,27 @@ Outros arquivos grandes de assinatura (`rfc3161-timestamp`, `pdf-structure-valid
 
 Padrão do `CLAUDE.md`: pasta com `index.tsx` e a lógica num hook `use-*.ts`.
 
-| Arquivo | Linhas |
-| --- | --- |
-| `app/celular/page.tsx` | 947 |
-| `components/agenda.tsx` | 670 |
-| `components/imports.tsx` | 648 |
-| `components/diagnoses.tsx` | 603 |
-| `components/auth.tsx` | 501 |
+| Arquivo | Linhas | Estado |
+| --- | --- | --- |
+| `app/celular/page.tsx` | 947 | feito (12/11/2026) |
+| `components/agenda.tsx` | 670 | a fazer |
+| `components/imports.tsx` | 648 | a fazer |
+| `components/diagnoses.tsx` | 603 | a fazer |
+| `components/auth.tsx` | 501 | a fazer |
 
 Uma tela por PR. Antes de mexer, conferir o que os testes de navegador (`npm run test:browser`)
-cobrem daquela tela e completar se faltar.
+cobrem daquela tela e completar se faltar. O PR tem dois commits: primeiro os testes, que passam
+sobre o código antigo; depois a divisão.
+
+- **Tela do celular (feito).** Não tinha teste nenhum; entrou `tests/browser/mobile-capture.spec.ts`
+  (12 testes, API de captura e Storage sintéticos). A tela foi para `components/capture/`, junto
+  da tela de anexos do computador: `use-mobile-capture.ts` (lógica), `mobile.tsx` (tela) e
+  `redact-modal.tsx` (editor de tarja). `app/celular/page.tsx` ficou só com a rota. Das 947 linhas,
+  893 foram movidas como estavam (14 delas só com outro recuo). Mudaram os imports, cinco linhas
+  de declaração (`export`, o tipo `Page` virou `MobilePage`, as referências aos campos de arquivo
+  ficaram na tela) e quatro manipuladores que estavam dentro do JSX e viraram três funções do
+  hook: `reconnect`, `renamePage` e `applyRedaction`.
+  Conferência extra: o HTML da tela em três estados saiu idêntico antes e depois.
 
 ### Etapa 4 — Servidor
 
@@ -147,3 +158,4 @@ cobrem daquela tela e completar se faltar.
 - 12/11/2026 — Etapa 2, pedaço 5 (OCSP): `evaluateOcspForCertificate` dividida em sete passos nomeados, sem alterar linhas de lógica.
 - 12/11/2026 — Teste de assinatura que falhava por acaso (exigia que o base64 da assinatura não tivesse as letras "PDF") passa a conferir os bytes.
 - 12/11/2026 — Etapa 2, pedaço 5 (certificado): teste novo para suspensão e evidências contraditórias; `evaluateSingleCertificateRevocation` dividida em passos nomeados, sem alterar linhas de lógica. Etapa 2 concluída.
+- 12/11/2026 — Etapa 3, tela do celular: 12 testes de navegador novos; `app/celular/page.tsx` dividido em hook, tela e editor de tarja dentro de `components/capture/`.
