@@ -1,4 +1,5 @@
 import {
+  assertClinicalRole,
   handle,
   HttpError,
   json,
@@ -12,12 +13,10 @@ export const dynamic = 'force-dynamic';
 export const POST = handle(async (request, ctx) => {
   writeGuard(request, 'x-signature-action');
 
-  if (!['owner', 'doctor'].includes(ctx.role)) {
-    throw new HttpError(
-      403,
-      'Apenas médicos podem assinar documentos clínicos.',
-    );
-  }
+  assertClinicalRole(
+    ctx.role,
+    'Apenas médicos podem assinar documentos clínicos.',
+  );
 
   const payload = await body(request);
   const documentId = payload.documentId;

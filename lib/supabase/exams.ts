@@ -4,10 +4,17 @@ import {
   type ExamDefinition,
   type ExamResult,
 } from '../exams.ts';
-import { body, check, handle, HttpError, json, writeGuard } from './server.ts';
+import {
+  assertClinicalRole,
+  body,
+  check,
+  handle,
+  HttpError,
+  json,
+  writeGuard,
+} from './server.ts';
 export const exams = handle(async (request, { db, clinic, role }) => {
-  if (!['owner', 'doctor'].includes(role))
-    throw new HttpError(403, 'Resultados disponíveis à equipe médica.');
+  assertClinicalRole(role, 'Resultados disponíveis à equipe médica.');
   const patient = new URL(request.url).searchParams.get('patientId');
   if (!patient || patient.length > 180)
     throw new HttpError(400, 'Selecione um paciente.');

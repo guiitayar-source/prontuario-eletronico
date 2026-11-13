@@ -1,4 +1,5 @@
 import {
+  assertClinicalRole,
   handle,
   HttpError,
   json,
@@ -8,12 +9,10 @@ import { evolutionSigningService } from '@/lib/signature/evolution-signing-servi
 export const dynamic = 'force-dynamic';
 
 export const GET = handle(async (request, ctx) => {
-  if (!['owner', 'doctor'].includes(ctx.role)) {
-    throw new HttpError(
-      403,
-      'Apenas médicos têm acesso aos detalhes de assinatura de evoluções.'
-    );
-  }
+  assertClinicalRole(
+    ctx.role,
+    'Apenas médicos têm acesso aos detalhes de assinatura de evoluções.',
+  );
 
   const url = new URL(request.url);
   const evolutionId = url.searchParams.get('evolutionId');

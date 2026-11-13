@@ -1,4 +1,12 @@
-import { body, check, handle, HttpError, json, writeGuard } from './server.ts';
+import {
+  assertClinicalRole,
+  body,
+  check,
+  handle,
+  HttpError,
+  json,
+  writeGuard,
+} from './server.ts';
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const allowed = {
@@ -9,11 +17,7 @@ const allowed = {
   medication_state: ['unknown', 'none', 'known'],
 } as const;
 export const clinicalContext = handle(async (request, { db, clinic, role }) => {
-  if (!['owner', 'doctor'].includes(role))
-    throw new HttpError(
-      403,
-      'O contexto clínico é exclusivo da equipe médica.',
-    );
+  assertClinicalRole(role, 'O contexto clínico é exclusivo da equipe médica.');
   const url = new URL(request.url),
     patient = url.searchParams.get('patientId');
   if (!patient || patient.length > 180)

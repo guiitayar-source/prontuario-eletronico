@@ -1,4 +1,9 @@
-import { handle, HttpError, json } from '@/lib/supabase/server';
+import {
+  assertClinicalRole,
+  handle,
+  HttpError,
+  json,
+} from '@/lib/supabase/server';
 import {
   ICD11_RELEASE,
   searchCid10,
@@ -10,8 +15,7 @@ export const dynamic = 'force-dynamic';
 // GET ?q=texto&system=cid10|icd11  → busca no catálogo
 // GET ?suggest=F32.1               → sugestões CID-11 para um CID-10
 export const GET = handle(async (request, { role }) => {
-  if (!['owner', 'doctor'].includes(role))
-    throw new HttpError(403, 'Diagnósticos são exclusivos da equipe médica.');
+  assertClinicalRole(role, 'Diagnósticos são exclusivos da equipe médica.');
   const url = new URL(request.url);
   const suggest = url.searchParams.get('suggest');
   if (suggest) {

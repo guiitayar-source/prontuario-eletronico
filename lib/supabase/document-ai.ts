@@ -11,6 +11,7 @@ import {
   restorePatientName,
 } from '../ai/pseudonymize.ts';
 import {
+  assertClinicalRole,
   boundedBody,
   check,
   handle,
@@ -105,11 +106,10 @@ function section(title: string, value: string) {
 
 export const documentAi = handle(
   async (request, { db, clinic, role, user }) => {
-    if (!['owner', 'doctor'].includes(role))
-      throw new HttpError(
-        403,
-        'A geração de documentos é exclusiva da equipe médica.',
-      );
+    assertClinicalRole(
+      role,
+      'A geração de documentos é exclusiva da equipe médica.',
+    );
     await assertFeature({ db, clinic }, 'ia');
 
     if (request.method === 'GET') {

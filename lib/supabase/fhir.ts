@@ -1,8 +1,14 @@
 import { exportFHIR, type Snapshot } from '../fhir/export.ts';
-import { body, check, handle, HttpError, writeGuard } from './server.ts';
+import {
+  assertClinicalRole,
+  body,
+  check,
+  handle,
+  HttpError,
+  writeGuard,
+} from './server.ts';
 export const fhir = handle(async (request, ctx) => {
-  if (!['owner', 'doctor'].includes(ctx.role))
-    throw new HttpError(403, 'Exportação disponível somente para médicos.');
+  assertClinicalRole(ctx.role, 'Exportação disponível somente para médicos.');
   const url = new URL(request.url);
   if (request.method === 'GET') {
     const row = check(

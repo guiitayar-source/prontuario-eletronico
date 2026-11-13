@@ -1,5 +1,14 @@
 import { fileType, MAX_FILE } from '../file-utils.ts';
-import { body, check, handle, HttpError, json, writeGuard } from './server.ts';
+import {
+  assertClinicalRole,
+  body,
+  check,
+  handle,
+  HttpError,
+  json,
+  writeGuard,
+} from './server.ts';
+import { isClinicalRole } from '../roles.ts';
 import { patient } from './patients.ts';
 import { adminClient } from './admin.ts';
 
@@ -15,7 +24,8 @@ export const capture = handle(async (request, ctx) => {
   }));
   if (request.method === 'GET') {
     if (action === 'list' || action === 'archived') {
-      if (action === 'archived' && !['owner','doctor'].includes(ctx.role)) throw new HttpError(403,'Acesso restrito ao médico.');
+      if (action === 'archived')
+        assertClinicalRole(ctx.role, 'Acesso restrito ao médico.');
       const patientId = url.searchParams.get('patientId')!;
       await patient(ctx, patientId);
       let query = ctx.db.from('attachments').select('id,request_id,name,mime,size,category,created_at').eq('clinic_id', ctx.clinic)
@@ -23,7 +33,7 @@ export const capture = handle(async (request, ctx) => {
       query = action === 'archived' ? query.not('archived_at','is',null) : query.is('archived_at',null);
       const rows = check(await query);
       const filledExamSet = new Set<string>();
-      if (['owner', 'doctor'].includes(ctx.role) && rows.length > 0) {
+      if (isClinicalRole(ctx.role) && rows.length > 0) {
         const { data: examData } = await ctx.db
           .from('exam_results')
           .select('attachment_id,provenance')

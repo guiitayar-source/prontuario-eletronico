@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { isClinicalRole } from '../roles.ts';
 
 export class HttpError extends Error {
   status: number;
@@ -77,6 +78,14 @@ export async function context(request: Request) {
   return { db, clinic: member.clinic_id as string, role: member.role as string, user: data.user.id, authSessionId };
 }
 export type Context = Awaited<ReturnType<typeof context>>;
+/**
+ * Checagem de papel das rotas clínicas, no começo do handler: recusa (403) quem não é owner nem
+ * doctor, com a mensagem da própria rota. Função que depende do plano chama assertFeature
+ * (features.ts) logo depois.
+ */
+export function assertClinicalRole(role: string, message: string) {
+  if (!isClinicalRole(role)) throw new HttpError(403, message);
+}
 export const handle = (fn: (request: Request, ctx: Context) => Promise<Response>) => async (request: Request) => {
   try { return await fn(request, await context(request)); }
   catch (error) { return json({ error: error instanceof HttpError ? error.message : 'Não foi possível concluir a operação.' }, error instanceof HttpError ? error.status : 500); }

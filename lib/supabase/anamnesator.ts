@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { adminClient } from './admin.ts';
 import { assertFeature } from './features.ts';
 import {
+  assertClinicalRole,
   body,
   boundedBody,
   check,
@@ -24,8 +25,7 @@ function id(value: unknown): string {
 }
 
 export const anamnesator = handle(async (request, ctx) => {
-  if (!['owner', 'doctor'].includes(ctx.role))
-    throw new HttpError(403, 'Acesso exclusivo da equipe médica.');
+  assertClinicalRole(ctx.role, 'Acesso exclusivo da equipe médica.');
   await assertFeature(ctx, 'anamnesator');
   const url = new URL(request.url);
   if (request.method === 'GET') {

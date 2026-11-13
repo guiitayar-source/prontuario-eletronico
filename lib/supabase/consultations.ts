@@ -1,4 +1,5 @@
 import {
+  assertClinicalRole,
   handle,
   check,
   json,
@@ -7,11 +8,10 @@ import {
   writeGuard,
 } from './server.ts';
 export const consultations = handle(async (request, { db, clinic, role }) => {
-  if (!['owner', 'doctor'].includes(role))
-    throw new HttpError(
-      403,
-      'O acesso às evoluções é exclusivo da equipe médica.',
-    );
+  assertClinicalRole(
+    role,
+    'O acesso às evoluções é exclusivo da equipe médica.',
+  );
   const url = new URL(request.url);
   if (request.method === 'GET') {
     const patient = url.searchParams.get('patientId');
