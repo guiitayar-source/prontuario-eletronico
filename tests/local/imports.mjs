@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
-import { normalizeImport } from '../lib/imports/normalize.ts';
-import { imports } from '../lib/supabase/imports.ts';
+import { normalizeImport } from '../../lib/imports/normalize.ts';
+import { imports } from '../../lib/supabase/imports.ts';
 const lgpd = JSON.parse(
   readFileSync('public/examples/import-lgpd.json', 'utf8'),
 );

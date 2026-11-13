@@ -23,7 +23,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | feito (12/11/2026) |
 | C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | feito (12/11/2026) |
 | D. Servidor | 4 | Checagem de papel clínico num auxiliar único | feito (12/11/2026) |
-| E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
+| E. Organização | 5 | Auditorias numa pasta só; testes separados por necessidade de banco | feito (13/11/2026) |
 
 ## Etapas em detalhe
 
@@ -49,6 +49,10 @@ Continuam manuais, porque exigem Supabase local (`npx supabase start`) ou build:
 `documents.mjs`, `team.mjs`, `consultations.mjs`, `imports.mjs`, `clinical-context.mjs`,
 `invite-flow.mjs`, `document-ai.mjs`, `readiness.mjs`, `anamnesator-native-db.mjs`,
 `sncr-rce-build.test.mjs` (`npm run test:sncr:build`).
+
+Desde a etapa 5 esses arquivos ficam em `tests/local/` e o `npm test` não é mais uma lista. A
+exceção é `anamnesator-native-db.mjs`: não precisava de banco (usa PGlite) e passou a rodar no
+`npm test`.
 
 ### Etapa 2 — Dividir `lib/signature/revocation-validator.ts` (feito)
 
@@ -226,11 +230,29 @@ de assinatura, do SNCR, da CID e de anexos, eram 25 no servidor e 6 nas telas.
 - `lib/document-pdf.ts` (880 linhas) e `lib/supabase/ai-files.ts` (502) podem ser divididos por
   tipo de documento, se forem crescer.
 
-### Etapa 5 — Organização (opcional)
+### Etapa 5 — Organização (feito, 13/11/2026)
 
-- Juntar `docs/audits/` e `docs/auditorias/`.
-- Separar em pastas os testes que exigem Supabase local, para o `npm test` usar um padrão de nome
-  em vez da lista arquivo a arquivo.
+- **Auditorias numa pasta só.** `docs/audits/` e `docs/auditorias/` eram duas pastas para a mesma
+  coisa. Os 11 relatórios de lote foram, sem alteração de conteúdo, para `docs/auditorias/lotes/`;
+  só mudaram as duas frases que apontavam para a pasta antiga. Os guias da raiz
+  (`OPERACAO_SEGURA.md`, `ARQUITETURA_ASSINATURAS.md`, `EXAMES.md`, `SUPABASE_MIGRATION.md`) ficam
+  onde estão.
+- **Testes separados por necessidade de infraestrutura.** Os 17 arquivos que exigem Supabase
+  local, contêiner ou build foram para `tests/local/` (o `README.md` de lá diz o que cada grupo
+  precisa). Tudo o que está direto em `tests/` roda no `npm test`, que deixou de ser uma lista
+  arquivo a arquivo e virou o padrão `tests/*.mjs`: teste novo sem banco entra no CI sozinho, sem
+  depender de alguém lembrar da lista (foi assim que 15 arquivos tinham ficado de fora antes da
+  etapa 1).
+  - Nos arquivos movidos só mudou o começo dos caminhos relativos (`../` virou `../../` e
+    `./helpers/` virou `../helpers/`). Um script conferiu que cada um dos 52 caminhos aponta para
+    o mesmo destino de antes e que o destino existe.
+  - O `npm test` roda os mesmos testes de antes, com o mesmo resultado (comparados nome a nome), e
+    mais `anamnesator-native-db.mjs`: 416 testes.
+  - `sncr-rce-build.test.mjs` passou antes e depois da mudança, sobre o mesmo build.
+  - Os outros 16 só rodam com Supabase local ou com o contêiner descartável. Sem esse ambiente,
+    param no mesmo ponto e com a mesma saída de antes da mudança, o que mostra que os imports do
+    topo do arquivo resolvem; os demais caminhos ficam por conta da conferência do script. Falta
+    rodá-los uma vez numa máquina com o ambiente.
 
 ## Fora do escopo
 
@@ -257,3 +279,4 @@ de assinatura, do SNCR, da CID e de anexos, eram 25 no servidor e 6 nas telas.
 - 12/11/2026 — Etapa 3, tela de entrada: 18 testes de navegador novos; `components/auth.tsx` dividido na pasta `components/auth/` (tela, lógica, formulários de entrar e de definir senha, contexto de acesso). Etapa 3 concluída.
 - 12/11/2026 — Etapa 4, servidor: 71 testes novos de papel nas rotas (`tests/clinical-roles.test.mjs`); as 25 cópias da checagem owner/doctor viram `assertClinicalRole`, com a lista de papéis em `lib/roles.ts`.
 - 12/11/2026 — Etapa 4, telas: 15 testes de navegador novos (`tests/browser/roles.spec.ts`); as 6 cópias nas telas usam `isClinicalRole`. Etapa 4 concluída.
+- 13/11/2026 — Etapa 5: `docs/audits/` vai para `docs/auditorias/lotes/`; os 17 testes que exigem Supabase local, contêiner ou build vão para `tests/local/` e o `npm test` passa a usar o padrão `tests/*.mjs` (416 testes). Todas as etapas do plano estão feitas.

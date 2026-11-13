@@ -14,12 +14,14 @@ Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abe
 - `npm run lint` / `npm run format` — oxlint / oxfmt. Não rode o formatador em arquivos que
   você não alterou: ele reescreve linhas não relacionadas e polui o diff.
 - `npm run dev` — servidor local em 127.0.0.1:3000; precisa de `.env.local` (ver `.env.example`).
-- Testes: `npm test` roda todos os que não precisam de banco (é o que o CI roda; teste novo sem
-  banco entra na lista do `package.json`). Um só: `node tests/<arquivo>`. Os demais
-  (`*-db.mjs`, `document-ai.mjs`, `supabase-flow.mjs`…) exigem Supabase local (`npx supabase start`).
-  `npm run test:browser` roda as telas num navegador com dados sintéticos (`tests/browser/`; o CI
-  também roda).
-- Refatoração em andamento: etapas, regras e estado em `docs/REFATORACAO.md`.
+- Testes: `npm test` roda tudo o que está direto em `tests/` (`tests/*.mjs`), sem banco nem rede;
+  é o que o CI roda, e teste novo desse tipo é só criar o arquivo ali. Um só:
+  `node tests/<arquivo>`. Os que exigem Supabase local (`npx supabase start`), contêiner ou build
+  ficam em `tests/local/` (o `README.md` de lá diz o que cada um precisa) e rodam à mão; auxiliares
+  compartilhados, em `tests/helpers/`. `npm run test:browser` roda as telas num navegador com
+  dados sintéticos (`tests/browser/`; o CI também roda).
+- Refatoração (etapas concluídas em 13/11/2026): o que foi feito, as regras e o que ficou anotado
+  para depois estão em `docs/REFATORACAO.md`.
 - Migrações: `npx supabase migration list` e `npx supabase db push` aplicam no projeto remoto
   vinculado (produção). Rode `--dry-run` primeiro e só aplique com o aval do titular.
 

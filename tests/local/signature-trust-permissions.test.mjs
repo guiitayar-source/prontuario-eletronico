@@ -8,7 +8,7 @@ import {
   oauthMigration,
   attemptsMigration,
   evidenceMigration,
-} from './helpers/signature-trust-db.mjs';
+} from '../helpers/signature-trust-db.mjs';
 
 const h = createSignatureTrustDb({
   baseline: process.env.SIGNATURE_TRUST_TEST_BASELINE === '1',
@@ -320,7 +320,7 @@ try {
       );
       assert.deepEqual(
         h.applied,
-        readdirSync(new URL('../supabase/migrations/', import.meta.url))
+        readdirSync(new URL('../../supabase/migrations/', import.meta.url))
           .filter((file) => file.endsWith('.sql') && ![trustMigration, oauthMigration, attemptsMigration, evidenceMigration].includes(file))
           .sort(),
       );

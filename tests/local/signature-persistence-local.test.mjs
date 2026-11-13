@@ -5,8 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
   attemptsMigration,
-} from './helpers/signature-trust-db.mjs';
-import { signingHarness } from './helpers/signing-persistence.mjs';
+} from '../helpers/signature-trust-db.mjs';
+import { signingHarness } from '../helpers/signing-persistence.mjs';
 const env = await signingHarness(),
   { h, fixture, asyncSql, statement, processSign } = env;
 try {
@@ -745,7 +745,7 @@ try {
   });
   await test('migração presente, eventos duráveis e ausência de segredos na auditoria', async () => {
     const source = readFileSync(
-      new URL('../supabase/migrations/' + attemptsMigration, import.meta.url),
+      new URL('../../supabase/migrations/' + attemptsMigration, import.meta.url),
       'utf8',
     );
     assert.ok(source.includes('document_signing_attempts'));

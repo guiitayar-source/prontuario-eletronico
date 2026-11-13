@@ -5,8 +5,8 @@ import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
-import { fhir } from '../lib/supabase/fhir.ts';
-import { capture } from '../lib/supabase/capture.ts';
+import { fhir } from '../../lib/supabase/fhir.ts';
+import { capture } from '../../lib/supabase/capture.ts';
 const raw = execFileSync(
     'node_modules/.bin/supabase',
     ['status', '-o', 'json'],

@@ -5,12 +5,12 @@ import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
 import { register } from 'node:module';
 import { createClient } from '@supabase/supabase-js';
-import { createSignatureTrustDb } from './helpers/signature-trust-db.mjs';
-import { startSignatureTrustRest } from './helpers/signature-trust-rest.mjs';
-import { MockBirdIdProvider } from '../lib/signature/mock-birdid-provider.ts';
-import { decryptToken } from '../lib/signature/crypto-utils.ts';
+import { createSignatureTrustDb } from '../helpers/signature-trust-db.mjs';
+import { startSignatureTrustRest } from '../helpers/signature-trust-rest.mjs';
+import { MockBirdIdProvider } from '../../lib/signature/mock-birdid-provider.ts';
+import { decryptToken } from '../../lib/signature/crypto-utils.ts';
 
-const root = new URL('../', import.meta.url).href;
+const root = new URL('../../', import.meta.url).href;
 register(
   'data:text/javascript,' +
     encodeURIComponent(
@@ -19,10 +19,10 @@ register(
   import.meta.url,
 );
 const { DocumentSigningService } =
-  await import('../lib/signature/document-signing-service.ts');
+  await import('../../lib/signature/document-signing-service.ts');
 const { setCustomSignatureProvider } =
-  await import('../lib/signature/provider-factory.ts');
-const { documents } = await import('../lib/supabase/documents.ts');
+  await import('../../lib/signature/provider-factory.ts');
+const { documents } = await import('../../lib/supabase/documents.ts');
 
 const h = createSignatureTrustDb({ oauth: true, attempts: true });
 const clinic = randomUUID(),

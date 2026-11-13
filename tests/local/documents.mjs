@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {createClient} from '@supabase/supabase-js';
-import {documents} from '../lib/supabase/documents.ts';
-import {documentPdf} from '../lib/document-pdf.ts';
+import {documents} from '../../lib/supabase/documents.ts';
+import {documentPdf} from '../../lib/document-pdf.ts';
 import {PDFDocument} from 'pdf-lib';
 const raw=execFileSync('node_modules/.bin/supabase',['status','-o','json'],{encoding:'utf8',stdio:['ignore','pipe','ignore']});const s=JSON.parse(raw.slice(raw.indexOf('{')));assert.match(s.API_URL,/^http:\/\/127\.0\.0\.1:/);
 process.env.NEXT_PUBLIC_SUPABASE_URL=s.API_URL;process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=s.PUBLISHABLE_KEY;
