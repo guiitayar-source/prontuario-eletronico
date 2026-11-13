@@ -11,7 +11,7 @@ consultar um arquivo:
 git show 13b9b79:<caminho>
 ```
 
-As auditorias dos lotes continuam em `docs/audits/` (3B, 4, 4B, 5A e a consulta de identidade).
+As auditorias dos lotes continuam em `docs/auditorias/lotes/` (3B, 4, 4B, 5A e a consulta de identidade).
 
 ## O que a linha da branch tinha e a main não tem
 

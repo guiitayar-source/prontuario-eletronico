@@ -18,7 +18,7 @@ Um manifesto SHA-256 dos 310 arquivos rastreados foi capturado antes da edição
 - Os 14 arquivos de `lib/signature/`, incluindo provedores Bird ID/VIDaaS, PAdES, criptografia e serviço principal.
 - `lib/document-pdf.ts` e `lib/document-fields.ts`: gerador comum, modalidades e modelos antigos intactos.
 - As 29 migrações existentes, incluindo os dois bloqueios iniciais de aplicação das migrações SNCR.
-- O PDF oficial e os cinco relatórios/consultas anteriores em `docs/audits/`.
+- O PDF oficial e os cinco relatórios/consultas anteriores em `docs/auditorias/lotes/`.
 - A numeração, sessões, cliente e mantenedora SNCR; a única alteração de produção em `lib/sncr/signing.ts` é o encaminhamento da RCE ao gerador novo.
 
 ## 2. Implementação
