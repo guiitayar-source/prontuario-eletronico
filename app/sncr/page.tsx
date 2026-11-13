@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/supabase/http';
 import { useAccess } from '@/components/auth';
+import { isClinicalRole } from '@/lib/roles';
 import {
   prescriptionCategories,
   type PrescriptionCategory,
@@ -180,7 +181,7 @@ export default function SncrPreparation() {
       setBusy(false);
     }
   }
-  if (!['owner', 'doctor'].includes(role))
+  if (!isClinicalRole(role))
     return (
       <main className="sncr-page">
         <p>Acesso exclusivo do prescritor.</p>

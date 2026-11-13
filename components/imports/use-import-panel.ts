@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/supabase/http';
 import { useAccess } from '../auth';
+import { isClinicalRole } from '@/lib/roles';
 import {
   MAX_IMPORT_BYTES,
   type Preview,
@@ -34,7 +35,7 @@ async function call<T>(action?: string, data?: unknown): Promise<T> {
 
 /** Estado e ações do painel de importação. `onBusy` avisa a tela enquanto algo está em curso. */
 export function useImportPanel(onBusy?: (busy: boolean) => void) {
-  const medical = ['owner', 'doctor'].includes(useAccess().role);
+  const medical = isClinicalRole(useAccess().role);
   const [source, setSource] = useState('Prontuário anterior'),
     [files, setFiles] = useState<File[]>([]),
     [queue, setQueue] = useState<string[]>([]),

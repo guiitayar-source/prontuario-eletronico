@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAccess } from '../auth';
+import { isClinicalRole } from '@/lib/roles';
 import { useClinicalContext } from '../clinical-context';
 import { useDocuments } from '../documents';
 import { documentTemplate } from '@/lib/document-fields';
@@ -51,7 +52,7 @@ export function useClinicalRecord({
   patient: Patient;
   appointmentId?: string;
 }) {
-  const medical = ['owner', 'doctor'].includes(useAccess().role);
+  const medical = isClinicalRole(useAccess().role);
   const signature = useSignatureProvider(medical);
   const signatureState = useSignatureSession(medical);
   const signatureSession = signatureState.session;

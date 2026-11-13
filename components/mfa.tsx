@@ -6,6 +6,7 @@ import { Audit } from './audit';
 import type { Session } from '@supabase/supabase-js';
 import QRCode from 'qrcode';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { isClinicalRole } from '@/lib/roles';
 import { Building2, ShieldCheck, LogOut, X } from 'lucide-react';
 
 export function MFAGate({
@@ -306,7 +307,7 @@ export function MFAGate({
             )}
           </button>
 
-          {['owner', 'doctor'].includes(role) && <Audit />}
+          {isClinicalRole(role) && <Audit />}
 
           {onSignOut && (
             <>

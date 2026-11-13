@@ -70,10 +70,11 @@ Cada médico tem a própria clínica (isolada por RLS); novas clínicas são abe
 ## Papéis e sigilo
 
 `owner` e `doctor` têm acesso clínico; `secretary` só agenda, cadastro e envio de anexos. A lista
-fica em `lib/roles.ts` (`isClinicalRole`). Toda rota clínica começa com
-`assertClinicalRole(role, 'mensagem em pt')` (`lib/supabase/server.ts`), que recusa com 403; rota
-nova entra em `tests/clinical-roles.test.mjs`. A tabela de permissões em `components/team.tsx`
-descreve isso ao usuário — mantenha as duas coisas em sincronia.
+fica em `lib/roles.ts` (`isClinicalRole`, também usada pelas telas). Toda rota clínica começa com
+`assertClinicalRole(role, 'mensagem em pt')` (`lib/supabase/server.ts`), que recusa com 403. Rota
+nova entra em `tests/clinical-roles.test.mjs`; tela nova, em `tests/browser/roles.spec.ts`. A
+tabela de permissões em `components/team.tsx` descreve isso ao usuário — mantenha as duas coisas
+em sincronia.
 
 IA e Anamnesator dependem do plano da clínica (`clinic_features`, lista em `lib/plan-features.ts`).
 A rota chama `assertFeature(ctx, 'ia')` depois da checagem de papel, e a tela esconde o controle

@@ -22,7 +22,7 @@ no fim. Levantamento inicial feito em 11/11/2026 sobre a `main` (`bdd0bb2`).
 | A. Rede de proteção | 1 | Testes sem banco rodando no `npm test` e no CI | feito (11/11/2026) |
 | B. Assinatura legível | 2 | Dividir `lib/signature/revocation-validator.ts` | feito (12/11/2026) |
 | C. Telas legíveis | 3 | Telas grandes no padrão pasta + hook `use-*.ts` | feito (12/11/2026) |
-| D. Servidor | 4 | Checagem de papel clínico num auxiliar único | servidor feito (12/11/2026); telas a fazer |
+| D. Servidor | 4 | Checagem de papel clínico num auxiliar único | feito (12/11/2026) |
 | E. Organização | 5 | Documentação numa pasta só; testes separados por necessidade de banco | a fazer (opcional) |
 
 ## Etapas em detalhe
@@ -214,10 +214,15 @@ de assinatura, do SNCR, da CID e de anexos, eram 25 no servidor e 6 nas telas.
   mensagem para secretária e para papel desconhecido, antes de qualquer acesso a dados, e que owner
   e doctor passam. Foi escrito antes da troca: pegou os 50 defeitos plantados no código antigo
   (checagem removida ou recusando doctor) e os 31 plantados no novo.
-- **Telas (a fazer):** `app/sncr/page.tsx`, `components/patients/registry.tsx`,
+- **Telas (feito, 12/11/2026):** `app/sncr/page.tsx`, `components/patients/registry.tsx`,
   `components/clinical-record/use-clinical-record.ts`, `components/settings.tsx`,
-  `components/mfa.tsx` (Auditoria) e `components/imports/use-import-panel.ts` passam a usar
-  `isClinicalRole`.
+  `components/mfa.tsx` (Auditoria) e `components/imports/use-import-panel.ts` usam
+  `isClinicalRole`. `tests/browser/roles.spec.ts` (15 testes) confere, para owner, doctor e
+  secretária, cada ponto: abas de importar e exportar, prontuário aberto na consulta ou só no
+  cadastro (a secretária não chama rota clínica), "Meus dados profissionais", Auditoria e a página
+  do SNCR. Pegou 11 dos 12 defeitos plantados antes e depois da troca; o que escapa (o painel de
+  importação tratar todo mundo como clínico) não muda nada, porque o painel só aparece para quem
+  é.
 - `lib/document-pdf.ts` (880 linhas) e `lib/supabase/ai-files.ts` (502) podem ser divididos por
   tipo de documento, se forem crescer.
 
@@ -251,3 +256,4 @@ de assinatura, do SNCR, da CID e de anexos, eram 25 no servidor e 6 nas telas.
 - 12/11/2026 — Etapa 3, diagnósticos: 6 testes de navegador novos; `components/diagnoses.tsx` dividido na pasta `components/diagnoses/` (busca no catálogo CID, sugestões da CID-11, tela e lógica dos diagnósticos do atendimento).
 - 12/11/2026 — Etapa 3, tela de entrada: 18 testes de navegador novos; `components/auth.tsx` dividido na pasta `components/auth/` (tela, lógica, formulários de entrar e de definir senha, contexto de acesso). Etapa 3 concluída.
 - 12/11/2026 — Etapa 4, servidor: 71 testes novos de papel nas rotas (`tests/clinical-roles.test.mjs`); as 25 cópias da checagem owner/doctor viram `assertClinicalRole`, com a lista de papéis em `lib/roles.ts`.
+- 12/11/2026 — Etapa 4, telas: 15 testes de navegador novos (`tests/browser/roles.spec.ts`); as 6 cópias nas telas usam `isClinicalRole`. Etapa 4 concluída.
