@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
-import { documentAi } from '../lib/supabase/document-ai.ts';
+import { documentAi } from '../../lib/supabase/document-ai.ts';
 
 const raw = execFileSync(
   'node_modules/.bin/supabase',

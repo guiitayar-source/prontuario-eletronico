@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { PDFDocument } from 'pdf-lib';
-import { localRceDatabase, syntheticSnapshot } from './helpers/sncr-rce-db.mjs';
+import { localRceDatabase, syntheticSnapshot } from '../helpers/sncr-rce-db.mjs';
 
 test('compiled RCE route authorizes, reserves and opens the official PDF without a live service', async () => {
   const local = await localRceDatabase();
@@ -104,7 +104,7 @@ test('compiled RCE route authorizes, reserves and opens the official PDF without
       throw new Error('Unexpected test HTTP path: ' + path);
     };
     const require = createRequire(import.meta.url);
-    const { GET, POST } = require('../.next/server/app/api/sncr/rce/route.js')
+    const { GET, POST } = require('../../.next/server/app/api/sncr/rce/route.js')
       .routeModule.userland;
     const headers = {
       Authorization: 'Bearer synthetic-user-token',

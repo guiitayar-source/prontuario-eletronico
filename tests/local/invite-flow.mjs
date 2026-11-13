@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
-import { team } from '../lib/supabase/team.ts';
+import { team } from '../../lib/supabase/team.ts';
 
 const raw = execFileSync('node_modules/.bin/supabase', ['status', '-o', 'json'], {
   encoding: 'utf8',

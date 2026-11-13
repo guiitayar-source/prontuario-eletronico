@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
-import { patients } from '../lib/supabase/patients.ts';
-import { appointments } from '../lib/supabase/appointments.ts';
-import { capture } from '../lib/supabase/capture.ts';
+import { patients } from '../../lib/supabase/patients.ts';
+import { appointments } from '../../lib/supabase/appointments.ts';
+import { capture } from '../../lib/supabase/capture.ts';
 const raw = execFileSync('node_modules/.bin/supabase',['status','-o','json'],{encoding:'utf8',stdio:['ignore','pipe','ignore']});
 const status=JSON.parse(raw.slice(raw.indexOf('{')));
 assert.match(status.API_URL,/^http:\/\/127\.0\.0\.1:/);

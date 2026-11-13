@@ -7,8 +7,8 @@ import { createClient } from '@supabase/supabase-js';
 
 import {
   createSignatureTrustDb,
-} from './helpers/signature-trust-db.mjs';
-import { startSignatureTrustRest } from './helpers/signature-trust-rest.mjs';
+} from '../helpers/signature-trust-db.mjs';
+import { startSignatureTrustRest } from '../helpers/signature-trust-rest.mjs';
 import {
   padesService,
   getStandardPkiAndTsaFixture,
@@ -16,14 +16,14 @@ import {
   signPdfWithOptionalTimestamp,
   createSyntheticCrl,
   createSyntheticOcspResponse,
-} from './helpers/pades-revocation-fixtures.mjs';
-import { parseX509Node } from '../lib/signature/icp-chain.ts';
+} from '../helpers/pades-revocation-fixtures.mjs';
+import { parseX509Node } from '../../lib/signature/icp-chain.ts';
 import {
   keepsBytes,
   loadAttemptRevocationEvidence,
   revocationEvidenceRecords,
   saveAttemptRevocationEvidence,
-} from '../lib/signature/revocation-evidence-store.ts';
+} from '../../lib/signature/revocation-evidence-store.ts';
 
 const T = (s) => new Date(s);
 const VERIFY_AT = T('2026-04-01T12:00:00Z');

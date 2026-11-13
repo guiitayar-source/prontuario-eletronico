@@ -9,12 +9,12 @@ import { createClient } from '@supabase/supabase-js';
 import {
   createSignatureTrustDb,
   oauthMigration,
-} from './helpers/signature-trust-db.mjs';
-import { startSignatureTrustRest } from './helpers/signature-trust-rest.mjs';
-import { containerEngine } from './helpers/sncr-container.mjs';
-import { MockBirdIdProvider } from '../lib/signature/mock-birdid-provider.ts';
-import { decryptToken, encryptToken } from '../lib/signature/crypto-utils.ts';
-const root = new URL('../', import.meta.url).href;
+} from '../helpers/signature-trust-db.mjs';
+import { startSignatureTrustRest } from '../helpers/signature-trust-rest.mjs';
+import { containerEngine } from '../helpers/sncr-container.mjs';
+import { MockBirdIdProvider } from '../../lib/signature/mock-birdid-provider.ts';
+import { decryptToken, encryptToken } from '../../lib/signature/crypto-utils.ts';
+const root = new URL('../../', import.meta.url).href;
 register(
   'data:text/javascript,' +
     encodeURIComponent(
@@ -23,12 +23,12 @@ register(
   import.meta.url,
 );
 const { DocumentSigningService } =
-  await import('../lib/signature/document-signing-service.ts');
+  await import('../../lib/signature/document-signing-service.ts');
 const { setCustomSignatureProvider } =
-  await import('../lib/signature/provider-factory.ts');
-const oauth = await import('../lib/signature/oauth-context.ts');
-const { HttpError } = await import('../lib/supabase/server.ts');
-const { PscProvider } = await import('../lib/signature/psc-provider.ts');
+  await import('../../lib/signature/provider-factory.ts');
+const oauth = await import('../../lib/signature/oauth-context.ts');
+const { HttpError } = await import('../../lib/supabase/server.ts');
+const { PscProvider } = await import('../../lib/signature/psc-provider.ts');
 const authorizationProvider = new PscProvider({
   label: 'PSC sintético',
   baseUrl: 'https://psc.synthetic/v0',
@@ -36,11 +36,11 @@ const authorizationProvider = new PscProvider({
   clientSecret: 'synthetic',
 });
 const authorize =
-  await import('../app/api/digital-signature/birdid/authorize/route.ts');
+  await import('../../app/api/digital-signature/birdid/authorize/route.ts');
 const callback =
-  await import('../app/api/digital-signature/birdid/callback/route.ts');
+  await import('../../app/api/digital-signature/birdid/callback/route.ts');
 const completeRoute =
-  await import('../app/api/digital-signature/birdid/complete/route.ts');
+  await import('../../app/api/digital-signature/birdid/complete/route.ts');
 const provider = new MockBirdIdProvider({ mockCpf: '52998224725' });
 const otherProvider = new MockBirdIdProvider({ mockCpf: '11144477735' });
 const cpf = '52998224725',
@@ -802,7 +802,7 @@ try {
     const s = await start();
     await finish(s);
     const source = readFileSync(
-      new URL('../supabase/migrations/' + oauthMigration, import.meta.url),
+      new URL('../../supabase/migrations/' + oauthMigration, import.meta.url),
       'utf8',
     );
     const legacyState = oauth.oauthSecret();
@@ -828,7 +828,7 @@ try {
       otherCpf,
     ])
       assert.ok(!logs.includes(secret));
-    const { default: config } = await import('../next.config.ts');
+    const { default: config } = await import('../../next.config.ts');
     for (const path of [
       '/api/digital-signature/birdid/callback?code=secret',
       '/api/digital-signature/vidaas/callback?code=secret',
